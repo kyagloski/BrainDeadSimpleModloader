@@ -27,29 +27,30 @@ COMPAT_DIR=TARGET_DIR/"compat"
 RELOAD_ON_INSTALL=False
 
 
-def create_cfg():
+def create_cfg(gui=False, target=None):
     # prompt user choice
-    choice = input("currently no config file exists or is not configured\nwould you like to create one? [Y/n] ").strip().lower()
-    if (not choice.startswith("y")) and (choice!=""): return
-    target = (input("enter absolute path to target dir: ").rstrip("/")).rstrip("/Data")+"/Data/"
-    if not os.path.exists(target): print("error: invalid target dir: "+target); sys.exit()
-    compat = input("enter absolute path to compat dir: ").rstrip("/") + "/"+"pfx/drive_c/users/steamuser/AppData/Local/"
-    # TODO: do a lookup on game dir for compat data (check if linux, compat should be on the same drive)
-    match = next((s for s in ["Fallout4","Skyrim","Skyrim Special Edition","Fallout3", "FalloutNV"] if os.path.isdir(os.path.join(compat, s))), None).rstrip("/") + "/"
-    compat = compat+match
-    if not os.path.exists(compat): print("error: invalid comapt dir: "+compat); sys.exit()
+    if not gui:
+        choice = input("currently no config file exists or is not configured\nwould you like to create one? [Y/n] ").strip().lower()
+        if (not choice.startswith("y")) and (choice!=""): return
+        target = input("enter absolute path to target dir: ").rstrip("/")+"/Data/"
+        if not os.path.exists(target): print("error: invalid target dir: "+target); sys.exit()
+    else: target=Path(target)
+    compat = str(game_specific.infer_compat_path(Path(target)))
+    if not os.path.exists(compat): print("error: could not infer comapt dir: "+compat); sys.exit()
     # write data
     with open(CONFIG_FILE, "w", encoding="utf-8") as f:
         f.write("# config file for braindead modloader\n")
         f.write("# mods directory\n")
-        f.write("SOURCE_DIR: "+SOURCE_DIR+"\n")
+        f.write("SOURCE_DIR: "+str(SOURCE_DIR)+"\n")
         f.write("# data directory (usually)\n")
-        f.write("TARGET_DIR: "+target+"\n")
+        f.write("TARGET_DIR: "+str(target)+"\n")
         f.write("# ini/plugins.txt directory\n")
-        f.write("COMPAT_DIR: "+compat+"\n")
+        f.write("COMPAT_DIR: "+str(compat)+"\n")
         f.write("# reload mods after installing new mod (or deleting) (boolean)\n")
         f.write("RELOAD_ON_INSTALL: True\n")
     print("created new config!")
+    read_cfg()
+
     
 def read_cfg():
     global SOURCE_DIR, TARGET_DIR, COMPAT_DIR, RELOAD_ON_INSTALL
@@ -59,6 +60,7 @@ def read_cfg():
     TARGET_DIR=Path(cfg_dict["TARGET_DIR"])
     COMPAT_DIR=Path(cfg_dict["COMPAT_DIR"])  
     RELOAD_ON_INSTALL=bool(cfg_dict["RELOAD_ON_INSTALL"])
+
 
 def load_list():
     if not os.path.exists(LOAD_ORDER):
@@ -125,13 +127,13 @@ def perform_copy():
         for root, dirs, files in os.walk(source_path):
             # calculate relative path within the source directory
             rel = os.path.relpath(root, source_path)
-            if rel.startswith("Data"): rel = rel.replace("Data/","",1) # might be broken
+            #if rel.startswith("Data"): rel = rel.replace("Data/","",1) # might be broken
             dest_root = os.path.join(TARGET_DIR, rel) if rel != "." else TARGET_DIR
 
             # ensure destination subdirectory exists
             if (dest_root != TARGET_DIR) \
             and (not os.path.isdir(dest_root)): 
-                dest_dir=dest_root.replace(TARGET_DIR,'')
+                dest_dir=dest_root.replace(str(TARGET_DIR),'')
                 copied_manifest.append(dest_dir) # add empty dirs
             dest_root=fix_path_case(dest_root)
             os.makedirs(dest_root, exist_ok=True)
@@ -232,8 +234,8 @@ def delete_mod(mod_name):
         for line in lines:
             if line.strip() != mod: f.write(line)
     # delete dir
-    try: shutil.rmtree(SOURCE_DIR+mod)
-    except: print("error: could not delete mod or mod does not exist in "+SOURCE_DIR)
+    try: shutil.rmtree(SOURCE_DIR/mod)
+    except: print("error: could not delete mod or mod does not exist in "+str(SOURCE_DIR))
     if RELOAD_ON_INSTALL: restore(); perform_copy()
     print("deleted mod "+mod+"!")
 

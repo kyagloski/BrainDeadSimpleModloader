@@ -9,6 +9,12 @@ from pathlib import Path
 
 from utils import *
 
+COMPACT_GAME_LIST = ["Fallout4",
+                     "Skyrim",
+                     "Skyrim Special Edition",
+                     "Fallout3", 
+                     "FalloutNV"]
+
 GAME_PLUGINS = { "Fallout3" : "Anchorage.esm\nBrokenSteel.esm\nFallout3.esm\nPointLookout.esm\nThePitt.esm\nZeta.esm\n",
                  "FalloutNV": "FalloutNV.esm\nCaravanPack.esm\nClassicPack.esm\nDeadMoney.esm\nGunRunnersArsenal.esm\nHonestHearts.esm\nLonesomeRoad.esm\nMercenaryPack.esm\nOldWorldBlues.esm\nTribalPack.esm\n",
                  "Fallout4" : "",
@@ -39,6 +45,13 @@ INIS = { "Fallout3"  : ["FalloutCustom.ini", "Fallout.ini", "FalloutPrefs.ini"],
          "Skyrim"    : ["SkyrimCustom.ini", "Skyrim.ini", "SkyrimPrefs.ini"],
          "Default"   : [] }
 
+GAME_IDS = { "Fallout 3 goty"         : 22370,
+             "Fallout 3"              : 22300,
+             "Fallout New Vegas"      : 22380,
+             "Fallout 4"              : 377160,
+             "Skyrim Special Edition" : 489830,
+             "Default"                : "" }
+
 
 def determine_game(compat_dir):
     game=""
@@ -51,12 +64,36 @@ def determine_game(compat_dir):
         game="Default"
     return game
 
+def determine_game_id(target_dir):
+    id=0
+    print(target_dir)
+    if   "Fallout 3 goty"    in str(target_dir): id=GAME_IDS["Fallout 3 goty"]
+    elif "Fallout 3"         in str(target_dir): id=GAME_IDS["Fallout 3"]
+    elif "Fallout New Vegas" in str(target_dir): id=GAME_IDS["Fallout New Vegas"]
+    elif "Fallout 4"         in str(target_dir): id=GAME_IDS["Fallout 4"]
+    elif "Skyrim Special Edition" in str(target_dir): id = GAME_IDS["Skyrim Special Edition"]
+    else: print("error: cannot detect game id")
+    return str(id)
+
 
 def get_ini_path(compat_dir):
     game=determine_game(compat_dir)
     return Path(*compat_dir.parts[:compat_dir.parts.index("AppData")])/"Documents"/"My Games"/game
     
 
+def infer_compat_path(target_dir):
+    if os.name == "posix":
+        game_id = determine_game_id(target_dir)  
+        u_compat=target_dir.parent.parent.parent/"compatdata"/game_id/"pfx"/"drive_c"/"users"/"steamuser"/"AppData"/"Local"
+        try: match = next((s for s in COMPACT_GAME_LIST if os.path.isdir(os.path.join(str(u_compat), s))), None).rstrip("/") + "/"
+        except: print("error: cannot determine game"); return ""
+        compat_dir = u_compat/match
+    elif os.name == "nt":
+        match = next((s for s in COMPACT_GAME_LIST if os.path.isdir(os.path.join(compat, s))), None).rstrip("/") + "/"
+        compat_dir=Path("C:\\Users\\"+os.getlogin()+"\\AppData\\Local\\"+match)
+    return compat_dir
+        
+    
 def write_plugins(compat_dir, backup_dir, plugins):
     game=determine_game(compat_dir)
     pfile=Path(PLUGINS_FILE[game])

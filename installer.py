@@ -12,7 +12,7 @@ import argparse
 try:
     import rarfile
     HAS_RAR = True
-except Importerror:
+except ImportError:
     HAS_RAR = False
 
 
@@ -404,7 +404,7 @@ def install_files(file_list, extract_dir, output_dir):
     extract_path = Path(extract_dir)
     output_path = Path(output_dir)
     output_path.mkdir(parents=True, exist_ok=True)
-    
+
     print("\n" + "="*80)
     print("Installing files...")
     print("="*80 + "\n")
@@ -483,6 +483,7 @@ def run(archive_path=None, output_dir=None):
             # Copy everything from temp to output
             output_dir.mkdir(parents=True, exist_ok=True)
             temp_path = Path(temp_dir)
+            if "Data" in os.listdir(temp_path): temp_path=temp_path/"Data" # traverse down
             for item in temp_path.iterdir():
                 dest = output_dir / item.name
                 if item.is_file():
