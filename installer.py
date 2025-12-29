@@ -8,6 +8,9 @@ import tempfile
 import xml.etree.ElementTree as ET
 from pathlib import Path
 import argparse
+import subprocess
+
+from utils import * 
 
 try:
     import rarfile
@@ -16,46 +19,22 @@ except ImportError:
     HAS_RAR = False
 
 
-def find_file_case_insensitive(directory, filename):
-    """Find a file case-insensitively in a directory."""
-    dir_path = Path(directory)
-    if not dir_path.exists():
-        return None
-    
-    for item in dir_path.rglob('*'):
-        if item.is_file() and item.name.lower() == filename.lower():
-            return item
-    return None
-
-
 def extract_archive(archive_path, extract_to):
     """Extract zip, 7z, or rar archive."""
-    import subprocess
     archive_path = Path(archive_path)
     ext = archive_path.suffix.lower()
-    
     print(f"Extracting {archive_path.name}...")
-    
     if ext == '.zip':
         with zipfile.ZipFile(archive_path, 'r') as zip_ref:
             zip_ref.extractall(extract_to)
-    
     elif ext == '.7z':
-        # Try system 7z command as fallback
         try:
-            result = subprocess.run(['7z', 'x', str(archive_path), f'-o{extract_to}', '-y'],
-                                    capture_output=True, text=True)
-            if result.returncode == 0:
-                print("Extraction complete!")
-                return
-            else:
-                print(f"7z command failed: {result.stderr}")
-        except FileNotFounderror:
-            pass
-        
+            result = subprocess.run(['7z', 'x', str(archive_path), f'-o{extract_to}', '-y'], capture_output=True, text=True)
+            if result.returncode == 0: print("Extraction complete!"); return
+            else: print(f"7z command failed: {result.stderr}")
+        except FileNotFounderror: pass
         print("error: Could not extract 7z file. Install py7zr (pip install py7zr) or 7z command line tool")
         return
-    
     elif ext == '.rar':
         # Try rarfile first
         if HAS_RAR:
@@ -66,7 +45,6 @@ def extract_archive(archive_path, extract_to):
                 return
             except Exception as e:
                 print(f"rarfile failed ({e}), trying system unrar command...")
-        
         # Try system unrar command as fallback
         try:
             result = subprocess.run(['unrar', 'x', '-y', str(archive_path), str(extract_to)],
@@ -74,18 +52,13 @@ def extract_archive(archive_path, extract_to):
             if result.returncode == 0:
                 print("Extraction complete!")
                 return
-            else:
-                print(f"unrar command failed: {result.stderr}")
-        except FileNotFounderror:
-            pass
-        
+            else: print(f"unrar command failed: {result.stderr}")
+        except FileNotFoundError: pass
         print("error: Could not extract rar file. Install rarfile (pip install rarfile) or unrar command line tool")
-        return #sys.exit(1)
-    
+        return
     else:
         print("error: Unsupported archive format for "+str(archive_path))
-        return #sys.exit(1)
-    
+        return
     print("Extraction complete!")
 
 
@@ -94,72 +67,78 @@ def find_fomod_config(extract_dir):
     # Common locations
     common_paths = [
         'fomod/ModuleConfig.xml',
-        'FOMOD/ModuleConfig.xml',
-        'Fomod/ModuleConfig.xml',
-        'ModuleConfig.xml'
+        'ModuleConfig.xml',
+        'fomod/info.xml',
+        'info.xml'
     ]
-    
     extract_path = Path(extract_dir)
-    
-    # Try common paths first
     for path in common_paths:
-        full_path = extract_path / path
+        full_path = Path(fix_path_case(extract_path / path))
         if full_path.exists():
+            print(f"found FOMOD config at: {full_path}")
             return full_path
-    
-    # Search recursively
-    config_file = find_file_case_insensitive(extract_dir, 'ModuleConfig.xml')
-    if config_file:
-        return config_file
     
     return None
 
 
-def parse_fomod_xml(xml_path):
-    """Safely parse FOMOD XML."""
+def find_mod_base_dir(mod_path):
+    mod_path = Path(mod_path)
+    data_indicators = [
+        '.esp', '.esm', '.esl', '.bsa', '.ba2',
+        'meshes', 'textures', 'scripts', 'sounds',
+        'interface', 'music', 'video', 'strings',
+        'skse', 'fose', 'f4se', 'nvse', 'seq',
+    ]
+    def is_data_directory(path):
+        try:
+            items = list(path.iterdir())
+        except (PermissionError, OSError):
+            return False
+        for item in items:
+            item_lower = item.name.lower()
+            for indicator in data_indicators:
+                if (indicator.startswith('.') and item_lower.endswith(indicator)) or \
+                   (not indicator.startswith('.') and item_lower == indicator and item.is_dir()):
+                    return True
+        return False
+    for root in mod_path.rglob('*'):
+        if root.is_dir() and root.name.lower() == 'data' and is_data_directory(root):
+            return root
+    for root in mod_path.rglob('*'):
+        if root.is_dir() and 'fomod' in [d.name.lower() for d in root.iterdir() if d.is_dir()] and is_data_directory(root):
+            return root
+    for root in [mod_path] + [p for p in mod_path.rglob('*') if p.is_dir()]:
+        if is_data_directory(root):
+            return root
+    return mod_path
+
+
+def parse_fomod(xml_path):
     try:
         # Read raw bytes to detect encoding
-        with open(xml_path, 'rb') as f:
-            raw_content = f.read()
-        
-        # Detect UTF-16 BOM
-        if raw_content.startswith(b'\xff\xfe'):
-            encoding = 'utf-16-le'
-        elif raw_content.startswith(b'\xfe\xff'):
-            encoding = 'utf-16-be'
-        elif raw_content.startswith(b'\xef\xbb\xbf'):
-            encoding = 'utf-8-sig'
-        else:
-            encoding = 'utf-8'
-        
+        with open(xml_path, 'rb') as f: raw_content = f.read()
+        if raw_content.startswith(b'\xff\xfe'):   encoding = 'utf-16-le'
+        elif raw_content.startswith(b'\xfe\xff'): encoding = 'utf-16-be'
+        elif raw_content.startswith(b'\xef\xbb\xbf'): encoding = 'utf-8-sig'
+        else: encoding = 'utf-8'
         # Try detected encoding first, then fallbacks
         encodings = [encoding, 'utf-16', 'utf-16-le', 'utf-16-be', 'utf-8', 'utf-8-sig', 'latin-1', 'cp1252']
         last_error = None
-        
         for enc in encodings:
             try:
                 content = raw_content.decode(enc)
-                
-                # Try to parse
                 root = ET.fromstring(content)
-                
-                # Remove namespace if present
                 namespace = ''
-                if root.tag.startswith('{'):
-                    namespace = root.tag.split('}')[0] + '}'
-                
+                if root.tag.startswith('{'): namespace = root.tag.split('}')[0] + '}'
                 return root, namespace
-                
             except (UnicodeDecodeerror, ET.Parseerror, Lookuperror) as e:
                 last_error = e
                 continue
-        
-        # If all encodings fail, show the error
+        # if all encodings fail, show the error
         print(f"Failed to parse XML. Last error: {last_error}")
         print(f"\nFirst 200 chars of file (raw):")
         print(raw_content[:200])
         raise Exception("Could not parse XML with any supported encoding")
-        
     except ET.Parseerror as e:
         print(f"error parsing XML: {e}")
         return #sys.exit(1)
@@ -173,8 +152,9 @@ def get_text(element, default=''):
     return element.text.strip() if element is not None and element.text else default
 
 
-def process_fomod(root, namespace, extract_dir, output_dir):
+def process_fomod(fomod_path, extract_dir, output_dir):
     """Process FOMOD configuration and guide user through installation."""
+    root, namespace = parse_fomod(fomod_path)
     ns = {'': namespace.strip('{}')} if namespace else {}
     
     # Get module name
@@ -288,10 +268,8 @@ def process_fomod(root, namespace, extract_dir, output_dir):
    
     # Combine required and selected files
     all_files = required_files + selected_files
- 
     # Install selected files
-    install_files(all_files, extract_dir, output_dir)
-    
+    install_fomod_files(all_files, extract_dir, output_dir)
     return selected_files
 
 
@@ -299,32 +277,21 @@ def evaluate_conditions(visible_elem, condition_flags, ns):
     """Evaluate visibility conditions based on current flags."""
     # Get dependencies element
     deps_elem = visible_elem.find('.//dependencies', ns) if ns else visible_elem.find('.//dependencies')
-    if deps_elem is None:
-        return True
-    
+    if deps_elem is None: return True
     operator = deps_elem.get('operator', 'And')
-    
     # Find all flag dependencies
     flag_deps = deps_elem.findall('.//flagDependency', ns) if ns else deps_elem.findall('.//flagDependency')
-    
-    if not flag_deps:
-        return True
-    
+    if not flag_deps: return True
     results = []
     for flag_dep in flag_deps:
         flag_name = flag_dep.get('flag', '')
         expected_value = flag_dep.get('value', 'On')
-        
         actual_value = condition_flags.get(flag_name, 'Off')
         results.append(actual_value == expected_value)
-    
     # Apply operator
-    if operator == 'And':
-        return all(results)
-    elif operator == 'Or':
-        return any(results)
-    else:
-        return all(results)  # Default to And
+    if operator == 'And':  return all(results)
+    elif operator == 'Or': return any(results)
+    else: return all(results)  # Default to And
 
 
 def get_user_selection(num_options, selection_type):
@@ -339,7 +306,6 @@ def get_user_selection(num_options, selection_type):
                 print(f"Please enter a number between 1 and {num_options}")
             except Valueerror:
                 print("Please enter a valid number")
-        
         elif selection_type == 'SelectAtMostOne':
             prompt = f"Select one option (1-{num_options}) or 0 to skip: "
             try:
@@ -399,7 +365,7 @@ def extract_files_info(files_elem, ns):
     return file_list
 
 
-def install_files(file_list, extract_dir, output_dir):
+def install_fomod_files(file_list, extract_dir, output_dir):
     """Copy selected files to output directory."""
     extract_path = Path(extract_dir)
     output_path = Path(output_dir)
@@ -416,56 +382,51 @@ def install_files(file_list, extract_dir, output_dir):
         
         for part in source_parts:
             found = False
-            if current_path.is_dir():
-                for item in current_path.iterdir():
-                    if item.name.lower() == part.lower():
-                        current_path = item
-                        found = True
-                        break
+            if not current_path.is_dir(): continue
+            for item in current_path.iterdir():
+                if item.name.lower() == part.lower():
+                    current_path = item
+                    found = True
+                    break
             if not found:
                 print(f"warning: Could not find {source}")
                 break
         else:
             dest_path = output_path / destination
-            
             if file_type == 'file' and current_path.is_file():
                 dest_path.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy2(current_path, dest_path)
                 print(f"installed: {current_path} to {destination}")
-            
             elif file_type == 'folder' and current_path.is_dir():
                 if dest_path.exists():
                     shutil.rmtree(dest_path)
                 shutil.copytree(current_path, dest_path)
                 print(f"installed folder: {current_path} to {destination}")
-    
     print(f"\ninstallation complete! files installed to: {output_path}")
 
 
+def install_mod_files(temp_dir, output_dir):
+    print("copying files from non-FOMOD archive...")
+    # Copy everything from temp to output
+    output_dir.mkdir(parents=True, exist_ok=True)
+    temp_path = Path(temp_dir)
+    for item in temp_path.iterdir():
+        dest = output_dir / item.name
+        if item.is_file():
+            shutil.copy2(item, dest)
+            print(f"copied: {item.name}")
+        elif item.is_dir():
+            if dest.exists():
+                shutil.rmtree(dest)
+            shutil.copytree(item, dest)
+            print(f"copied folder: {item.name}")
+    print(f"\nall files copied to: {output_dir}")
+
+
 def run(archive_path=None, output_dir=None):
-    if not archive_path: 
-        parser = argparse.ArgumentParser(
-            description='install Bethesda mods with FOMOD support',
-            formatter_class=argparse.RawDescriptionHelpFormatter,)
-        parser.add_argument('archive', 
-                            help='Path to the mod archive (zip, 7z, or rar)')
-        parser.add_argument('-o', '--output', 
-                            help='Output directory (default: <archive_name>_installed in current directory)',
-                            default=None)
-        args = parser.parse_args()
-        if not os.path.exists(args.archive):
-            print(f"error: Archive not found: {args.archive}")
-            return
-        archive_path=args.archive
-        # Get output directory
-        archive_name = Path(args.archive).stem
-        if args.output: output_dir = Path(args.output) / f"{archive_name}"
-        else: output_dir = Path.cwd() / f"{archive_name}"
-
-    else:
-        archive_name = Path(archive_path).stem
-        output_dir = Path(output_dir) / f"{archive_name}"
-
+    archive_name = Path(archive_path).stem
+    output_dir = Path(output_dir) / f"{archive_name}"
+    
     # handle dups
     output_dir = next(
         p for i in range(10**9)
@@ -473,36 +434,36 @@ def run(archive_path=None, output_dir=None):
     archive_name = Path(output_dir).stem # reassign in case of change
 
     # Create temporary directory for extraction
-    with tempfile.TemporaryDirectory() as temp_dir:
+    try:
+        temp_dir = Path(tempfile.mkdtemp())
         extract_archive(archive_path, temp_dir)
-        # Find FOMOD config
+        temp_dir = find_mod_base_dir(Path(temp_dir))
         config_path = find_fomod_config(temp_dir)
-        if not config_path:
-            #print("\nno FOMOD configuration found.")
-            print("copying files from non-FOMOD archive...")
-            # Copy everything from temp to output
-            output_dir.mkdir(parents=True, exist_ok=True)
-            temp_path = Path(temp_dir)
-            if "Data" in os.listdir(temp_path): temp_path=temp_path/"Data" # traverse down
-            for item in temp_path.iterdir():
-                dest = output_dir / item.name
-                if item.is_file():
-                    shutil.copy2(item, dest)
-                    print(f"copied: {item.name}")
-                elif item.is_dir():
-                    if dest.exists():
-                        shutil.rmtree(dest)
-                    shutil.copytree(item, dest)
-                    print(f"copied folder: {item.name}")
-            print(f"\nall files copied to: {output_dir}")
-            return archive_name
-        print(f"found FOMOD config at: {config_path}")
-        # Parse and process FOMOD
-        root, namespace = parse_fomod_xml(config_path)
-        process_fomod(root, namespace, temp_dir, output_dir)
-
+        if config_path: res=process_fomod(config_path, temp_dir, output_dir)
+        if not config_path or not res: install_mod_files(temp_dir, output_dir)
+    except Exception as e:
+        print("error: encoutered exception: "+str(e)+" when installing mod, giving up")
+        return None
     return archive_name
 
 
 if __name__ == '__main__':
-    run()
+    parser = argparse.ArgumentParser(
+        description='install Bethesda mods with FOMOD support',
+        formatter_class=argparse.RawDescriptionHelpFormatter,)
+    parser.add_argument('archive', 
+                        help='Path to the mod archive (zip, 7z, or rar)')
+    parser.add_argument('-o', '--output', 
+                        help='Output directory (default: <archive_name>_installed in current directory)',
+                        default=None)
+    args = parser.parse_args()
+    if not os.path.exists(args.archive):
+        print(f"error: Archive not found: {args.archive}")
+    archive_path=args.archive
+
+    # Get output directory
+    archive_name = Path(args.archive)
+    if args.output: output_dir = Path(args.output)
+    else: output_dir = Path.cwd()
+
+    run(archive_path, output_dir)

@@ -214,6 +214,7 @@ def save_to_loadorder(mods):
 
 def install_mod(mod_path):  
     name = installer.run(mod_path, SOURCE_DIR)
+    if not name: return None
     with open(LOAD_ORDER, "a", encoding="utf-8") as f:
         f.write(name+'\n')
     if RELOAD_ON_INSTALL: restore(); perform_copy()
@@ -221,13 +222,14 @@ def install_mod(mod_path):
     return name
 
 
-def delete_mod(mod_name):
+def delete_mod(mod_name, gui=False):
     # TODO: apply this to all load order presets (when that is supported)
     matches = [mod for mod in load_list() if mod_name.lower() in mod.lower()]
     if matches==[]: print("error: could not find mod "+mod_name); return
     mod = matches[0].lstrip('*~#')
-    prompt="are you sure you want to remove mod "+mod+" [y/N] "
-    if 'y' not in input(prompt): return
+    if not gui: 
+        prompt="are you sure you want to remove mod "+mod+" [y/N] "
+        if 'y' not in input(prompt): return
     # remove from load order 
     with open(LOAD_ORDER, "r") as f: lines = f.readlines()
     with open(LOAD_ORDER, "w") as f:

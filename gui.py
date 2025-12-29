@@ -302,6 +302,7 @@ class BDSM(QMainWindow):
         self.mod_table.customContextMenuRequested.connect(self.show_context_menu)
         self.mod_table.horizontalHeader().sectionClicked.connect(self.on_header_clicked)
         self.mod_table.setSortingEnabled(False)  # We'll handle sorting manually
+        self.mod_table.horizontalHeader().setStretchLastSection(True)
         
         # Enable F2 key for renaming
         self.mod_table.keyPressEvent = self.table_key_press_event
@@ -335,7 +336,7 @@ class BDSM(QMainWindow):
         # Vertical separator
         separator = QLabel("|")
         separator.setStyleSheet("color: gray; font-size: 20px; padding: 0px; margin: 0px 5px;")
-        separator.setFixedWidth(10)
+        separator.setFixedWidth(30)
         
         self.save_button = QPushButton("Save Load Order")
         self.load_button = QPushButton("Load Mods")
@@ -375,7 +376,7 @@ class BDSM(QMainWindow):
         header.setSectionResizeMode(1, header.ResizeMode.Fixed)
         self.mod_table.setColumnWidth(0, 40)  # Priority number column
         self.mod_table.setColumnWidth(1, 25)  # Checkbox column
-        self.mod_table.setColumnWidth(2, 600)  # Mod name column
+        self.mod_table.setColumnWidth(2, 500)  # Mod name column
         
         # Connect buttons
         self.add_button.clicked.connect(self.add_mod_dialog)
@@ -675,7 +676,7 @@ class BDSM(QMainWindow):
             if installed_count > 0:
                 self.update_status()
                 self.auto_save_load_order()
-                if RELOAD_ON_INSTALL: self.load_mods()
+                if RELOAD_ON_INSTALL: restore(); perform_copy()
                 self.statusBar().showMessage(f"Successfully installed {installed_count} mod(s)", 3000)
             
             if failed_files:
@@ -946,6 +947,8 @@ class BDSM(QMainWindow):
                         mods.append(mod_name)
             
             save_to_loadorder(mods)
+            #restore(); perform_copy() # reload
+            self.load_mods()
             self.statusBar().showMessage("Load order auto-saved", 2000)
         except Exception as e:
             self.statusBar().showMessage(f"Auto-save failed: {str(e)}", 3000)
@@ -1409,12 +1412,14 @@ class BDSM(QMainWindow):
                     children = self.get_separator_children_rows(row)
                     for child_row in children:
                         self.mod_table.setRowHidden(child_row, False)
+                mod_name = self.mod_table.collect_row_data(row)["name"]
+                delete_mod(mod_name, gui=True)
                 self.mod_table.removeRow(row)
             
             self.update_priority_numbers()
             self.update_status()
             self.auto_save_load_order()
-            if RELOAD_ON_INSTALL: self.load_mods
+            if RELOAD_ON_INSTALL: self.load_mods()
 
     def toggle_selected_mods(self):
         """Toggle enabled/disabled state for all selected mods"""
@@ -1433,10 +1438,13 @@ class BDSM(QMainWindow):
         new_state = Qt.CheckState.Unchecked if enabled_count > len(selected_rows) / 2 else Qt.CheckState.Checked
         
         for row in selected_rows:
+            row_data = self.mod_table.collect_row_data(row)
+            if row_data["is_separator"]: continue
             self.mod_table.item(row, 1).setCheckState(new_state)
         
         self.update_status()
         self.auto_save_load_order()
+        if RELOAD_ON_INSTALL: self.load_mods()
 
     def rename_selected_mod(self):
         """Rename the selected mod using an input dialog"""
@@ -1656,7 +1664,6 @@ class BDSM(QMainWindow):
         if installed_count > 0:
             self.update_status()
             self.auto_save_load_order()
-            if RELOAD_ON_INSTALL: restore(); perform_copy()
             self.statusBar().showMessage(f"Successfully installed {installed_count} mod(s)", 3000)
         
         if failed_files:
