@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/python3
 
 import os
 import sys
@@ -26,6 +26,8 @@ COMPAT_DIR=TARGET_DIR/"compat"
 
 RELOAD_ON_INSTALL=False
 
+VERBOSITY=False
+
 
 def create_cfg(gui=False, target=None):
     # prompt user choice
@@ -46,6 +48,8 @@ def create_cfg(gui=False, target=None):
         f.write("TARGET_DIR: "+str(target)+"\n")
         f.write("# ini/plugins.txt directory\n")
         f.write("COMPAT_DIR: "+str(compat)+"\n")
+        f.write("# load order txt file\n")
+        f.write("LOAD_ORDER: "+str(LOAD_ORDER)+"\n")
         f.write("# reload mods after installing new mod (or deleting) (boolean)\n")
         f.write("RELOAD_ON_INSTALL: True\n")
     print("created new config!")
@@ -53,13 +57,15 @@ def create_cfg(gui=False, target=None):
 
     
 def read_cfg():
-    global SOURCE_DIR, TARGET_DIR, COMPAT_DIR, RELOAD_ON_INSTALL
+    global SOURCE_DIR, TARGET_DIR, COMPAT_DIR, LOAD_ORDER, RELOAD_ON_INSTALL
     if not os.path.exists(CONFIG_FILE): create_cfg(); return
     with open("config.yaml", "r") as f: cfg_dict = yaml.safe_load(f)
     SOURCE_DIR=Path(cfg_dict["SOURCE_DIR"])
     TARGET_DIR=Path(cfg_dict["TARGET_DIR"])
-    COMPAT_DIR=Path(cfg_dict["COMPAT_DIR"])  
+    COMPAT_DIR=Path(cfg_dict["COMPAT_DIR"])
+    LOAD_ORDER=Path(cfg_dict["LOAD_ORDER"])
     RELOAD_ON_INSTALL=bool(cfg_dict["RELOAD_ON_INSTALL"])
+    sync_loadorder() # just in case
 
 
 def load_list():
@@ -80,7 +86,7 @@ def copy_with_backup(src, dst, backup_dir, copied_manifest, backedup_manifest, t
     # 2. the file was NOT already copied from a source directory earlier
     if os.path.exists(dst_path) and (rel_path not in copied_manifest):
         backup_path = os.path.join(backup_dir, rel_path)
-        print("backing up: "+rel_path) # status
+        if VERBOSITY: print("backing up: "+rel_path) # status
         os.makedirs(os.path.dirname(backup_path), exist_ok=True)
         if not os.path.exists(backup_path):
             shutil.move(dst_path, backup_path)
@@ -98,6 +104,10 @@ def perform_copy():
     ensure_dir(BACKUP_DIR)
 
     load_order = load_list()
+
+    if (os.path.exists(COPY_MANIFEST) \
+    or os.path.exists(BACKUP_MANIFEST)) \
+    and RELOAD_ON_INSTALL: restore()
 
     copied_manifest = []
     backedup_manifest = []
@@ -140,7 +150,7 @@ def perform_copy():
 
             # copy all files
             for file in files:
-                print("linking: "+file) # status
+                if VERBOSITY: print("linking: "+file) # status
                 if file.endswith('.esm') \
                 or file.endswith('.esl') \
                 or file.endswith('.esp'):
@@ -183,7 +193,7 @@ def restore():
     for filename in copied_files:
         path = os.path.join(TARGET_DIR, filename)
         if not os.path.exists(path): continue
-        print("unlinking: "+path) # status
+        if VERBOSITY: print("unlinking: "+path) # status
         if os.path.isdir(path): shutil.rmtree(path)
         else: os.remove(path)
     # restore originals
@@ -191,7 +201,7 @@ def restore():
         backup_path = os.path.join(BACKUP_DIR, filename)
         target_path = os.path.join(TARGET_DIR, filename)
         if os.path.exists(BACKUP_DIR):
-            print("restoring: "+target_path) # status
+            if VERBOSITY: print("restoring: "+target_path) # status
             shutil.move(backup_path, target_path)
     # remove manifests
     os.remove(COPY_MANIFEST)
@@ -212,12 +222,29 @@ def save_to_loadorder(mods):
     print("wrote to "+str(LOAD_ORDER))
 
 
-def install_mod(mod_path):  
-    name = installer.run(mod_path, SOURCE_DIR)
+def sync_loadorder():
+    # this is in case user does something shifty with their files
+    # in between sessions (hehehe)
+    loadorder=load_list()
+    clean_loadorder=[s.lstrip('~*') for s in loadorder]
+    additions  = []
+    exclusions = []
+    for mod in os.listdir(SOURCE_DIR):
+        if mod not in clean_loadorder: additions.append('~'+mod)
+    for mod in loadorder:
+        if any(mod.startswith(sub) for sub in ['~','*','#']): continue
+        if mod not in os.listdir(SOURCE_DIR): exclusions.append(mod)
+    loadorder = [x for x in loadorder if x not in exclusions] # remove exclusions
+    loadorder = [item for i, item in enumerate(loadorder) if item.startswith('#') or item not in loadorder[:i]]
+    save_to_loadorder(loadorder+additions)
+
+
+def install_mod(mod_path, gui=False, parent=None):  
+    name = installer.run(mod_path, SOURCE_DIR, gui, parent)
     if not name: return None
     with open(LOAD_ORDER, "a", encoding="utf-8") as f:
         f.write(name+'\n')
-    if RELOAD_ON_INSTALL: restore(); perform_copy()
+    if RELOAD_ON_INSTALL: perform_copy() #restore(); perform_copy()
     print("wrote mod: "+name+" to load order!")
     return name
 
@@ -238,7 +265,7 @@ def delete_mod(mod_name, gui=False):
     # delete dir
     try: shutil.rmtree(SOURCE_DIR/mod)
     except: print("error: could not delete mod or mod does not exist in "+str(SOURCE_DIR))
-    if RELOAD_ON_INSTALL: restore(); perform_copy()
+    if RELOAD_ON_INSTALL: perform_copy() #restore(); perform_copy()
     print("deleted mod "+mod+"!")
 
 
@@ -269,6 +296,8 @@ def main():
     parser.add_argument("-d", "--delete", help="delete a mod")
     args = parser.parse_args()
 
+    if len(sys.argv)>1: read_cfg() 
+
     if args.load: perform_copy()
     elif args.unload: restore()
     elif args.reload: restore(); perform_copy()
@@ -280,9 +309,6 @@ def main():
     elif args.restore_ini: game_specific.restore_ini(COMPAT_DIR, SOURCE_DIR)
     else: 
         os.system("python '"+str(LOCAL_DIR / Path("gui.py"))+"'")
-        #print("error: specify an option\n")
-        #parser.print_help() 
 
 if __name__ == "__main__":
-    read_cfg()
     main()

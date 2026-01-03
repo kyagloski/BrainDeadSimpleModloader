@@ -50,6 +50,7 @@ GAME_IDS = { "Fallout 3 goty"         : 22370,
              "Fallout New Vegas"      : 22380,
              "Fallout 4"              : 377160,
              "Skyrim Special Edition" : 489830,
+             "Skyrim VR"              : "", # TODO: add support for ALL beth game 
              "Default"                : "" }
 
 
@@ -123,7 +124,7 @@ def switch_launcher(compat_dir, target_dir):
         except: pass
     try: lpath=os.readlink(tback/lbin)
     except: lpath=tback/(lbin+"_original")
-    if sbin in lpath: force_symlink(tback/(lbin+"_original"),tback/lbin); print("switched to vanilla launcher!")
+    if str(sbin) in str(lpath): force_symlink(tback/(lbin+"_original"),tback/lbin); print("switched to vanilla launcher!")
     elif lbin+"_original" in str(lpath): force_symlink(tback/sbin,tback/lbin); print("switched to script extender!")
     else: print("error: could not switch launchers")
 
@@ -137,7 +138,6 @@ def backup_ini(compat_dir, source_dir):
     for i in INIS[game]:
         try:
             f=Path(fix_path_case(str(ini_dir/i)))
-            print(f)
             shutil.copy(f, back_dir)
         except:
             print("error: could find file "+i)
