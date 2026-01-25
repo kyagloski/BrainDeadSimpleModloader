@@ -7,7 +7,8 @@ import shutil
 from datetime import datetime
 from pathlib import Path
 
-from utils import *
+try:    from utils.utils import *
+except: from utils import * 
 
 COMPACT_GAME_LIST = ["Fallout4",
                      "Skyrim",

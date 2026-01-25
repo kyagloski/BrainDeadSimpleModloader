@@ -2,7 +2,7 @@
 # UTILITY FUNCTIONS
 
 import os
-
+import traceback
 
 def force_symlink(target, link_name):
     try:
@@ -32,3 +32,5 @@ def fix_path_case(path):
 def ensure_dir(path):
     os.makedirs(path, exist_ok=True)
 
+def print_traceback():
+    for line in traceback.format_stack()[:-1]: print(line.strip())

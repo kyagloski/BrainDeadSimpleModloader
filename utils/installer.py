@@ -10,7 +10,8 @@ from pathlib import Path
 import argparse
 import subprocess
 
-from utils import * 
+try:    from utils.utils import *
+except: from utils import * 
 
 try:
     import rarfile
@@ -651,9 +652,9 @@ def install_fomod_files(file_list, extract_dir, output_dir):
                 shutil.copy2(current_path, dest_path)
                 print(f"installed: {current_path} to {destination}")
             elif file_type == 'folder' and current_path.is_dir():
-                if dest_path.exists():
-                    shutil.rmtree(dest_path)
-                shutil.copytree(current_path, dest_path)
+                #if dest_path.exists():
+                #    shutil.rmtree(dest_path)
+                shutil.copytree(current_path, dest_path, dirs_exist_ok=True)
                 print(f"installed folder: {current_path} to {destination}")
     print(f"\ninstallation complete! files installed to: {output_path}")
 

@@ -8,14 +8,20 @@ import stat
 import yaml
 from pathlib import Path
 
-from utils import * 
-import installer
-import game_specific
+try: # can run cl or ui, import accordingly
+    from utils.utils import * 
+    import utils.utils
+    import utils.installer as installer
+    import utils.game_specific as game_specific
+except:
+    from utils import * 
+    import installer
+    import game_specific
 
 VERSION="v0.1"
 LOCAL_DIR=Path(os.path.dirname(os.path.realpath(__file__)))
 CONFIG_FILE=LOCAL_DIR/"config.yaml"
-LOAD_ORDER=LOCAL_DIR/"load_order.txt"
+LOAD_ORDER=LOCAL_DIR/"manifest"/"loadorders"/"load_order.txt"
 BACKUP_DIR=LOCAL_DIR/"manifest"
 COPY_MANIFEST=BACKUP_DIR/"copy_manifest.txt"
 BACKUP_MANIFEST=BACKUP_DIR/"backup_manifest.txt"
@@ -25,8 +31,8 @@ TARGET_DIR=LOCAL_DIR/"target"
 COMPAT_DIR=TARGET_DIR/"compat"
 
 RELOAD_ON_INSTALL=False
-
-VERBOSITY=False
+VERBOSITY        =False
+OPERATION_TIMEOUT=500 # 0.5s
 
 
 def create_cfg(gui=False, target=None):
@@ -56,21 +62,22 @@ def create_cfg(gui=False, target=None):
     read_cfg()
 
     
-def read_cfg():
+def read_cfg(sync=True):
     global SOURCE_DIR, TARGET_DIR, COMPAT_DIR, LOAD_ORDER, RELOAD_ON_INSTALL
     if not os.path.exists(CONFIG_FILE): create_cfg(); return
-    with open("config.yaml", "r") as f: cfg_dict = yaml.safe_load(f)
+    with open(CONFIG_FILE, "r") as f: cfg_dict = yaml.safe_load(f)
     SOURCE_DIR=Path(cfg_dict["SOURCE_DIR"])
     TARGET_DIR=Path(cfg_dict["TARGET_DIR"])
     COMPAT_DIR=Path(cfg_dict["COMPAT_DIR"])
     LOAD_ORDER=Path(cfg_dict["LOAD_ORDER"])
     RELOAD_ON_INSTALL=bool(cfg_dict["RELOAD_ON_INSTALL"])
-    sync_loadorder() # just in case
+    if sync: sync_loadorder() # just in case
 
 
 def load_list():
     if not os.path.exists(LOAD_ORDER):
-        print("load order file not found, creating new load_order.txt")
+        print("load order file not found, creating new manifest/loadorders/load_order.txt")
+        ensure_dir(LOAD_ORDER.parent)
         Path(LOAD_ORDER).touch()
     with open(LOAD_ORDER, "r", encoding="utf-8") as f:
         return [line.strip() for line in f if line.strip()]
@@ -145,7 +152,7 @@ def perform_copy():
             and (not os.path.isdir(dest_root)): 
                 dest_dir=dest_root.replace(str(TARGET_DIR),'')
                 copied_manifest.append(dest_dir) # add empty dirs
-            dest_root=fix_path_case(dest_root)
+            dest_root=fix_path_case(str(dest_root))
             os.makedirs(dest_root, exist_ok=True)
 
             # copy all files
@@ -215,11 +222,11 @@ def restore():
     print("unload complete!")
 
 
-def save_to_loadorder(mods):
+def save_to_loadorder(mods, verbose=True):
     # save list of mods to load order
     with open(LOAD_ORDER, "w") as f:
         for mod in mods: f.write(mod+'\n')
-    print("wrote to "+str(LOAD_ORDER))
+    if verbose: print("wrote to "+str(LOAD_ORDER))
 
 
 def sync_loadorder():
@@ -236,7 +243,7 @@ def sync_loadorder():
         if mod not in os.listdir(SOURCE_DIR): exclusions.append(mod)
     loadorder = [x for x in loadorder if x not in exclusions] # remove exclusions
     loadorder = [item for i, item in enumerate(loadorder) if item.startswith('#') or item not in loadorder[:i]]
-    save_to_loadorder(loadorder+additions)
+    if additions!=[] or exclusions!=[]: save_to_loadorder(loadorder+additions, verbose=False)
 
 
 def install_mod(mod_path, gui=False, parent=None):  
@@ -308,7 +315,7 @@ def main():
     elif args.backup_ini: game_specific.backup_ini(COMPAT_DIR, SOURCE_DIR)
     elif args.restore_ini: game_specific.restore_ini(COMPAT_DIR, SOURCE_DIR)
     else: 
-        os.system("python '"+str(LOCAL_DIR / Path("gui.py"))+"'")
+        os.system("python '"+str(LOCAL_DIR / "utils" /Path("gui.py"))+"'")
 
 if __name__ == "__main__":
     main()

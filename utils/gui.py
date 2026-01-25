@@ -9,12 +9,16 @@ from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, 
     QTreeWidget, QTreeWidgetItem, QTableWidget, QTableWidgetItem, 
     QPushButton, QSplitter, QLabel, QLineEdit, QMenu, QMessageBox, QComboBox,
-    QFileDialog, QInputDialog, QTextEdit, QThread, QWaitCondition, pyqtSignal
+    QFileDialog, QInputDialog, QTextEdit
 )
-from PyQt6.QtCore import Qt, QItemSelectionModel, QObject, pyqtSignal
+from PyQt6.QtCore import Qt, QItemSelectionModel, QObject, QThread, QWaitCondition, pyqtSignal, QMutex, QMutexLocker, QTimer
 from PyQt6.QtGui import QIcon, QFont, QTextCursor
 
-from bdsm import *
+try:
+    sys.path.append(str(Path(__file__).parent.parent))
+    from ..bdsm import *
+except:
+    from bdsm import *
 
 SHOW_MSG_TIME = 10000000
 
@@ -36,45 +40,49 @@ class StdoutRedirector(QObject):
         if self.original_stdout:
             self.original_stdout.flush()
 
-class CommandWorker(QThread):
-    finished = pyqtSignal(str, object)  # command_name, result
-
+class CommandExecutorThread(QThread):
+    commands_finished = pyqtSignal()
+    
     def __init__(self):
         super().__init__()
-        self._mutex = QMutex()
-        self._condition = QWaitCondition()
-        self._commands = OrderedDict()  # {command_name: (func, args, kwargs)}
-        self._running = True
-
-    def queue(self, name, func, *args, **kwargs):
-        """Queue a command - if same name exists, replaces it"""
-        self._mutex.lock()
-        self._commands[name] = (func, args, kwargs)
-        self._mutex.unlock()
-        self._condition.wakeOne()
-
+        self.commands = {}  # Dict to store latest version of each unique command
+        self.mutex = QMutex()
+        self.timer = None
+        self.is_running = True
+        
+    def add_command(self, command_id, command_data):
+        with QMutexLocker(self.mutex):
+            # Store/update the latest version of this command
+            self.commands[command_id] = command_data
+        self.reset_timer()
+        
+    def reset_timer(self):
+        if self.timer: self.timer.stop()
+        self.timer = QTimer()
+        self.timer.timeout.connect(self.execute_commands)
+        self.timer.setSingleShot(True)
+        self.timer.start(OPERATION_TIMEOUT)
+        
+    def execute_commands(self):
+        with QMutexLocker(self.mutex):
+            commands_to_execute = self.commands.copy()
+            self.commands.clear()
+        for command_id, command_data in commands_to_execute.items():
+            result = self.process_command(command_id, command_data)
+        self.commands_finished.emit()
+            
+    def process_command(self, command_id, command_data):
+        command_id(*command_data) 
+        return f"Executed: {command_id} with data: {command_data}"
+        
     def run(self):
-        while self._running:
-            self._mutex.lock()
-            if not self._commands:
-                self._condition.wait(self._mutex)
-            if self._commands:
-                name, (func, args, kwargs) = self._commands.popitem(last=False)
-                self._mutex.unlock()
-                try:
-                    result = func(*args, **kwargs)
-                    self.finished.emit(name, result)
-                except Exception as e:
-                    self.finished.emit(name, e)
-            else:
-                self._mutex.unlock()
-
+        self.exec()
+        
     def stop(self):
-        self._running = False
-        self._condition.wakeOne()
+        self.is_running = False
+        if self.timer: self.timer.stop()
+        self.quit()
         self.wait()
-
-
 
 class ReorderOnlyTable(QTableWidget):
     def __init__(self, *args, **kwargs):
@@ -242,6 +250,11 @@ class ModLoaderUserInterface(QMainWindow):
         self._load_initial_data()
         self._loading = False
 
+        # Create the command executor thread
+        self.executor = CommandExecutorThread()
+        self.executor.commands_finished.connect(self.load_plugins_list)
+        self.executor.start()
+
     def _setup_stdout_redirect(self):
         self._stdout_redirector = StdoutRedirector(sys.stdout)
         self._stdout_redirector.text_written.connect(self._append_log)
@@ -293,7 +306,6 @@ class ModLoaderUserInterface(QMainWindow):
         log_layout.addWidget(self.log_output)
         
         main_splitter.addWidget(log_widget)
-        
         main_splitter.setSizes([500, 100])
         
         self.statusBar().setContentsMargins(0,0,0,0)
@@ -366,9 +378,10 @@ class ModLoaderUserInterface(QMainWindow):
         self.settings_button.clicked.connect(self.open_settings)
         preset_layout.addWidget(self.settings_button)
         
-        preset_layout.addWidget(QLabel("Load Order:"))
+        preset_layout.addWidget(QLabel("Preset:"))
         self.preset_combo = QComboBox()
-        self.preset_combo.addItem("loadorder.txt")
+        self.preset_combo.setFixedWidth(150)
+        self.preset_combo.addItem("load_order.txt")
         preset_layout.addWidget(self.preset_combo)
         preset_layout.addStretch()
         
@@ -407,7 +420,7 @@ class ModLoaderUserInterface(QMainWindow):
 
     def _create_search_box(self):
         self.search_box = QLineEdit()
-        self.search_box.setPlaceholderText("Search mods...")
+        self.search_box.setPlaceholderText("Filter")
         self.search_box.textChanged.connect(self.filter_mods)
         return self.search_box
 
@@ -622,7 +635,8 @@ class ModLoaderUserInterface(QMainWindow):
             self.auto_save_load_order()
             if RELOAD_ON_INSTALL:
                 #restore()
-                perform_copy()
+                #perform_copy()
+                self.executor.add_command(perform_copy, tuple())
             self.statusBar().showMessage(f"Successfully installed {installed_count} mod(s)", SHOW_MSG_TIME)
         
         if failed_files:
@@ -654,8 +668,9 @@ class ModLoaderUserInterface(QMainWindow):
     def load_mods(self):
         try:
             #restore()
-            read_cfg() # check for update
-            perform_copy()
+            read_cfg(sync=False) # check for update
+            #perform_copy()
+            self.executor.add_command(perform_copy, tuple())
             self.update_unload_button_state()
             self.load_plugins_list()
             self.statusBar().showMessage("Mods loaded successfully", SHOW_MSG_TIME)
@@ -664,8 +679,9 @@ class ModLoaderUserInterface(QMainWindow):
 
     def unload_mods(self):
         try:
-            read_cfg() # check for update
-            restore()
+            read_cfg(sync=False) # check for update
+            #restore()
+            self.executor.add_command(restore, tuple())
             self.update_unload_button_state()
             self.load_plugins_list()
             self.statusBar().showMessage("Mods unloaded successfully", SHOW_MSG_TIME)
@@ -778,13 +794,13 @@ class ModLoaderUserInterface(QMainWindow):
         if self._loading: return
         try:
             mods = self._collect_load_order()
-            read_cfg() # check for update
+            read_cfg(sync=False) # check for update
             # manually read cfg for param because this shit is broke somehow
             with open("config.yaml", "r") as f: cfg_dict = yaml.safe_load(f)
             RELOAD_ON_INSTALL = cfg_dict["RELOAD_ON_INSTALL"]
-            print(RELOAD_ON_INSTALL)
             if RELOAD_ON_INSTALL: 
-                save_to_loadorder(mods)
+                #save_to_loadorder(mods)
+                self.save_load_order()
                 self.load_mods()
                 self.statusBar().showMessage("Load order auto-saved", SHOW_MSG_TIME)
         except Exception as e:
@@ -794,7 +810,7 @@ class ModLoaderUserInterface(QMainWindow):
     def save_load_order(self):
         try:
             mods = self._collect_load_order()
-            read_cfg() # check for update
+            read_cfg(sync=False) # check for update
             save_to_loadorder(mods)
             self.statusBar().showMessage("Load order saved successfully", SHOW_MSG_TIME)
         except Exception as e:
@@ -1108,8 +1124,8 @@ class ModLoaderUserInterface(QMainWindow):
             self.mod_table.item(row, 1).setCheckState(new_state)
         
         self.update_status()
-        self.auto_save_load_order()
-        read_cfg() # check for update
+        #self.auto_save_load_order() # this happens elsewhere (maybe uncomment)
+        read_cfg(sync=False) # check for update
         if RELOAD_ON_INSTALL:
             self.load_mods()
 
