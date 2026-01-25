@@ -3,6 +3,7 @@
 import sys
 import subprocess
 import platform
+import yaml
 from pathlib import Path
 from collections import OrderedDict
 from PyQt6.QtWidgets import (
@@ -229,6 +230,34 @@ class ReorderOnlyTable(QTableWidget):
             self.itemChanged.emit(self.selectedItems()[0])
 
 
+class EditableComboBox(QComboBox):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.customContextMenuRequested.connect(self.show_context_menu)
+    
+    def show_context_menu(self, pos):
+        menu = QMenu(self)
+        open_action = menu.addAction("Edit file")
+        action = menu.exec(self.mapToGlobal(pos))
+        
+        if action == open_action:
+            self.open_in_editor()
+    
+    def open_in_editor(self):
+        file_path = str(LOAD_ORDER)
+        print("Opening loadorder file with system text editor...")
+        if not os.path.isfile(file_path):
+            print("error: could not open "+file_path)
+            return
+        if sys.platform == 'win32':
+            os.startfile(file_path)
+        elif sys.platform == 'darwin':
+            subprocess.run(['open', file_path])
+        else:  # Linux
+            subprocess.run(['xdg-open', file_path])
+
+
 class ModLoaderUserInterface(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -266,7 +295,7 @@ class ModLoaderUserInterface(QMainWindow):
         self.log_output.moveCursor(QTextCursor.MoveOperation.End)
         QApplication.processEvents()
 
-    def _init_ui(self):
+    def _init_ui(self, verbose=False):
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
         main_layout = QVBoxLayout(central_widget)
@@ -301,7 +330,11 @@ class ModLoaderUserInterface(QMainWindow):
         
         self.log_output = QTextEdit()
         self.log_output.setReadOnly(True)
-        self.log_output.setPlaceholderText("Click '+' or drag archive to install mods!")
+        if verbose: 
+            self.log_output.setPlainText(verbose)
+            self.log_output.moveCursor(QTextCursor.MoveOperation.End)
+            self.log_output.ensureCursorVisible()
+        else: self.log_output.setPlaceholderText("Click '+' or drag archive to install mods!")
         self.log_output.setStyleSheet("QTextEdit { font-family: monospace; }")
         log_layout.addWidget(self.log_output)
         
@@ -362,27 +395,49 @@ class ModLoaderUserInterface(QMainWindow):
         right_panel = QWidget()
         right_layout = QVBoxLayout(right_panel)
         
-        right_layout.addLayout(self._create_preset_layout())
+        right_layout.addLayout(self._create_top_layout())
         right_layout.addWidget(self._create_mod_table())
         right_layout.addWidget(self._create_search_box())
         right_layout.addLayout(self._create_button_layout())
         
         return right_panel
 
-    def _create_preset_layout(self):
+    def _create_top_layout(self):
         preset_layout = QHBoxLayout()
         
         self.settings_button = QPushButton("⚙")
-        self.settings_button.setFixedWidth(30)
-        self.settings_button.setToolTip("Open Settings")
+        self.settings_button.setFixedWidth(35)
+        self.settings_button.setToolTip("Settings")
         self.settings_button.clicked.connect(self.open_settings)
         preset_layout.addWidget(self.settings_button)
+
+        self.tools_button = QPushButton("⚒")
+        self.tools_button.setFixedWidth(35)
+        self.tools_button.setToolTip("Tools")
+        self.tools_button.clicked.connect(self.open_settings)
+        preset_layout.addWidget(self.tools_button)
         
         preset_layout.addWidget(QLabel("Preset:"))
-        self.preset_combo = QComboBox()
+        self.preset_combo = EditableComboBox()
         self.preset_combo.setFixedWidth(150)
-        self.preset_combo.addItem("load_order.txt")
+        presets=os.listdir()
+        #self.preset_combo.addItem("loadorder.txt")
+        self.read_presets()
+        self.preset_combo.currentTextChanged.connect(self.select_preset)
         preset_layout.addWidget(self.preset_combo)
+
+        self.add_preset_button = QPushButton("+")
+        self.add_preset_button.setFixedWidth(35)
+        self.add_preset_button.setToolTip("New Preset")
+        self.add_preset_button.clicked.connect(self.add_preset)
+        preset_layout.addWidget(self.add_preset_button)
+
+        self.del_preset_button = QPushButton("-")
+        self.del_preset_button.setFixedWidth(35)
+        self.del_preset_button.setToolTip("Delete Preset")
+        self.del_preset_button.clicked.connect(self.del_preset)
+        preset_layout.addWidget(self.del_preset_button)
+
         preset_layout.addStretch()
         
         return preset_layout
@@ -428,18 +483,18 @@ class ModLoaderUserInterface(QMainWindow):
         button_layout = QHBoxLayout()
         
         self.add_button = QPushButton("+")
-        self.add_button.setFixedWidth(40)
+        self.add_button.setFixedWidth(35)
         self.add_button.setToolTip("Add Mod")
         self.add_button.clicked.connect(self.add_mod_dialog)
         
         self.move_up_button = QPushButton("↑")
-        self.move_up_button.setFixedWidth(40)
+        self.move_up_button.setFixedWidth(35)
         self.move_up_button.setToolTip("Move Up")
         self.move_up_button.clicked.connect(self.move_mod_up)
         self.move_up_button.setEnabled(False)
         
         self.move_down_button = QPushButton("↓")
-        self.move_down_button.setFixedWidth(40)
+        self.move_down_button.setFixedWidth(35)
         self.move_down_button.setToolTip("Move Down")
         self.move_down_button.clicked.connect(self.move_mod_down)
         self.move_down_button.setEnabled(False)
@@ -470,7 +525,7 @@ class ModLoaderUserInterface(QMainWindow):
         
         return button_layout
 
-    def _load_initial_data(self):
+    def _load_initial_data(self, reload=False):
         mods = load_list()
         for mod in mods:
             if mod.startswith('#'):
@@ -482,7 +537,7 @@ class ModLoaderUserInterface(QMainWindow):
         
         self.update_status()
         self.update_unload_button_state()
-        self.load_plugins_list()
+        if not reload: self.load_plugins_list()
 
     def _open_path(self, path):
         """Open a path with system's default application"""
@@ -505,6 +560,15 @@ class ModLoaderUserInterface(QMainWindow):
             QMessageBox.warning(self, "Error", f"Config file not found:\n{config_path}")
             return
         self._open_path(config_path)
+
+    def read_presets(self):
+        global LOAD_ORDER
+        cfg_dict=read_cfg() # dont use globals kids
+        LOAD_ORDER=Path(cfg_dict["LOAD_ORDER"])
+        self.preset_combo.clear()
+        for i in os.listdir(PRESET_DIR):
+            self.preset_combo.addItem(i)
+        self.preset_combo.setCurrentText(LOAD_ORDER.name)
 
     def load_plugins_list(self):
         self.plugins_list.clear()
@@ -697,10 +761,20 @@ class ModLoaderUserInterface(QMainWindow):
         self.auto_save_load_order()
 
     def enable_all(self):
-        self._set_all_mods_state(Qt.CheckState.Checked)
+        reply = QMessageBox.question(
+            self, "Confirm Enable All",
+            "Enable all mods?\n",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+        if reply == QMessageBox.StandardButton.Yes:
+            self._set_all_mods_state(Qt.CheckState.Checked)
             
     def disable_all(self):
-        self._set_all_mods_state(Qt.CheckState.Unchecked)
+        reply = QMessageBox.question(
+            self, "Confirm Disable All",
+            "Disable all mods?\n",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+        if reply == QMessageBox.StandardButton.Yes:
+            self._set_all_mods_state(Qt.CheckState.Unchecked)
 
     def _reselect_rows(self, rows):
         """Reselect rows after a move operation"""
@@ -796,7 +870,7 @@ class ModLoaderUserInterface(QMainWindow):
             mods = self._collect_load_order()
             read_cfg(sync=False) # check for update
             # manually read cfg for param because this shit is broke somehow
-            with open("config.yaml", "r") as f: cfg_dict = yaml.safe_load(f)
+            with open(CONFIG_FILE, "r") as f: cfg_dict = yaml.safe_load(f)
             RELOAD_ON_INSTALL = cfg_dict["RELOAD_ON_INSTALL"]
             if RELOAD_ON_INSTALL: 
                 #save_to_loadorder(mods)
@@ -811,7 +885,7 @@ class ModLoaderUserInterface(QMainWindow):
         try:
             mods = self._collect_load_order()
             read_cfg(sync=False) # check for update
-            save_to_loadorder(mods)
+            save_to_loadorder(mods, verbose=False)
             self.statusBar().showMessage("Load order saved successfully", SHOW_MSG_TIME)
         except Exception as e:
             QMessageBox.warning(self, "Save Error", f"Failed to save load order:\n{str(e)}")
@@ -997,6 +1071,53 @@ class ModLoaderUserInterface(QMainWindow):
                 self.remove_selected_mod()
             elif action == open_folder_action:
                 self.open_mod_folder()
+
+
+    def select_preset(self, text):
+        global LOAD_ORDER
+        print("switching to preset "+text)
+        with open(CONFIG_FILE, "r") as f: cfg_dict = yaml.safe_load(f)
+        cfg_dict["LOAD_ORDER"]=str(PRESET_DIR / Path(text))
+        with open(CONFIG_FILE, "w") as f: cfg_dict = yaml.dump(cfg_dict,f)
+        LOAD_ORDER=PRESET_DIR / Path(text)
+        read_cfg()
+        #sync_loadorder()
+        self._init_ui(verbose=self.log_output.toPlainText())
+        self._load_initial_data()
+
+    def add_preset(self, text=None):
+        if text:
+            name, ok = QInputDialog.getText(
+                self, "New Preset", text+"Preset name",
+                QLineEdit.EchoMode.Normal, "New Preset")
+        else:
+            name, ok = QInputDialog.getText(
+                self, "New Preset", "Preset name:",
+                QLineEdit.EchoMode.Normal, "New Preset")
+        if ok and name:
+            name=name.removesuffix(".txt")+".txt"
+            if name in os.listdir(PRESET_DIR):
+                print("error: preset already exists")
+                return
+            Path(str(PRESET_DIR / name)).touch() 
+            self.select_preset(name)
+
+    def del_preset(self):
+        global LOAD_ORDER
+        reply = QMessageBox.question(
+            self, "Confirm Removal",
+            "Remove this preset?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+        if reply == QMessageBox.StandardButton.Yes:
+            print("removing "+str(LOAD_ORDER))
+            os.remove(LOAD_ORDER)
+            preset_idx=self.preset_combo.currentIndex()
+            if self.preset_combo.count()>1:
+                self.preset_combo.removeItem(preset_idx)
+            else:
+                print("no presets left, creating new preset...")
+                self.add_preset(text="No presets left, creating new preset...\n")
+        
 
     def add_separator_at(self, row):
         name, ok = QInputDialog.getText(
@@ -1219,12 +1340,18 @@ class ModLoaderUserInterface(QMainWindow):
             if event.key() in (Qt.Key.Key_Plus, Qt.Key.Key_Equal):
                 self._scale_factor = min(2.0, self._scale_factor + 0.1)
                 self.apply_scale()
+                self._init_ui(verbose=self.log_output.toPlainText())
+                self._load_initial_data(reload=True)
             elif event.key() == Qt.Key.Key_Minus:
                 self._scale_factor = max(0.5, self._scale_factor - 0.1)
                 self.apply_scale()
+                self._init_ui(verbose=self.log_output.toPlainText())
+                self._load_initial_data(reload=True)
             elif event.key() == Qt.Key.Key_0:
                 self._scale_factor = 1.0
                 self.apply_scale()
+                self._init_ui(verbose=self.log_output.toPlainText())
+                self._load_initial_data(reload=True)
             else:
                 super().keyPressEvent(event)
         else:

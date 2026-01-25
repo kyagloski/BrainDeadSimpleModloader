@@ -21,7 +21,8 @@ except:
 VERSION="v0.1"
 LOCAL_DIR=Path(os.path.dirname(os.path.realpath(__file__)))
 CONFIG_FILE=LOCAL_DIR/"config.yaml"
-LOAD_ORDER=LOCAL_DIR/"manifest"/"loadorders"/"load_order.txt"
+LOAD_ORDER=LOCAL_DIR/"manifest"/"loadorders"/"loadorder.txt"
+PRESET_DIR=LOCAL_DIR/"manifest"/"loadorders"
 BACKUP_DIR=LOCAL_DIR/"manifest"
 COPY_MANIFEST=BACKUP_DIR/"copy_manifest.txt"
 BACKUP_MANIFEST=BACKUP_DIR/"backup_manifest.txt"
@@ -72,11 +73,12 @@ def read_cfg(sync=True):
     LOAD_ORDER=Path(cfg_dict["LOAD_ORDER"])
     RELOAD_ON_INSTALL=bool(cfg_dict["RELOAD_ON_INSTALL"])
     if sync: sync_loadorder() # just in case
+    return cfg_dict
 
 
 def load_list():
     if not os.path.exists(LOAD_ORDER):
-        print("load order file not found, creating new manifest/loadorders/load_order.txt")
+        print("load order file not found, creating new manifest/loadorders/loadorder.txt")
         ensure_dir(LOAD_ORDER.parent)
         Path(LOAD_ORDER).touch()
     with open(LOAD_ORDER, "r", encoding="utf-8") as f:
