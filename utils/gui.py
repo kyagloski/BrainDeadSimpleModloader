@@ -10,16 +10,19 @@ from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, 
     QTreeWidget, QTreeWidgetItem, QTableWidget, QTableWidgetItem, 
     QPushButton, QSplitter, QLabel, QLineEdit, QMenu, QMessageBox, QComboBox,
-    QFileDialog, QInputDialog, QTextEdit
+    QFileDialog, QInputDialog, QTextEdit, QToolButton
 )
-from PyQt6.QtCore import Qt, QItemSelectionModel, QObject, QThread, QWaitCondition, pyqtSignal, QMutex, QMutexLocker, QTimer
-from PyQt6.QtGui import QIcon, QFont, QTextCursor
+from PyQt6.QtCore import Qt, QItemSelectionModel, QObject, QThread, QWaitCondition, pyqtSignal, QMutex, QMutexLocker, QTimer, QPoint
+from PyQt6.QtGui import QIcon, QFont, QTextCursor, QCursor
 
 try:
     sys.path.append(str(Path(__file__).parent.parent))
     from ..bdsm import *
+    from ini_manager import *
 except:
     from bdsm import *
+    from ini_manager import *
+    from game_specific import *
 
 SHOW_MSG_TIME = 10000000
 
@@ -411,20 +414,29 @@ class ModLoaderUserInterface(QMainWindow):
         self.settings_button.clicked.connect(self.open_settings)
         preset_layout.addWidget(self.settings_button)
 
-        self.tools_button = QPushButton("⚒")
+        self.tools_button = QToolButton()
+        self.tools_button.setText("⚒")
         self.tools_button.setFixedWidth(35)
         self.tools_button.setToolTip("Tools")
-        self.tools_button.clicked.connect(self.open_settings)
+        #self.tools_button.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
+        #self.tools_button.clicked.connect(self.open_settings)
+        menu = QMenu()
+        ini_man = menu.addAction("INI Manager")
+        def show_menu(): menu.exec(self.tools_button.mapToGlobal(QPoint(0, self.tools_button.height())))
+        self.tools_button.clicked.connect(show_menu)
+        self.tools_button.setMenu(menu)
         preset_layout.addWidget(self.tools_button)
+
+        ini_man.triggered.connect(self.open_ini_manager)
         
         preset_layout.addWidget(QLabel("Preset:"))
         self.preset_combo = EditableComboBox()
-        self.preset_combo.setFixedWidth(150)
-        presets=os.listdir()
-        #self.preset_combo.addItem("loadorder.txt")
+        #self.preset_combo.setFixedWidth(150)
+        self.preset_combo.setSizePolicy(self.preset_combo.sizePolicy().horizontalPolicy().Expanding,
+                                        self.preset_combo.sizePolicy().verticalPolicy().Preferred)
         self.read_presets()
         self.preset_combo.currentTextChanged.connect(self.select_preset)
-        preset_layout.addWidget(self.preset_combo)
+        preset_layout.addWidget(self.preset_combo,2)
 
         self.add_preset_button = QPushButton("+")
         self.add_preset_button.setFixedWidth(35)
@@ -438,8 +450,38 @@ class ModLoaderUserInterface(QMainWindow):
         self.del_preset_button.clicked.connect(self.del_preset)
         preset_layout.addWidget(self.del_preset_button)
 
+
+        separator = QLabel("|")
+        separator.setStyleSheet("color: gray; font-size: 20px; padding: 0px; margin: 0px 5px;")
+        separator.setFixedWidth(30)
+        preset_layout.addWidget(separator)
+
         preset_layout.addStretch()
-        
+
+        preset_layout.addWidget(QLabel("Binary:"))
+        self.bin_combo = EditableComboBox()
+        #self.bin_combo.setFixedWidth(150)
+        self.bin_combo.setSizePolicy(self.bin_combo.sizePolicy().horizontalPolicy().Expanding,
+                                     self.bin_combo.sizePolicy().verticalPolicy().Preferred)
+        self.bin_combo.addItem("SkyrimSE")
+        self.bin_combo.currentTextChanged.connect(self.select_preset)
+        preset_layout.addWidget(self.bin_combo,2)
+
+
+        self.settings_button = QPushButton("☰")
+        self.settings_button.setFixedWidth(35)
+        self.settings_button.setToolTip("Settings")
+        self.settings_button.clicked.connect(self.open_settings)
+        preset_layout.addWidget(self.settings_button)
+
+
+        self.settings_button = QPushButton("▶︎")
+        self.settings_button.setFixedWidth(35)
+        self.settings_button.setToolTip("Settings")
+        self.settings_button.clicked.connect(self.open_settings)
+        preset_layout.addWidget(self.settings_button)
+
+
         return preset_layout
 
     def _create_mod_table(self):
@@ -1405,6 +1447,20 @@ class ModLoaderUserInterface(QMainWindow):
         self.setStyleSheet("")
         self._show_installation_results(installed_count, failed_files)
         event.acceptProposedAction()
+
+    def open_ini_manager(self):
+        cfg_dict=read_cfg(sync=False)
+        back_dir=Path(cfg_dict["SOURCE_DIR"]).parent/"inis"
+        ini_dir=get_ini_path(Path(cfg_dict["COMPAT_DIR"])) 
+        
+        self.ini_manager = INIManager(back_dir,ini_dir)
+
+        cursor_pos = QCursor.pos()
+        window_rect = self.ini_manager.frameGeometry()
+        window_rect.moveCenter(cursor_pos)
+        self.ini_manager.move(window_rect.topLeft())
+
+        self.ini_manager.show() 
 
 
 

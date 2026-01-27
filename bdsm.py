@@ -73,6 +73,8 @@ def read_cfg(sync=True):
     LOAD_ORDER=Path(cfg_dict["LOAD_ORDER"])
     RELOAD_ON_INSTALL=bool(cfg_dict["RELOAD_ON_INSTALL"])
     if sync: sync_loadorder() # just in case
+
+    ensure_dir(PRESET_DIR)
     return cfg_dict
 
 
