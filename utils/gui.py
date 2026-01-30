@@ -18,11 +18,14 @@ from PyQt6.QtGui import QIcon, QFont, QTextCursor, QCursor
 try:
     sys.path.append(str(Path(__file__).parent.parent))
     from ..bdsm import *
+    from game_specific import *
     from ini_manager import *
+    from exe_manager import *
 except:
     from bdsm import *
-    from ini_manager import *
     from game_specific import *
+    from ini_manager import *
+    from exe_manager import *
 
 SHOW_MSG_TIME = 10000000
 
@@ -471,7 +474,7 @@ class ModLoaderUserInterface(QMainWindow):
         self.settings_button = QPushButton("☰")
         self.settings_button.setFixedWidth(35)
         self.settings_button.setToolTip("Settings")
-        self.settings_button.clicked.connect(self.open_settings)
+        self.settings_button.clicked.connect(self.open_exe_manager)
         preset_layout.addWidget(self.settings_button)
 
 
@@ -1118,7 +1121,7 @@ class ModLoaderUserInterface(QMainWindow):
     def select_preset(self, text):
         global LOAD_ORDER
         print("switching to preset "+text)
-        with open(CONFIG_FILE, "r") as f: cfg_dict = yaml.safe_load(f)
+        with open(CONFIG_FILE, "r") as f: cfg_dict = OrderedDict(yaml.safe_load(f))
         cfg_dict["LOAD_ORDER"]=str(PRESET_DIR / Path(text))
         with open(CONFIG_FILE, "w") as f: cfg_dict = yaml.dump(cfg_dict,f)
         LOAD_ORDER=PRESET_DIR / Path(text)
@@ -1450,18 +1453,40 @@ class ModLoaderUserInterface(QMainWindow):
 
     def open_ini_manager(self):
         cfg_dict=read_cfg(sync=False)
-        back_dir=Path(cfg_dict["SOURCE_DIR"]).parent/"inis"
-        ini_dir=get_ini_path(Path(cfg_dict["COMPAT_DIR"])) 
+        ensure_dir(Path(cfg_dict["INI_DIR"]))
+        if determine_game(cfg_dict["COMPAT_DIR"])!="Default":
+            compat_dir=Path(cfg_dict["COMPAT_DIR"])
+            back_dir=Path(cfg_dict["INI_DIR"])
+            ini_dir=get_ini_path(Path(cfg_dict["COMPAT_DIR"])) 
+        else:
+            compat_dir=Path(cfg_dict["COMPAT_DIR"])
+            back_dir=Path(cfg_dict["INI_DIR"])
+            try: test=Path(cfg_dict["INI_DIR"])/os.listdir(back_dir)[0]
+            except: test=back_dir
+            ini_dir=test
         
-        self.ini_manager = INIManager(back_dir,ini_dir)
+        self.ini_manager = INIManager(compat_dir,back_dir,ini_dir)
 
-        cursor_pos = QCursor.pos()
-        window_rect = self.ini_manager.frameGeometry()
-        window_rect.moveCenter(cursor_pos)
-        self.ini_manager.move(window_rect.topLeft())
+        #cursor_pos = QCursor.pos()
+        #window_rect = self.ini_manager.frameGeometry()
+        #window_rect.moveCenter(cursor_pos)
+        #self.ini_manager.move(window_rect.topLeft())
 
         self.ini_manager.show() 
 
+    def open_exe_manager(self):
+        self.exe_manager = ExeManager(parent=self)
+        self.exe_manager.setWindowModality(Qt.WindowModality.ApplicationModal)
+        self.exe_manager.closed.connect(self.on_exe_manager_close)
+        #cursor_pos = QCursor.pos()
+        #window_rect = self.exe_manager.frameGeometry()
+        #window_rect.moveCenter(cursor_pos)
+        #self.exe_manager.move(window_rect.topLeft())
+
+        self.exe_manager.show() 
+    
+    def on_exe_manager_close(self):
+        print("closed")
 
 
 if __name__ == "__main__":

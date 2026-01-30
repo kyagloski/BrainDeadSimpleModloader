@@ -44,7 +44,7 @@ INIS = { "Fallout3"  : ["FalloutCustom.ini", "Fallout.ini", "FalloutPrefs.ini"],
          "FalloutNV" : ["FalloutCustom.ini", "Fallout.ini", "FalloutPrefs.ini"],
          "Fallout4"  : ["Fallout4Custom.ini", "Fallout4.ini", "Fallout4Prefs.ini"],
          "Skyrim"    : ["SkyrimCustom.ini", "Skyrim.ini", "SkyrimPrefs.ini"],
-         "Default"   : [] }
+         "Default"   : ["Fallout.ini", "FalloutPrefs.ini"] } # testing
 
 GAME_IDS = { "Fallout 3 goty"         : 22370,
              "Fallout 3"              : 22300,
@@ -130,12 +130,13 @@ def switch_launcher(compat_dir, target_dir):
     else: print("error: could not switch launchers")
 
 
-def backup_ini(compat_dir, source_dir):
+def backup_ini(compat_dir, back_dir):
     game=determine_game(compat_dir)
     time=timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-    back_dir=source_dir.parent/"inis"/time
-    ini_dir=get_ini_path(compat_dir)
-    os.makedirs(back_dir)
+    try: ini_dir=get_ini_path(compat_dir)
+    except: ini_dir=back_dir/os.listdir(back_dir)[0] # testing
+    back_dir=back_dir/time
+    ensure_dir(back_dir)
     for i in INIS[game]:
         try:
             f=Path(fix_path_case(str(ini_dir/i)))
@@ -149,15 +150,16 @@ def backup_ini(compat_dir, source_dir):
         print("successfully backed up inis to "+str(back_dir))
 
 
-def restore_ini(compat_dir, source_dir):
+def restore_ini(compat_dir, back_dir, ui=False):
     game=determine_game(compat_dir)
-    ini_dir=get_ini_path(compat_dir)
-    back_dir=source_dir.parent/"inis"
-    backs=os.listdir(back_dir)
-    prompt="please enter a backup version you want to restore from\n"+('\n'.join(f"{i+1}. {item}" for i, item in enumerate(backs)))+"\nversion number: "
-    num=input(prompt)
-    if not input("are you sure you want to restore from backup "+num+"? [y/N] ").lower().startswith('y'): return
-    back_dir=back_dir/(backs[int(num)-1])
+    try: ini_dir=get_ini_path(compat_dir)
+    except: ini_dir=back_dir.parent/os.listdir(back_dir.parent)[0] # testing
+    if not ui:
+        backs=os.listdir(back_dir)
+        prompt="please enter a backup version you want to restore from\n"+('\n'.join(f"{i+1}. {item}" for i, item in enumerate(backs)))+"\nversion number: "
+        num=input(prompt)
+        if not input("are you sure you want to restore from backup "+num+"? [y/N] ").lower().startswith('y'): return
+        back_dir=back_dir/(backs[int(num)-1])
     files=[back_dir/i for i in os.listdir(back_dir)]
     try: [shutil.copy2(f, ini_dir) for f in files] 
     except: print("error: could not restore ini files"); return

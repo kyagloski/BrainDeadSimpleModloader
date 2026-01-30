@@ -1,15 +1,18 @@
 #!/usr/bin/python3
 import os
 import sys
+import shutil
 from pathlib import Path
+
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QPushButton, QTreeView, QTextEdit, QSplitter,
-    QMessageBox, QFileDialog, QLabel
+    QMessageBox, QFileDialog, QLabel, QDialog, QLineEdit, QCheckBox
 )
 from PyQt6.QtCore import Qt, QDir, QEvent
-from PyQt6.QtGui import QFont, QColor, QSyntaxHighlighter, QTextCharFormat, QFileSystemModel, QShortcut, QKeySequence
+from PyQt6.QtGui import QFont, QColor, QSyntaxHighlighter, QTextCharFormat, QFileSystemModel, QShortcut, QKeySequence, QTextCursor, QTextDocument  # Add QTextCursor, QTextDocument
 
+from game_specific import *
 
 class IniSyntaxHighlighter(QSyntaxHighlighter):
     """Syntax highlighter for INI files"""
@@ -31,7 +34,7 @@ class IniSyntaxHighlighter(QSyntaxHighlighter):
         self.comment_format = QTextCharFormat()
         self.comment_format.setForeground(QColor("#808080"))
         self.comment_format.setFontItalic(True)
-    
+
     def highlightBlock(self, text):
         # Highlight comments (lines starting with ; or #)
         if text.strip().startswith(';') or text.strip().startswith('#'):
@@ -53,10 +56,12 @@ class IniSyntaxHighlighter(QSyntaxHighlighter):
 
 
 class INIManager(QMainWindow):
-    def __init__(self, backup_dir, compat_dir):
+    def __init__(self, compat_dir, backup_dir, ini_dir):
         super().__init__()
+
         self.setWindowTitle("BrainDead Simple Modloader - INI Manager")
-        self.setGeometry(100, 100, 1400, 800)
+        #self.setGeometry(100, 100, 1400, 800)
+        self.resize(1400,800)
         
         # Main widget and layout
         main_widget = QWidget()
@@ -103,15 +108,28 @@ class INIManager(QMainWindow):
         self.right_editor.installEventFilter(self)
         self.right_editor.viewport().installEventFilter(self)
 
-        self.set_backup_directory(backup_dir)
-        self.set_current_directory(compat_dir)
-        
         # Initialize paths
-        self.backup_dir = None
-        self.current_dir = None
-        self.selected_backup_file = None
-        self.selected_current_file = None
-    
+        self.compat_dir  = compat_dir
+        self.current_dir = ini_dir
+        self.backup_dir  = backup_dir
+        if "Documents" not in str(ini_dir):
+            print("reading inis from: "+str(ini_dir)) # testing
+        self.game = determine_game(ini_dir)
+        self.set_current_directory(self.current_dir)
+        self.set_backup_directory(self.backup_dir)
+
+        # Add Ctrl+F for find
+        self.find_shortcut = QShortcut(QKeySequence("Ctrl+F"), self)
+        self.find_shortcut.activated.connect(self.show_find_dialog)
+        
+        # Track font size
+        self.editor_font_size = 10
+        
+        # Track find state
+        self.find_dialog = None
+        self.current_matches = []
+        self.current_match_index = -1
+
     def create_left_column(self):
         """Create left column with directory tree and read-only editor"""
         column_widget = QWidget()
@@ -154,18 +172,13 @@ class INIManager(QMainWindow):
         # Buttons
         button_layout = QHBoxLayout()
         
-        # Set Directory button
-        #self.left_set_dir_btn = QPushButton("Set Backup Directory")
-        #self.left_set_dir_btn.clicked.connect(self.set_backup_directory)
-        #button_layout.addWidget(self.left_set_dir_btn)
-        
         self.restore_btn = QPushButton("Restore")
-        #self.restore_btn.clicked.connect(self.restore_file)
+        self.restore_btn.clicked.connect(self.restore_on_click)
         self.restore_btn.setEnabled(False)
         button_layout.addWidget(self.restore_btn)
         
         self.delete_btn = QPushButton("Delete Backup")
-        #self.delete_btn.clicked.connect(self.delete_backup)
+        self.delete_btn.clicked.connect(self.delete_on_click)
         self.delete_btn.setEnabled(False)
         button_layout.addWidget(self.delete_btn)
         
@@ -221,18 +234,13 @@ class INIManager(QMainWindow):
         button_layout = QHBoxLayout()
         button_layout.addStretch()
         
-        # Set Directory button
-        #self.right_set_dir_btn = QPushButton("Set Current Directory")
-        #self.right_set_dir_btn.clicked.connect(self.set_current_directory)
-        #button_layout.addWidget(self.right_set_dir_btn)
-        
         self.save_btn = QPushButton("Save")
         self.save_btn.clicked.connect(self.save_current_file)
         self.save_btn.setEnabled(False)
         button_layout.addWidget(self.save_btn)
         
         self.backup_btn = QPushButton("Backup")
-        #self.backup_btn.clicked.connect(self.backup_file)
+        self.backup_btn.clicked.connect(self.backup_on_click)
         self.backup_btn.setEnabled(False)
         button_layout.addWidget(self.backup_btn)
         
@@ -243,20 +251,13 @@ class INIManager(QMainWindow):
     def set_backup_directory(self, directory):
         """Set the backup directory for left column"""
         #directory = QFileDialog.getExistingDirectory(self, "Select Backup Directory")
-        #if directory:
         self.backup_dir = Path(directory)
         self.left_tree.setRootIndex(self.left_model.index(str(self.backup_dir)))
         self.left_tree.expandAll()
-        self.left_dir_label.setText(self.backup_dir.name)
+        self.left_dir_label.setText("Backups - "+self.backup_dir.name)
     
     def set_current_directory(self, directory):
         """Set the current directory for right column (INI files only)"""
-        #directory = QFileDialog.getExistingDirectory(self, "Select Current Directory")
-        #if directory:
-        #self.current_dir = Path(directory)
-        #self.right_tree.setRootIndex(self.right_model.index(str(self.current_dir)))
-        #self.backup_btn.setEnabled(True)
-        #self.right_dir_label.setText(self.current_dir.name)
         self.current_dir = Path(directory)
         root_index = self.right_model.index(str(self.current_dir))
         self.right_tree.setRootIndex(root_index)
@@ -268,7 +269,7 @@ class INIManager(QMainWindow):
                 self.right_tree.setRowHidden(i, root_index, True)
         
         self.backup_btn.setEnabled(True)
-        self.right_dir_label.setText(self.current_dir.name)
+        self.right_dir_label.setText(self.game)
     
     def on_left_file_clicked(self, index):
         """Handle file selection in left tree"""
@@ -277,31 +278,31 @@ class INIManager(QMainWindow):
         # Update label with current directory or file's parent directory
         if file_path.is_dir():
             self.left_dir_label.setText(file_path.name)
+            self.restore_btn.setEnabled(True)
+            self.delete_btn.setEnabled(True)
+            self.selected_backup_file = file_path
         else:
-            self.left_dir_label.setText(file_path.parent.name)
-        
+            self.left_dir_label.setText(file_path.parent.name+" - "+file_path.name)
+            self.restore_btn.setEnabled(False)
+            self.delete_btn.setEnabled(False)
+
         if file_path.is_file() and file_path.suffix.lower() == '.ini':
             self.selected_backup_file = file_path
             try:
                 with open(file_path, 'r', encoding='utf-8') as f:
                     content = f.read()
                 self.left_editor.setPlainText(content)
-                self.restore_btn.setEnabled(True)
-                self.delete_btn.setEnabled(True)
             except Exception as e:
                 QMessageBox.warning(self, "Error", f"Could not read file:\n{str(e)}")
-        else:
-            self.restore_btn.setEnabled(False)
-            self.delete_btn.setEnabled(False)
     
     def on_right_file_clicked(self, index):
         """Handle file selection in right tree"""
         file_path = Path(self.right_model.fileInfo(index).absoluteFilePath())
 
         if file_path.is_dir():
-            self.right_dir_label.setText(file_path.name)
+            self.right_dir_label.setText(self.game+" - "+file_path.name)
         else:
-            self.right_dir_label.setText(file_path.parent.name)
+            self.right_dir_label.setText(self.game+" - "+file_path.name)
         
         if file_path.is_file() and file_path.suffix.lower() == '.ini':
             self.selected_current_file = file_path
@@ -333,89 +334,85 @@ class INIManager(QMainWindow):
             QMessageBox.information(self, "Success", "File saved successfully!")
         except Exception as e:
             QMessageBox.warning(self, "Error", f"Could not save file:\n{str(e)}")
-    
-    #def backup_file(self):
-    #    """Backup current file to backup directory"""
-    #    if not self.selected_current_file:
-    #        QMessageBox.warning(self, "Warning", "Please select a file to backup.")
-    #        return
-    #    
-    #    if not self.backup_dir:
-    #        QMessageBox.warning(self, "Warning", "Please set a backup directory first.")
-    #        return
-    #    
-    #    # Check if there are unsaved changes
-    #    if hasattr(self, 'right_editor_modified') and self.right_editor_modified:
-    #        reply = QMessageBox.question(
-    #            self, 
-    #            "Unsaved Changes",
-    #            "You have unsaved changes. Do you want to save before backing up?",
-    #            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No | QMessageBox.StandardButton.Cancel
-    #        )
-    #        
-    #        if reply == QMessageBox.StandardButton.Cancel:
-    #            return
-    #        elif reply == QMessageBox.StandardButton.Yes:
-    #            self.save_current_file()
-    #    
-    #    try:
-    #        import shutil
-    #        from datetime import datetime
-    #        
-    #        # Create backup with timestamp
-    #        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    #        backup_name = f"{self.selected_current_file.stem}_{timestamp}.ini"
-    #        backup_path = self.backup_dir / backup_name
-    #        
-    #        shutil.copy2(self.selected_current_file, backup_path)
-    #        
-    #        QMessageBox.information(self, "Success", f"File backed up to:\n{backup_path}")
-    #        
-    #        # Refresh left tree
-    #        self.left_model.setRootPath("")
-    #        self.left_tree.setRootIndex(self.left_model.index(str(self.backup_dir)))
-    #        
-    #    except Exception as e:
-    #        QMessageBox.warning(self, "Error", f"Could not backup file:\n{str(e)}")
-    #
-    #def restore_file(self):
-    #    """Restore backup file to current directory"""
-    #    if not self.selected_backup_file:
-    #        QMessageBox.warning(self, "Warning", "Please select a backup file to restore.")
-    #        return
-    #    
-    #    if not self.current_dir:
-    #        QMessageBox.warning(self, "Warning", "Please set a current directory first.")
-    #        return
-    #    
-    #    # Ask for confirmation
-    #    reply = QMessageBox.question(
-    #        self,
-    #        "Confirm Restore",
-    #        f"Restore {self.selected_backup_file.name} to current directory?\nThis will overwrite any existing file with the same name.",
-    #        QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
-    #    )
-    #    
-    #    if reply == QMessageBox.StandardButton.No:
-    #        return
-    #    
-    #    try:
-    #        import shutil
-    #        
-    #        # Extract original filename (remove timestamp)
-    #        original_name = self.selected_backup_file.stem.rsplit('_', 1)[0] + '.ini'
-    #        restore_path = self.current_dir / original_name
-    #        
-    #        shutil.copy2(self.selected_backup_file, restore_path)
-    #        
-    #        QMessageBox.information(self, "Success", f"File restored to:\n{restore_path}")
-    #        
-    #        # Refresh right tree
-    #        self.right_model.setRootPath("")
-    #        self.right_tree.setRootIndex(self.right_model.index(str(self.current_dir)))
-    #        
-    #    except Exception as e:
-    #        QMessageBox.warning(self, "Error", f"Could not restore file:\n{str(e)}")
+
+    def backup_on_click(self):
+        # Check if there are unsaved changes
+        if hasattr(self, 'right_editor_modified') and self.right_editor_modified:
+            reply = QMessageBox.question(
+                self, 
+                "Unsaved Changes",
+                "You have unsaved changes. Do you want to save before backing up?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No | QMessageBox.StandardButton.Cancel
+            )
+            
+            if reply == QMessageBox.StandardButton.Cancel:
+                return
+            elif reply == QMessageBox.StandardButton.Yes:
+                self.save_current_file()
+
+        reply = QMessageBox.question(
+            self, "Confirm Backup Creation",
+            "Create Backup?\n",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+        if reply == QMessageBox.StandardButton.Yes:
+            # backup files
+            backup_ini(self.compat_dir, self.backup_dir)
+        
+            # Refresh left tree
+            self.left_model.setRootPath("")
+            self.left_tree.setRootIndex(self.left_model.index(str(self.backup_dir)))
+
+    def delete_on_click(self):
+        """Delete selected backup file"""
+        if not self.selected_backup_file:
+            QMessageBox.warning(self, "Warning", "Please select a backup file to delete.")
+            return
+        
+        # Ask for confirmation
+        reply = QMessageBox.question(
+            self,
+            "Confirm Delete",
+            f"Delete backup file:\n{self.selected_backup_file.name}?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+        )
+        if reply == QMessageBox.StandardButton.No:
+            return
+        try:
+            #self.selected_backup_file.unlink()
+            shutil.rmtree(self.selected_backup_file)
+            self.left_editor.clear()
+            self.restore_btn.setEnabled(False)
+            self.delete_btn.setEnabled(False)
+            
+            QMessageBox.information(self, "Success", "Backup file deleted.")
+            
+            # Refresh left tree
+            self.left_model.setRootPath("")
+            self.left_tree.setRootIndex(self.left_model.index(str(self.backup_dir)))
+            
+        except Exception as e:
+            QMessageBox.warning(self, "Error", f"Could not delete file:\n{str(e)}")
+
+    def restore_on_click(self):
+        if not self.selected_backup_file:
+            QMessageBox.warning(self, "Warning", "Please select a backup directory to restore from.")
+            return
+        # Ask for confirmation
+        reply = QMessageBox.question(
+            self,
+            "Confirm Restore",
+            f"Restore {self.selected_backup_file.name} to current directory?\nThis will overwrite any existing file with the same name.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+        if reply == QMessageBox.StandardButton.No:
+            return
+        # restore
+        restore_ini(self.compat_dir, self.selected_backup_file, ui=True)
+
+        QMessageBox.information(self, "Success", f"{self.selected_backup_file} restored to:\n{self.current_dir}")
+        # Refresh right tree
+        self.right_model.setRootPath(str(self.current_dir))
+        self.right_tree.setRootIndex(self.right_model.index(str(self.current_dir)))
+        self.right_editor.setPlainText("")
     
     def zoom_in(self):
         """Increase font size in both editors"""
@@ -461,40 +458,200 @@ class INIManager(QMainWindow):
                 return True  # Block the scroll event completely
         
         return super().eventFilter(obj, event)
+
+
+    def show_find_dialog(self):
+        """Show or focus the find dialog"""
+        if self.find_dialog is None:
+            self.find_dialog = QDialog(self)
+            self.find_dialog.setWindowTitle("Find")
+            self.find_dialog.setModal(False)
+            
+            layout = QVBoxLayout(self.find_dialog)
+            
+            # Search input
+            search_layout = QHBoxLayout()
+            search_layout.addWidget(QLabel("Find:"))
+            self.find_input = QLineEdit()
+            self.find_input.textChanged.connect(self.on_find_text_changed)
+            self.find_input.returnPressed.connect(self.find_next)
+            search_layout.addWidget(self.find_input)
+            layout.addLayout(search_layout)
+            
+            # Match count label
+            self.match_count_label = QLabel("0 matches")
+            layout.addWidget(self.match_count_label)
+            
+            # Checkboxes
+            self.case_insensitive_check = QCheckBox("Case insensitive")
+            self.case_insensitive_check.setChecked(True)
+            self.case_insensitive_check.stateChanged.connect(self.on_find_text_changed)
+            layout.addWidget(self.case_insensitive_check)
+            
+            self.search_both_check = QCheckBox("Search both editors")
+            self.search_both_check.stateChanged.connect(self.on_find_text_changed)
+            layout.addWidget(self.search_both_check)
+            
+            # Navigation buttons
+            button_layout = QHBoxLayout()
+            prev_btn = QPushButton("Previous")
+            prev_btn.clicked.connect(self.find_previous)
+            button_layout.addWidget(prev_btn)
+            
+            next_btn = QPushButton("Next")
+            next_btn.clicked.connect(self.find_next)
+            button_layout.addWidget(next_btn)
+            
+            layout.addLayout(button_layout)
+            
+            self.find_dialog.setLayout(layout)
+        
+        self.find_dialog.show()
+        self.find_dialog.raise_()
+        self.find_dialog.activateWindow()
+        self.find_input.setFocus()
+        self.find_input.selectAll()
     
-    #def delete_backup(self):
-    #    """Delete selected backup file"""
-    #    if not self.selected_backup_file:
-    #        QMessageBox.warning(self, "Warning", "Please select a backup file to delete.")
-    #        return
-    #    
-    #    # Ask for confirmation
-    #    reply = QMessageBox.question(
-    #        self,
-    #        "Confirm Delete",
-    #        f"Delete backup file:\n{self.selected_backup_file.name}?",
-    #        QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
-    #    )
-    #    
-    #    if reply == QMessageBox.StandardButton.No:
-    #        return
-    #    
-    #    try:
-    #        self.selected_backup_file.unlink()
-    #        self.left_editor.clear()
-    #        self.restore_btn.setEnabled(False)
-    #        self.delete_btn.setEnabled(False)
-    #        
-    #        QMessageBox.information(self, "Success", "Backup file deleted.")
-    #        
-    #        # Refresh left tree
-    #        self.left_model.setRootPath("")
-    #        self.left_tree.setRootIndex(self.left_model.index(str(self.backup_dir)))
-    #        
-    #    except Exception as e:
-    #        QMessageBox.warning(self, "Error", f"Could not delete file:\n{str(e)}")
+    def on_find_text_changed(self):
+        """Update search results when text or options change"""
+        search_text = self.find_input.text()
+        
+        if not search_text:
+            self.current_matches = []
+            self.current_match_index = -1
+            self.match_count_label.setText("0 matches")
+            self.clear_highlights()
+            return
+        
+        # Get search flags
+        case_sensitive = not self.case_insensitive_check.isChecked()
+        search_both = self.search_both_check.isChecked()
+        
+        # Find all matches
+        self.current_matches = []
+        
+        if search_both:
+            # Search in both editors
+            self.find_in_editor(self.left_editor, search_text, case_sensitive, 'left')
+            self.find_in_editor(self.right_editor, search_text, case_sensitive, 'right')
+        else:
+            # Determine which editor has focus or was last used
+            if self.right_editor.hasFocus() or (hasattr(self, 'selected_current_file') and self.selected_current_file):
+                self.find_in_editor(self.right_editor, search_text, case_sensitive, 'right')
+            else:
+                self.find_in_editor(self.left_editor, search_text, case_sensitive, 'left')
+        
+        # Update match count
+        self.match_count_label.setText(f"{len(self.current_matches)} matches")
+        
+        # Reset match index
+        self.current_match_index = -1
+        
+        # Highlight all matches
+        self.highlight_all_matches()
+    
+    def find_in_editor(self, editor, search_text, case_sensitive, editor_id):
+        """Find all occurrences in a specific editor"""
+        document = editor.document()
+        cursor = QTextCursor(document)
+        
+        flags = QTextDocument.FindFlag(0)
+        if case_sensitive:
+            flags |= QTextDocument.FindFlag.FindCaseSensitively
+        
+        while True:
+            cursor = document.find(search_text, cursor, flags)
+            if cursor.isNull():
+                break
+            self.current_matches.append({
+                'editor': editor,
+                'editor_id': editor_id,
+                'position': cursor.position(),
+                'start': cursor.selectionStart(),
+                'end': cursor.selectionEnd()
+            })
+    
+    def highlight_all_matches(self):
+        """Highlight all matches in the editors"""
+        self.clear_highlights()
+        
+        # Create highlight format
+        highlight_format = QTextCharFormat()
+        highlight_format.setBackground(QColor("#FFFF00"))  # Yellow background
+        
+        for match in self.current_matches:
+            editor = match['editor']
+            cursor = QTextCursor(editor.document())
+            cursor.setPosition(match['start'])
+            cursor.setPosition(match['end'], QTextCursor.MoveMode.KeepAnchor)
+            
+            # Apply highlight using extra selections
+            selection = QTextEdit.ExtraSelection()
+            selection.cursor = cursor
+            selection.format = highlight_format
+            
+            current_selections = editor.extraSelections()
+            current_selections.append(selection)
+            editor.setExtraSelections(current_selections)
+    
+    def clear_highlights(self):
+        """Clear all highlights from both editors"""
+        self.left_editor.setExtraSelections([])
+        self.right_editor.setExtraSelections([])
+    
+    def find_next(self):
+        """Go to next match"""
+        if not self.current_matches:
+            return
+        
+        # Move to next match (wrap around)
+        self.current_match_index = (self.current_match_index + 1) % len(self.current_matches)
+        self.select_current_match()
+    
+    def find_previous(self):
+        """Go to previous match"""
+        if not self.current_matches:
+            return
+        
+        # Move to previous match (wrap around)
+        self.current_match_index = (self.current_match_index - 1) % len(self.current_matches)
+        self.select_current_match()
+    
+    def select_current_match(self):
+        """Select and scroll to the current match"""
+        if not self.current_matches or self.current_match_index < 0:
+            return
+        
+        match = self.current_matches[self.current_match_index]
+        editor = match['editor']
+        
+        # Create cursor and select the match
+        cursor = QTextCursor(editor.document())
+        cursor.setPosition(match['start'])
+        cursor.setPosition(match['end'], QTextCursor.MoveMode.KeepAnchor)
+        
+        # Set the cursor (this also scrolls to it)
+        editor.setTextCursor(cursor)
+        
+        # Give focus to the editor
+        editor.setFocus()
+        
+        # Re-highlight with current selection emphasized
+        self.highlight_all_matches()
+        
+        # Add a different color for current match
+        current_format = QTextCharFormat()
+        current_format.setBackground(QColor("#FFA500"))  # Orange background
+        
+        selection = QTextEdit.ExtraSelection()
+        selection.cursor = cursor
+        selection.format = current_format
+        
+        current_selections = editor.extraSelections()
+        current_selections.append(selection)
+        editor.setExtraSelections(current_selections)
 
-
+    
 def main():
     app = QApplication(sys.argv)
     window = INIManager()

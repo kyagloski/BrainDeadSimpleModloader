@@ -24,6 +24,7 @@ CONFIG_FILE=LOCAL_DIR/"config.yaml"
 LOAD_ORDER=LOCAL_DIR/"manifest"/"loadorders"/"loadorder.txt"
 PRESET_DIR=LOCAL_DIR/"manifest"/"loadorders"
 BACKUP_DIR=LOCAL_DIR/"manifest"
+INI_DIR=LOCAL_DIR/"inis"
 COPY_MANIFEST=BACKUP_DIR/"copy_manifest.txt"
 BACKUP_MANIFEST=BACKUP_DIR/"backup_manifest.txt"
 
@@ -48,33 +49,38 @@ def create_cfg(gui=False, target=None):
     if not os.path.exists(compat): print("error: could not infer comapt dir: "+compat); sys.exit()
     # write data
     with open(CONFIG_FILE, "w", encoding="utf-8") as f:
-        f.write("# config file for braindead modloader\n")
-        f.write("# mods directory\n")
+        #f.write("# config file for braindead modloader\n")
+        #f.write("# mods directory\n")
         f.write("SOURCE_DIR: "+str(SOURCE_DIR)+"\n")
-        f.write("# data directory (usually)\n")
+        #f.write("# data directory (usually)\n")
         f.write("TARGET_DIR: "+str(target)+"\n")
-        f.write("# ini/plugins.txt directory\n")
+        #f.write("# ini/plugins.txt directory\n")
         f.write("COMPAT_DIR: "+str(compat)+"\n")
-        f.write("# load order txt file\n")
+        #f.write("# load order txt file\n")
         f.write("LOAD_ORDER: "+str(LOAD_ORDER)+"\n")
-        f.write("# reload mods after installing new mod (or deleting) (boolean)\n")
+        #f.write("# reload mods after installing new mod (or deleting) (boolean)\n")
+        f.write("")
+        f.write("INI_DIR: "+str(INI_DIR)+"\n")
         f.write("RELOAD_ON_INSTALL: True\n")
     print("created new config!")
     read_cfg()
 
     
 def read_cfg(sync=True):
-    global SOURCE_DIR, TARGET_DIR, COMPAT_DIR, LOAD_ORDER, RELOAD_ON_INSTALL
+    global SOURCE_DIR, TARGET_DIR, COMPAT_DIR, LOAD_ORDER, INI_DIR, RELOAD_ON_INSTALL
+    # TODO: make this smarter, add missing entries automatically
     if not os.path.exists(CONFIG_FILE): create_cfg(); return
     with open(CONFIG_FILE, "r") as f: cfg_dict = yaml.safe_load(f)
     SOURCE_DIR=Path(cfg_dict["SOURCE_DIR"])
     TARGET_DIR=Path(cfg_dict["TARGET_DIR"])
     COMPAT_DIR=Path(cfg_dict["COMPAT_DIR"])
     LOAD_ORDER=Path(cfg_dict["LOAD_ORDER"])
+    INI_DIR=Path(cfg_dict["INI_DIR"])
     RELOAD_ON_INSTALL=bool(cfg_dict["RELOAD_ON_INSTALL"])
-    if sync: sync_loadorder() # just in case
 
     ensure_dir(PRESET_DIR)
+    ensure_dir(SOURCE_DIR)
+    if sync: sync_loadorder() # just in case
     return cfg_dict
 
 
@@ -316,8 +322,8 @@ def main():
     elif args.delete: delete_mod(args.delete) # TODO: handle multiple
     elif args.rename: rename_mod(*tuple(args.rename))
     elif args.switch_launcher: game_specific.switch_launcher(COMPAT_DIR, TARGET_DIR) 
-    elif args.backup_ini: game_specific.backup_ini(COMPAT_DIR, SOURCE_DIR)
-    elif args.restore_ini: game_specific.restore_ini(COMPAT_DIR, SOURCE_DIR)
+    elif args.backup_ini: game_specific.backup_ini(COMPAT_DIR, INI_DIR)
+    elif args.restore_ini: game_specific.restore_ini(COMPAT_DIR, INI_DIR)
     else: 
         os.system("python '"+str(LOCAL_DIR / "utils" /Path("gui.py"))+"'")
 
