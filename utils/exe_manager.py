@@ -7,6 +7,7 @@ from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QHBoxLayout,
 from PyQt6.QtCore import Qt, pyqtSignal
 
 from bdsm import *
+from game_specific import *
 
 class ListItem:
     """Class to represent a list item with title, path, and params"""
@@ -284,6 +285,7 @@ class ExeManager(QMainWindow):
         # Load item data into fields
         if 0 <= index < len(self.items):
             item = self.items[index]
+            self.current_item = item
             self.title_edit.setText(item.title)
             self.path_edit.setText(item.path)
             self.params_edit.setText(item.params)
@@ -350,14 +352,21 @@ class ExeManager(QMainWindow):
     def use_as_steam_executable(self):
         """Swap this executable with Steam launcher"""
         reply = QMessageBox.question(self, 'Steam Executable',
-                            'This will swap the selected executable with what Steam uses as its launcher.\nContinue?',
+                            'This will swap the selected executable with what Steam uses as its launcher.\nWarning, this is kinda broken\nContinue?',
                              QMessageBox.StandardButton.Yes | 
                              QMessageBox.StandardButton.No)
-        
+        # this is deplorable
         if reply == QMessageBox.StandardButton.Yes:
+            exe=self.current_item.path
+            first,van_bin=set_launcher(self.cfg["COMPAT_DIR"],self.cfg["TARGET_DIR"],exe)
+            if first:
+                item=None
+                for i in range(len(self.items)):
+                    if self.items[i].path.strip().endswith(van_bin): item=self.items[i]
+                if item and (not item.path.endswith("_original")): item.path=item.path+"_original"
             # Placeholder for Steam executable swap functionality
             QMessageBox.information(self, 'Steam Executable',
-                                  'Steam executable swap functionality will be implemented here.')
+                                  f'Set {exe} as Steam game launcher.')
     
     def closeEvent(self, event):
         """Handle window close event and emit signal with items"""

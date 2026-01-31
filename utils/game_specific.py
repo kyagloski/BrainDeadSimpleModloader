@@ -4,6 +4,7 @@ import os
 import sys
 import stat
 import shutil
+import yaml
 from datetime import datetime
 from pathlib import Path
 from collections import OrderedDict
@@ -68,7 +69,7 @@ def determine_game(compat_dir):
     elif "Fallout4"  in str(compat_dir): game="Fallout4"
     elif "Skyrim" in str(compat_dir): game="Skyrim Special Edition"
     else: 
-        print("error: cannot detect game name")
+        print("error: cannot detect game name from compat dir: "+compat_dir)
         game="Default"
     return game
 
@@ -137,6 +138,31 @@ def switch_launcher(compat_dir, target_dir):
     else: print("error: could not switch launchers")
 
 
+def set_launcher(compat_dir, target_dir, launcher):
+    game=determine_game(compat_dir)
+    van_bin=VANILLA_LAUNCHERS[game]
+    bin_dir=Path(target_dir).parent
+    first=False
+    # backup original binary
+    if not van_bin+"_original" in os.listdir(bin_dir): # fresh setup
+        first=True
+        os.rename(bin_dir/van_bin, bin_dir/(van_bin+"_original"))
+        LOCAL_DIR=Path(os.path.dirname(os.path.realpath(__file__))).parent
+        CONFIG_FILE=LOCAL_DIR/"config.yaml"
+        with open(CONFIG_FILE, "r") as f: cfg = OrderedDict(yaml.safe_load(f))
+        #cfg=read_cfg(sync=False)
+        cfg["EXECUTABLES"][van_bin.rstrip(".exe")]["PATH"]=cfg["EXECUTABLES"][van_bin.rstrip(".exe")]["PATH"]+"_original"
+        #write_cfg(cfg)
+        with open(CONFIG_FILE, "w") as f: yaml.dump(dict(cfg),f,sort_keys=False,default_flow_style=False)
+        try: # utility symlinks for plugin and ini dirs
+            force_symlink(compat_dir, bin_dir/"compatdata_plugins")
+            force_symlink(get_ini_path(compat_dir), bin_dir/"compatdata_ini")
+        except: pass
+    # link binary
+    force_symlink(launcher,bin_dir/van_bin)
+    return first,van_bin
+
+
 def backup_ini(compat_dir, back_dir):
     game=determine_game(compat_dir)
     time=timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
@@ -153,8 +179,10 @@ def backup_ini(compat_dir, back_dir):
     if not os.listdir(back_dir):
         os.rmdir(back_dir)
         print("error: ini backup failed")
+        return False
     else:
         print("successfully backed up inis to "+str(back_dir))
+        return True
 
 
 def restore_ini(compat_dir, back_dir, ui=False):
@@ -169,9 +197,11 @@ def restore_ini(compat_dir, back_dir, ui=False):
         back_dir=back_dir/(backs[int(num)-1])
     files=[back_dir/i for i in os.listdir(back_dir)]
     try: [shutil.copy2(f, ini_dir) for f in files] 
-    except: print("error: could not restore ini files"); return
+    except Exception as e: 
+        print("error: could not restore ini files, "+str(e)); 
+        return False,str(e)
     print("successfully restored inis from backup!")
-
+    return True,None
 
 def get_launchers(target_dir,compat_dir):
     game=determine_game(compat_dir)

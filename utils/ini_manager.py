@@ -406,9 +406,10 @@ class INIManager(QMainWindow):
         if reply == QMessageBox.StandardButton.No:
             return
         # restore
-        restore_ini(self.compat_dir, self.selected_backup_file, ui=True)
+        res,exc=restore_ini(self.compat_dir, self.selected_backup_file, ui=True)
 
-        QMessageBox.information(self, "Success", f"{self.selected_backup_file} restored to:\n{self.current_dir}")
+        if res: QMessageBox.information(self, "Success", f"{self.selected_backup_file} restored to:\n{self.current_dir}")
+        else: QMessageBox.information(self, "Failure", f"Failed to restore ini files\nEncountered exception: {exc}")
         # Refresh right tree
         self.right_model.setRootPath(str(self.current_dir))
         self.right_tree.setRootIndex(self.right_model.index(str(self.current_dir)))

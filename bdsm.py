@@ -56,7 +56,9 @@ def create_cfg(gui=False, target=None):
         f.write("COMPAT_DIR: "+str(compat)+"\n")
         f.write("LOAD_ORDER: "+str(LOAD_ORDER)+"\n")
         f.write("INI_DIR: "+str(INI_DIR)+"\n")
-        f.write("RELOAD_ON_INSTALL: True\n")
+        f.write("RELOAD_ON_INSTALL: false\n")
+        f.write("UPDATE_ON_CLOSE: true\n")
+        f.write("LINK_ON_LAUNCH: true\n")
         launchers=game_specific.get_launchers(target,compat)
         f.write("EXECUTABLES:\n")
         for title in launchers:
@@ -81,6 +83,8 @@ def read_cfg(sync=True):
     LOAD_ORDER=Path(cfg_dict["LOAD_ORDER"])
     INI_DIR=Path(cfg_dict["INI_DIR"])
     RELOAD_ON_INSTALL=bool(cfg_dict["RELOAD_ON_INSTALL"])
+    UPDATE_ON_CLOSE=bool(cfg_dict["UPDATE_ON_CLOSE"])
+    LINK_ON_LAUNCH=bool(cfg_dict["LINK_ON_LAUNCH"])
 
     ensure_dir(PRESET_DIR)
     ensure_dir(SOURCE_DIR)
@@ -171,7 +175,11 @@ def perform_copy():
                 dest_dir=dest_root.replace(str(TARGET_DIR),'')
                 copied_manifest.append(dest_dir) # add empty dirs
             dest_root=fix_path_case(str(dest_root))
-            os.makedirs(dest_root, exist_ok=True)
+            #os.makedirs(dest_root, exist_ok=True)
+            try: ensure_dir(dest_root)
+            except Exception as e: 
+                print("linking error: cant link "+dirname+"\nfailed to create dir: "+dest_root+", "+str(e))
+                break
 
             # copy all files
             for file in files:

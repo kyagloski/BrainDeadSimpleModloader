@@ -29,7 +29,7 @@ except:
     from exe_manager import *
 
 SHOW_MSG_TIME = 10000000
-
+SOURCE_DIR    = None # stupid
 
 class StdoutRedirector(QObject):
     text_written = pyqtSignal(str)
@@ -269,6 +269,8 @@ class ModLoaderUserInterface(QMainWindow):
     def __init__(self):
         super().__init__()
         self.cfg = read_cfg(sync=False)
+        global SOURCE_DIR
+        SOURCE_DIR=self.cfg["SOURCE_DIR"]
         self.command_queue = OrderedDict() # ordered set
 
         self.setWindowTitle("BrainDead Simple Modloader (BDSM "+VERSION+")")
@@ -922,10 +924,10 @@ class ModLoaderUserInterface(QMainWindow):
             read_cfg(sync=False) # check for update
             # manually read cfg for param because this shit is broke somehow
             #with open(CONFIG_FILE, "r") as f: cfg_dict = yaml.safe_load(f)
+            self.save_load_order()
             RELOAD_ON_INSTALL = self.cfg["RELOAD_ON_INSTALL"]
             if RELOAD_ON_INSTALL: 
-                #save_to_loadorder(mods)
-                self.save_load_order()
+                #self.save_load_order()
                 self.load_mods()
                 self.statusBar().showMessage("Load order auto-saved", SHOW_MSG_TIME)
         except Exception as e:
@@ -1500,18 +1502,27 @@ class ModLoaderUserInterface(QMainWindow):
         if not new_select: self.current_exe=deepcopy(list(exes.keys())[0])
         self.bin_combo.setCurrentText(self.current_exe)
 
+    def closeEvent(self, event):
+        print("saving load order...")
+        if self.cfg["UPDATE_ON_CLOSE"]: self.auto_save_load_order()
+        event.accept()
+
     def on_play(self):
         if os.name=="posix":
+            if self.cfg["LINK_ON_LAUNCH"]: 
+                self.auto_save_load_order()
+                perform_copy()
             c=self.cfg["COMPAT_DIR"].split("pfx")[0]
             with open(Path(c)/"config_info",'r') as f: 
                 proton=(f.readlines()[1].split("files")[0]+"proton").replace(' ','\\ ')
             exe=self.cfg["EXECUTABLES"][self.current_exe]["PATH"]
             exe_dir=str(Path(exe).parent).replace(' ','\\ ')
             params=self.cfg["EXECUTABLES"][self.current_exe]["PARAMS"]
+            appid="SteamAppId="+str(Path(c).name)
+            gameid="SteamGameId="+str(Path(c).name)
             cpath="STEAM_COMPAT_DATA_PATH="+c
             spath="STEAM_COMPAT_CLIENT_INSTALL_PATH="+os.path.expanduser("~/.steam/steam")
-            cmd="STEAM_COMPAT_DATA_PATH="+c+' '+proton+' '+"\""+exe+"\" "+params
-            cmd=f"cd {exe_dir}; {cpath} {spath} {proton} run \"{exe}\" {params}"
+            cmd=f"cd {exe_dir}; {cpath} {spath} {appid} {gameid} {proton} run \"{exe}\" {params} &"
             print("Launching using: "+cmd)
             os.system(cmd) 
 
