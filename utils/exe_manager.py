@@ -1,10 +1,12 @@
 #!/usr/bin/python3
 import sys
+from collections import OrderedDict
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QHBoxLayout, 
                              QVBoxLayout, QListWidget, QPushButton, QLineEdit, 
                              QLabel, QMessageBox, QFormLayout)
 from PyQt6.QtCore import Qt, pyqtSignal
 
+from bdsm import *
 
 class ListItem:
     """Class to represent a list item with title, path, and params"""
@@ -23,6 +25,7 @@ class ExeManager(QMainWindow):
     
     def __init__(self, parent=None):
         super().__init__(parent)
+        self.cfg = read_cfg(sync=False)
         self.items = []
         self.current_item_index = -1
         self.has_pending_changes = False
@@ -48,6 +51,9 @@ class ExeManager(QMainWindow):
         
         # List widget
         self.list_widget = QListWidget()
+        exes=self.cfg["EXECUTABLES"]
+        for exe in exes:
+            self.add_item(title=exe, path=exes[exe]["PATH"], params=exes[exe]["PARAMS"])
         self.list_widget.currentRowChanged.connect(self.on_item_selected)
         left_layout.addWidget(self.list_widget)
         
@@ -136,6 +142,10 @@ class ExeManager(QMainWindow):
         
         # Initialize with empty fields disabled
         self.set_fields_enabled(False)
+
+        # start selection
+        self.on_item_selected(0)
+        self.list_widget.setCurrentRow(0)
         
     def set_fields_enabled(self, enabled):
         """Enable or disable the text fields and apply button"""
@@ -164,7 +174,7 @@ class ExeManager(QMainWindow):
                     missing.append("Path")
                 self.apply_button.setToolTip(f"Required field(s) missing: {', '.join(missing)}")
             
-    def add_item(self):
+    def add_item(self, title=None, path=None, params=None):
         """Add a new item to the list"""
         # Check if there's already an item with empty title or path
         for item in self.items:
@@ -180,8 +190,13 @@ class ExeManager(QMainWindow):
         
         # Create new item
         new_item = ListItem()
+        if title: new_item.title=title
+        if path: new_item.path=path
+        if params: new_item.params=params
+
         self.items.append(new_item)
         self.list_widget.addItem(str(new_item))
+        
         
         # Select the new item
         self.list_widget.setCurrentRow(len(self.items) - 1)
@@ -308,10 +323,17 @@ class ExeManager(QMainWindow):
                     return
             
             item = self.items[self.current_item_index]
+            if item.title!=new_title: 
+                del self.cfg["EXECUTABLES"][item.title] # rename occured
+                self.cfg["EXECUTABLES"][new_title]=dict()
+                self.cfg["EXECUTABLES"][new_title]["SELECTED"]=False
             item.title = new_title
             item.path = self.path_edit.text()
             item.params = self.params_edit.text()
-            
+            self.cfg["EXECUTABLES"][item.title]["PATH"]=item.path
+            self.cfg["EXECUTABLES"][item.title]["PARAMS"]=item.params
+            write_cfg(self.cfg)
+
             # Update list widget item text
             self.list_widget.item(self.current_item_index).setText(str(item))
             

@@ -6,12 +6,12 @@ import stat
 import shutil
 from datetime import datetime
 from pathlib import Path
+from collections import OrderedDict
 
 try:    from utils.utils import *
 except: from utils import * 
 
 COMPACT_GAME_LIST = ["Fallout4",
-                     "Skyrim",
                      "Skyrim Special Edition",
                      "Fallout3", 
                      "FalloutNV"]
@@ -19,31 +19,37 @@ COMPACT_GAME_LIST = ["Fallout4",
 GAME_PLUGINS = { "Fallout3" : "Anchorage.esm\nBrokenSteel.esm\nFallout3.esm\nPointLookout.esm\nThePitt.esm\nZeta.esm\n",
                  "FalloutNV": "FalloutNV.esm\nCaravanPack.esm\nClassicPack.esm\nDeadMoney.esm\nGunRunnersArsenal.esm\nHonestHearts.esm\nLonesomeRoad.esm\nMercenaryPack.esm\nOldWorldBlues.esm\nTribalPack.esm\n",
                  "Fallout4" : "",
-                 "Skyrim"   : "",
+                 "Skyrim Special Edition" : "",
                  "Default"  : ""}
 
 PLUGINS_FILE = { "Fallout3" : "plugins.txt",
                  "FalloutNV": "plugins.txt",
                  "Fallout4" : "Plugins.txt",
-                 "Skyrim"   : "Plugins.txt",
+                 "Skyrim Special Edition"   : "Plugins.txt",
                  "Default"  : "Plugins.txt"}
 
 VANILLA_LAUNCHERS = { "Fallout3" : "Fallout3Launcher.exe",
                       "FalloutNV": "FalloutNVLauncher.exe",
                       "Fallout4" : "Fallout4Launcher.exe",
-                      "Skyrim"   : "SkyrimLauncher.exe",
+                      "Skyrim Special Edition" : "SkyrimSELauncher.exe",
+                      "Default"  : ""}
+
+VANILLA_GAMES     = { "Fallout3" : "Fallout3.exe",
+                      "FalloutNV": "FalloutNV.exe",
+                      "Fallout4" : "Fallout4.exe",
+                      "Skyrim Special Edition" : "SkyrimSE.exe",
                       "Default"  : ""}
 
 SCRIPT_EXTENDERS  = { "Fallout3" : "fose_loader.exe",
                       "FalloutNV": "nvse_loader.exe",
                       "Fallout4" : "f4se_loader.exe",
-                      "Skyrim"   : "skse_loader.exe",
+                      "Skyrim Special Edition" : "skse64_loader.exe",
                       "Default"  : ""}
 
 INIS = { "Fallout3"  : ["FalloutCustom.ini", "Fallout.ini", "FalloutPrefs.ini"],
          "FalloutNV" : ["FalloutCustom.ini", "Fallout.ini", "FalloutPrefs.ini"],
          "Fallout4"  : ["Fallout4Custom.ini", "Fallout4.ini", "Fallout4Prefs.ini"],
-         "Skyrim"    : ["SkyrimCustom.ini", "Skyrim.ini", "SkyrimPrefs.ini"],
+         "Skyrim Special Edition" : ["SkyrimCustom.ini", "Skyrim.ini", "SkyrimPrefs.ini"],
          "Default"   : ["Fallout.ini", "FalloutPrefs.ini"] } # testing
 
 GAME_IDS = { "Fallout 3 goty"         : 22370,
@@ -60,7 +66,7 @@ def determine_game(compat_dir):
     if   "Fallout3"  in str(compat_dir): game="Fallout3"
     elif "FalloutNV" in str(compat_dir): game="FalloutNV"
     elif "Fallout4"  in str(compat_dir): game="Fallout4"
-    elif "Skyrim"    in str(compat_dir): game="Skyrim"
+    elif "Skyrim" in str(compat_dir): game="Skyrim Special Edition"
     else: 
         print("error: cannot detect game name")
         game="Default"
@@ -68,12 +74,11 @@ def determine_game(compat_dir):
 
 def determine_game_id(target_dir):
     id=0
-    print(target_dir)
     if   "Fallout 3 goty"    in str(target_dir): id=GAME_IDS["Fallout 3 goty"]
     elif "Fallout 3"         in str(target_dir): id=GAME_IDS["Fallout 3"]
     elif "Fallout New Vegas" in str(target_dir): id=GAME_IDS["Fallout New Vegas"]
     elif "Fallout 4"         in str(target_dir): id=GAME_IDS["Fallout 4"]
-    elif "Skyrim Special Edition" in str(target_dir): id = GAME_IDS["Skyrim Special Edition"]
+    elif "Skyrim" in str(target_dir): id = GAME_IDS["Skyrim Special Edition"]
     else: print("error: cannot detect game id")
     return str(id)
 
@@ -83,12 +88,14 @@ def get_ini_path(compat_dir):
     return Path(*compat_dir.parts[:compat_dir.parts.index("AppData")])/"Documents"/"My Games"/game
     
 
-def infer_compat_path(target_dir):
+def infer_compat_path(target_dir, verbose=False):
     if os.name == "posix":
         game_id = determine_game_id(target_dir)  
         u_compat=target_dir.parent.parent.parent/"compatdata"/game_id/"pfx"/"drive_c"/"users"/"steamuser"/"AppData"/"Local"
         try: match = next((s for s in COMPACT_GAME_LIST if os.path.isdir(os.path.join(str(u_compat), s))), None).rstrip("/") + "/"
-        except: print("error: cannot determine game"); return ""
+        except: 
+            if verbose: print("error: cannot determine game for compat inference"); 
+            return ""
         compat_dir = u_compat/match
     elif os.name == "nt":
         match = next((s for s in COMPACT_GAME_LIST if os.path.isdir(os.path.join(compat, s))), None).rstrip("/") + "/"
@@ -164,3 +171,21 @@ def restore_ini(compat_dir, back_dir, ui=False):
     try: [shutil.copy2(f, ini_dir) for f in files] 
     except: print("error: could not restore ini files"); return
     print("successfully restored inis from backup!")
+
+
+def get_launchers(target_dir,compat_dir):
+    game=determine_game(compat_dir)
+    game_dir=Path(target_dir).parent
+    launcher_exe=game_dir/VANILLA_LAUNCHERS[game]
+    game_exe=game_dir/VANILLA_GAMES[game]
+    se_exe=game_dir/SCRIPT_EXTENDERS[game]
+    exes=[launcher_exe,game_exe,se_exe]
+    launchers=dict()
+    if game=="Default": return {"Default":{"PATH":"\"\"","PARAMS":""}}
+    for exe in exes:
+        if os.path.exists(exe):
+            title=str(exe.name).replace(".exe",'')
+            launchers[title]=dict()
+            launchers[title]["PATH"]=str(exe)
+            launchers[title]["PARAMS"]=""
+    return launchers

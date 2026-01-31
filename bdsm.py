@@ -7,6 +7,7 @@ import argparse
 import stat
 import yaml
 from pathlib import Path
+from collections import OrderedDict
 
 try: # can run cl or ui, import accordingly
     from utils.utils import * 
@@ -46,22 +47,25 @@ def create_cfg(gui=False, target=None):
         if not os.path.exists(target): print("error: invalid target dir: "+target); sys.exit()
     else: target=Path(target)
     compat = str(game_specific.infer_compat_path(Path(target)))
+    if not compat: compat=target
     if not os.path.exists(compat): print("error: could not infer comapt dir: "+compat); sys.exit()
     # write data
     with open(CONFIG_FILE, "w", encoding="utf-8") as f:
-        #f.write("# config file for braindead modloader\n")
-        #f.write("# mods directory\n")
         f.write("SOURCE_DIR: "+str(SOURCE_DIR)+"\n")
-        #f.write("# data directory (usually)\n")
         f.write("TARGET_DIR: "+str(target)+"\n")
-        #f.write("# ini/plugins.txt directory\n")
         f.write("COMPAT_DIR: "+str(compat)+"\n")
-        #f.write("# load order txt file\n")
         f.write("LOAD_ORDER: "+str(LOAD_ORDER)+"\n")
-        #f.write("# reload mods after installing new mod (or deleting) (boolean)\n")
-        f.write("")
         f.write("INI_DIR: "+str(INI_DIR)+"\n")
         f.write("RELOAD_ON_INSTALL: True\n")
+        launchers=game_specific.get_launchers(target,compat)
+        f.write("EXECUTABLES:\n")
+        for title in launchers:
+            path=launchers[title]["PATH"]
+            f.write(' '*4+title+":\n")
+            f.write(' '*8+"PATH: "+path+"\n")
+            f.write(' '*8+"PARAMS: \"\"\n")
+            f.write(' '*8+"SELECTED: false\n")
+        
     print("created new config!")
     read_cfg()
 
@@ -70,7 +74,7 @@ def read_cfg(sync=True):
     global SOURCE_DIR, TARGET_DIR, COMPAT_DIR, LOAD_ORDER, INI_DIR, RELOAD_ON_INSTALL
     # TODO: make this smarter, add missing entries automatically
     if not os.path.exists(CONFIG_FILE): create_cfg(); return
-    with open(CONFIG_FILE, "r") as f: cfg_dict = yaml.safe_load(f)
+    with open(CONFIG_FILE, "r") as f: cfg_dict = OrderedDict(yaml.safe_load(f))
     SOURCE_DIR=Path(cfg_dict["SOURCE_DIR"])
     TARGET_DIR=Path(cfg_dict["TARGET_DIR"])
     COMPAT_DIR=Path(cfg_dict["COMPAT_DIR"])
@@ -82,6 +86,10 @@ def read_cfg(sync=True):
     ensure_dir(SOURCE_DIR)
     if sync: sync_loadorder() # just in case
     return cfg_dict
+
+def write_cfg(d):
+    with open(CONFIG_FILE, "w") as f: 
+        yaml.dump(dict(d),f,sort_keys=False,default_flow_style=False)
 
 
 def load_list():

@@ -6,6 +6,7 @@ import platform
 import yaml
 from pathlib import Path
 from collections import OrderedDict
+from copy import deepcopy
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, 
     QTreeWidget, QTreeWidgetItem, QTableWidget, QTableWidgetItem, 
@@ -267,6 +268,7 @@ class EditableComboBox(QComboBox):
 class ModLoaderUserInterface(QMainWindow):
     def __init__(self):
         super().__init__()
+        self.cfg = read_cfg(sync=False)
         self.command_queue = OrderedDict() # ordered set
 
         self.setWindowTitle("BrainDead Simple Modloader (BDSM "+VERSION+")")
@@ -466,8 +468,14 @@ class ModLoaderUserInterface(QMainWindow):
         #self.bin_combo.setFixedWidth(150)
         self.bin_combo.setSizePolicy(self.bin_combo.sizePolicy().horizontalPolicy().Expanding,
                                      self.bin_combo.sizePolicy().verticalPolicy().Preferred)
-        self.bin_combo.addItem("SkyrimSE")
-        self.bin_combo.currentTextChanged.connect(self.select_preset)
+        exes=self.cfg["EXECUTABLES"]
+        self.current_exe=None
+        for exe in exes:
+            if exes[exe]["SELECTED"]: self.current_exe=deepcopy(exe)
+            self.bin_combo.addItem(exe)
+        if not self.current_exe: self.current_exe=deepcopy(list(exes.keys())[0])
+        self.bin_combo.setCurrentText(self.current_exe)
+        self.bin_combo.currentTextChanged.connect(self.select_exe)
         preset_layout.addWidget(self.bin_combo,2)
 
 
@@ -478,12 +486,11 @@ class ModLoaderUserInterface(QMainWindow):
         preset_layout.addWidget(self.settings_button)
 
 
-        self.settings_button = QPushButton("▶︎")
-        self.settings_button.setFixedWidth(35)
-        self.settings_button.setToolTip("Settings")
-        self.settings_button.clicked.connect(self.open_settings)
-        preset_layout.addWidget(self.settings_button)
-
+        self.play_button = QPushButton("▶︎")
+        self.play_button.setFixedWidth(35)
+        self.play_button.setToolTip("Settings")
+        self.play_button.clicked.connect(self.on_play)
+        preset_layout.addWidget(self.play_button)
 
         return preset_layout
 
@@ -608,8 +615,7 @@ class ModLoaderUserInterface(QMainWindow):
 
     def read_presets(self):
         global LOAD_ORDER
-        cfg_dict=read_cfg() # dont use globals kids
-        LOAD_ORDER=Path(cfg_dict["LOAD_ORDER"])
+        LOAD_ORDER=Path(self.cfg["LOAD_ORDER"])
         self.preset_combo.clear()
         for i in os.listdir(PRESET_DIR):
             self.preset_combo.addItem(i)
@@ -915,8 +921,8 @@ class ModLoaderUserInterface(QMainWindow):
             mods = self._collect_load_order()
             read_cfg(sync=False) # check for update
             # manually read cfg for param because this shit is broke somehow
-            with open(CONFIG_FILE, "r") as f: cfg_dict = yaml.safe_load(f)
-            RELOAD_ON_INSTALL = cfg_dict["RELOAD_ON_INSTALL"]
+            #with open(CONFIG_FILE, "r") as f: cfg_dict = yaml.safe_load(f)
+            RELOAD_ON_INSTALL = self.cfg["RELOAD_ON_INSTALL"]
             if RELOAD_ON_INSTALL: 
                 #save_to_loadorder(mods)
                 self.save_load_order()
@@ -1121,11 +1127,12 @@ class ModLoaderUserInterface(QMainWindow):
     def select_preset(self, text):
         global LOAD_ORDER
         print("switching to preset "+text)
-        with open(CONFIG_FILE, "r") as f: cfg_dict = OrderedDict(yaml.safe_load(f))
-        cfg_dict["LOAD_ORDER"]=str(PRESET_DIR / Path(text))
-        with open(CONFIG_FILE, "w") as f: cfg_dict = yaml.dump(cfg_dict,f)
+        #with open(CONFIG_FILE, "r") as f: cfg_dict = OrderedDict(yaml.safe_load(f))
+        self.cfg["LOAD_ORDER"]=str(PRESET_DIR / Path(text))
+        #with open(CONFIG_FILE, "w") as f: self.cfg = yaml.dump(self.cfg,f)
+        write_cfg(self.cfg)
         LOAD_ORDER=PRESET_DIR / Path(text)
-        read_cfg()
+        #read_cfg()
         #sync_loadorder()
         self._init_ui(verbose=self.log_output.toPlainText())
         self._load_initial_data()
@@ -1451,43 +1458,62 @@ class ModLoaderUserInterface(QMainWindow):
         self._show_installation_results(installed_count, failed_files)
         event.acceptProposedAction()
 
+    def select_exe(self, text):
+        if text=='': return
+        self.current_exe = text
+        for exe in self.cfg["EXECUTABLES"]:
+            self.cfg["EXECUTABLES"][exe]["SELECTED"]=False
+        self.cfg["EXECUTABLES"][self.current_exe]["SELECTED"]=True
+        write_cfg(self.cfg) 
+
     def open_ini_manager(self):
-        cfg_dict=read_cfg(sync=False)
-        ensure_dir(Path(cfg_dict["INI_DIR"]))
-        if determine_game(cfg_dict["COMPAT_DIR"])!="Default":
-            compat_dir=Path(cfg_dict["COMPAT_DIR"])
-            back_dir=Path(cfg_dict["INI_DIR"])
-            ini_dir=get_ini_path(Path(cfg_dict["COMPAT_DIR"])) 
+        #cfg_dict=read_cfg(sync=False)
+        ensure_dir(Path(self.cfg["INI_DIR"]))
+        if determine_game(self.cfg["COMPAT_DIR"])!="Default":
+            compat_dir=Path(self.cfg["COMPAT_DIR"])
+            back_dir=Path(self.cfg["INI_DIR"])
+            ini_dir=get_ini_path(Path(self.cfg["COMPAT_DIR"])) 
         else:
-            compat_dir=Path(cfg_dict["COMPAT_DIR"])
-            back_dir=Path(cfg_dict["INI_DIR"])
-            try: test=Path(cfg_dict["INI_DIR"])/os.listdir(back_dir)[0]
+            compat_dir=Path(self.cfg["COMPAT_DIR"])
+            back_dir=Path(self.cfg["INI_DIR"])
+            try: test=Path(self.cfg["INI_DIR"])/os.listdir(back_dir)[0]
             except: test=back_dir
             ini_dir=test
         
         self.ini_manager = INIManager(compat_dir,back_dir,ini_dir)
-
-        #cursor_pos = QCursor.pos()
-        #window_rect = self.ini_manager.frameGeometry()
-        #window_rect.moveCenter(cursor_pos)
-        #self.ini_manager.move(window_rect.topLeft())
-
         self.ini_manager.show() 
 
     def open_exe_manager(self):
         self.exe_manager = ExeManager(parent=self)
         self.exe_manager.setWindowModality(Qt.WindowModality.ApplicationModal)
         self.exe_manager.closed.connect(self.on_exe_manager_close)
-        #cursor_pos = QCursor.pos()
-        #window_rect = self.exe_manager.frameGeometry()
-        #window_rect.moveCenter(cursor_pos)
-        #self.exe_manager.move(window_rect.topLeft())
-
         self.exe_manager.show() 
     
     def on_exe_manager_close(self):
-        print("closed")
+        self.cfg=read_cfg(sync=False)
+        exes=self.cfg["EXECUTABLES"]
+        self.bin_combo.clear()
+        new_select=None
+        for exe in exes:
+            if exes[exe]["SELECTED"]: new_select=exe
+            self.bin_combo.addItem(exe)
+        if not new_select: self.current_exe=deepcopy(list(exes.keys())[0])
+        self.bin_combo.setCurrentText(self.current_exe)
 
+    def on_play(self):
+        if os.name=="posix":
+            c=self.cfg["COMPAT_DIR"].split("pfx")[0]
+            with open(Path(c)/"config_info",'r') as f: 
+                proton=(f.readlines()[1].split("files")[0]+"proton").replace(' ','\\ ')
+            exe=self.cfg["EXECUTABLES"][self.current_exe]["PATH"]
+            exe_dir=str(Path(exe).parent).replace(' ','\\ ')
+            params=self.cfg["EXECUTABLES"][self.current_exe]["PARAMS"]
+            cpath="STEAM_COMPAT_DATA_PATH="+c
+            spath="STEAM_COMPAT_CLIENT_INSTALL_PATH="+os.path.expanduser("~/.steam/steam")
+            cmd="STEAM_COMPAT_DATA_PATH="+c+' '+proton+' '+"\""+exe+"\" "+params
+            cmd=f"cd {exe_dir}; {cpath} {spath} {proton} run \"{exe}\" {params}"
+            print("Launching using: "+cmd)
+            os.system(cmd) 
 
 if __name__ == "__main__":
     read_cfg()
