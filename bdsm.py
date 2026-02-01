@@ -34,6 +34,8 @@ TARGET_DIR=LOCAL_DIR/"target"
 COMPAT_DIR=TARGET_DIR/"compat"
 
 RELOAD_ON_INSTALL=False
+UPDATE_ON_CLOSE=True
+LINK_ON_LAUNCH=True
 VERBOSITY        =False
 OPERATION_TIMEOUT=500 # 0.5s
 
@@ -73,7 +75,7 @@ def create_cfg(gui=False, target=None):
 
     
 def read_cfg(sync=True):
-    global SOURCE_DIR, TARGET_DIR, COMPAT_DIR, LOAD_ORDER, INI_DIR, RELOAD_ON_INSTALL
+    global SOURCE_DIR, TARGET_DIR, COMPAT_DIR, LOAD_ORDER, INI_DIR, RELOAD_ON_INSTALL, UPDATE_ON_CLOSE, LINK_ON_LAUNCH
     # TODO: make this smarter, add missing entries automatically
     if not os.path.exists(CONFIG_FILE): create_cfg(); return
     with open(CONFIG_FILE, "r") as f: cfg_dict = OrderedDict(yaml.safe_load(f))
@@ -97,6 +99,7 @@ def write_cfg(d):
 
 
 def load_list():
+    read_cfg(sync=False)
     if not os.path.exists(LOAD_ORDER):
         print("load order file not found, creating new manifest/loadorders/loadorder.txt")
         ensure_dir(LOAD_ORDER.parent)

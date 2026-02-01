@@ -457,7 +457,6 @@ class ModLoaderUserInterface(QMainWindow):
         self.del_preset_button.clicked.connect(self.del_preset)
         preset_layout.addWidget(self.del_preset_button)
 
-
         separator = QLabel("|")
         separator.setStyleSheet("color: gray; font-size: 20px; padding: 0px; margin: 0px 5px;")
         separator.setFixedWidth(30)
@@ -921,12 +920,9 @@ class ModLoaderUserInterface(QMainWindow):
         if self._loading: return
         try:
             mods = self._collect_load_order()
-            read_cfg(sync=False) # check for update
-            # manually read cfg for param because this shit is broke somehow
-            #with open(CONFIG_FILE, "r") as f: cfg_dict = yaml.safe_load(f)
+            self.cfg=read_cfg(sync=False) # check for update
             self.save_load_order()
-            RELOAD_ON_INSTALL = self.cfg["RELOAD_ON_INSTALL"]
-            if RELOAD_ON_INSTALL: 
+            if self.cfg["RELOAD_ON_INSTALL"]:
                 #self.save_load_order()
                 self.load_mods()
                 self.statusBar().showMessage("Load order auto-saved", SHOW_MSG_TIME)
@@ -1127,15 +1123,12 @@ class ModLoaderUserInterface(QMainWindow):
 
 
     def select_preset(self, text):
-        global LOAD_ORDER
         print("switching to preset "+text)
-        #with open(CONFIG_FILE, "r") as f: cfg_dict = OrderedDict(yaml.safe_load(f))
-        self.cfg["LOAD_ORDER"]=str(PRESET_DIR / Path(text))
-        #with open(CONFIG_FILE, "w") as f: self.cfg = yaml.dump(self.cfg,f)
+        load_order=str(PRESET_DIR / Path(text))
+        self.cfg["LOAD_ORDER"]=load_order
         write_cfg(self.cfg)
-        LOAD_ORDER=PRESET_DIR / Path(text)
         #read_cfg()
-        #sync_loadorder()
+        sync_loadorder()
         self._init_ui(verbose=self.log_output.toPlainText())
         self._load_initial_data()
 
@@ -1163,8 +1156,9 @@ class ModLoaderUserInterface(QMainWindow):
             "Remove this preset?",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
         if reply == QMessageBox.StandardButton.Yes:
-            print("removing "+str(LOAD_ORDER))
-            os.remove(LOAD_ORDER)
+            print("removing "+str(self.cfg["LOAD_ORDER"]))
+            os.unlink(self.cfg["LOAD_ORDER"])
+            print(self.cfg["LOAD_ORDER"])
             preset_idx=self.preset_combo.currentIndex()
             if self.preset_combo.count()>1:
                 self.preset_combo.removeItem(preset_idx)
