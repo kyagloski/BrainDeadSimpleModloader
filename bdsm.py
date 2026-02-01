@@ -131,6 +131,7 @@ def copy_with_backup(src, dst, backup_dir, copied_manifest, backedup_manifest, t
 
 
 def perform_copy():
+    read_cfg(sync=False)
     ensure_dir(SOURCE_DIR)
     ensure_dir(TARGET_DIR)
     ensure_dir(BACKUP_DIR)
@@ -138,8 +139,8 @@ def perform_copy():
     load_order = load_list()
 
     if (os.path.exists(COPY_MANIFEST) \
-    or os.path.exists(BACKUP_MANIFEST)) \
-    and RELOAD_ON_INSTALL: restore()
+    or os.path.exists(BACKUP_MANIFEST)): 
+        restore()
 
     copied_manifest = []
     backedup_manifest = []
@@ -216,6 +217,7 @@ def perform_copy():
 
 
 def restore():
+    read_cfg(sync=False)
     if not os.path.exists(COPY_MANIFEST) \
     or not os.path.exists(BACKUP_MANIFEST):
         print("no manifests found, nothing to restore.")
@@ -240,8 +242,9 @@ def restore():
             if VERBOSITY: print("restoring: "+target_path) # status
             shutil.move(backup_path, target_path)
     # remove manifests
-    os.remove(COPY_MANIFEST)
-    os.remove(BACKUP_MANIFEST)
+    os.unlink(COPY_MANIFEST)
+    os.unlink(BACKUP_MANIFEST)
+    print("deleted manifests...")
     # clean all symlinks (if install broke) (maybe risky idk)
     remove_symlink_rec(TARGET_DIR)
     if os.path.exists(BACKUP_DIR / Path("plugins.txt")): os.unlink(BACKUP_DIR / Path("plugins.txt"))
@@ -252,6 +255,7 @@ def restore():
 
 
 def save_to_loadorder(mods, verbose=True):
+    read_cfg(sync=False)
     # save list of mods to load order
     with open(LOAD_ORDER, "w") as f:
         for mod in mods: f.write(mod+'\n')
@@ -261,6 +265,7 @@ def save_to_loadorder(mods, verbose=True):
 def sync_loadorder():
     # this is in case user does something shifty with their files
     # in between sessions (hehehe)
+    read_cfg(sync=False)
     loadorder=load_list()
     clean_loadorder=[s.lstrip('~*') for s in loadorder]
     additions  = []
@@ -276,6 +281,7 @@ def sync_loadorder():
 
 
 def install_mod(mod_path, gui=False, parent=None):  
+    read_cfg(sync=False)
     name = installer.run(mod_path, SOURCE_DIR, gui, parent)
     if not name: return None
     with open(LOAD_ORDER, "a", encoding="utf-8") as f:
@@ -286,7 +292,7 @@ def install_mod(mod_path, gui=False, parent=None):
 
 
 def delete_mod(mod_name, gui=False):
-    # TODO: apply this to all load order presets (when that is supported)
+    read_cfg(sync=False)
     matches = [mod for mod in load_list() if mod_name.lower() in mod.lower()]
     if matches==[]: print("error: could not find mod "+mod_name); return
     mod = matches[0].lstrip('*~#')
@@ -306,7 +312,7 @@ def delete_mod(mod_name, gui=False):
 
 
 def rename_mod(old_name, new_name):
-    # TODO: apply this to all load order presets (when that is supported)
+    read_cfg(sync=False)
     odir = Path(old_name)
     ndir = Path(new_name)
     if os.path.exists(Path(SOURCE_DIR) / old_name): 

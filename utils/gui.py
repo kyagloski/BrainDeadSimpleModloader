@@ -245,7 +245,10 @@ class EditableComboBox(QComboBox):
     
     def show_context_menu(self, pos):
         menu = QMenu(self)
-        open_action = menu.addAction("Edit file")
+        open_action = menu.addAction("Edit")
+        rename_action = menu.addAction("Rename")
+        duplicate_action = menu.addAction("Duplicate")
+        delete_action = menu.addAction("Delete")
         action = menu.exec(self.mapToGlobal(pos))
         
         if action == open_action:
