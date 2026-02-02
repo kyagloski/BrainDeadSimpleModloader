@@ -1,0 +1,3 @@
+yaml
+rarfile
+PyQt6
