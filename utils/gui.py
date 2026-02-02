@@ -1579,6 +1579,11 @@ class ModLoaderUserInterface(QMainWindow):
             cmd=f"cd {exe_dir}; {cpath} {spath} {appid} {gameid} {proton} run \"{exe}\" {params} &"
             print("Launching using: "+cmd)
             os.system(cmd) 
+        else:
+            exe=self.cfg["EXECUTABLES"][self.current_exe]["PATH"]
+            params=self.cfg["EXECUTABLES"][self.current_exe]["PARAMS"]
+            cmd=f"{cmd} {params}"
+            os.system(cmd)
 
 if __name__ == "__main__":
     read_cfg(gui=True)
