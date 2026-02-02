@@ -1,2 +1,3 @@
 # braindead-modloader
-&lt;Currently> CLI based mod loader for various Bethesda games.
+&lt;Python Mod Organizer 2 alternative for Linux and Windows
+
