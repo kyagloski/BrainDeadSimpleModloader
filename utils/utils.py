@@ -40,8 +40,6 @@ def print_traceback():
 def select_directory():
     """Show detailed prompt then directory picker with confirmation"""
     app = QApplication(sys.argv)
-    
-    # Create custom message box
     msg = QMessageBox()
     msg.setIcon(QMessageBox.Icon.Question)
     msg.setWindowTitle("Target Directory Required")
@@ -55,47 +53,28 @@ def select_directory():
         QMessageBox.StandardButton.Cancel
     )
     msg.setDefaultButton(QMessageBox.StandardButton.Ok)
-    
-    # Show message and wait for response
     result = msg.exec()
-    
     if result == QMessageBox.StandardButton.Ok:
-        # Loop until user confirms or cancels
         while True:
-            # Show directory picker
             directory = QFileDialog.getExistingDirectory(
                 None,
                 "Select Target Directory",
                 "/home",
-                QFileDialog.Option.ShowDirsOnly | QFileDialog.Option.DontResolveSymlinks
-            )
-            
+                QFileDialog.Option.ShowDirsOnly | QFileDialog.Option.DontResolveSymlinks)
             if directory:
-                # Show confirmation dialog
                 confirm = QMessageBox.question(
                     None,
                     "Confirm Directory",
                     f"Are you sure you want to use this directory?\n\n{directory}",
                     QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-                    QMessageBox.StandardButton.Yes
-                )
+                    QMessageBox.StandardButton.Yes)
                 
-                if confirm == QMessageBox.StandardButton.Yes:
-                    # User confirmed, return the directory
-                    print(f"Selected directory: {directory}")
-                    return directory
-                else:
-                    # User said no, loop continues to show directory picker again
-                    print("User rejected directory, showing picker again...")
-                    continue
+                if confirm == QMessageBox.StandardButton.Yes: return directory
+                else: continue
             else:
-                # No directory selected (user cancelled the file dialog)
-                QMessageBox.warning(
-                    None,
-                    "Warning",
-                    "No directory was selected!"
-                )
+                #QMessageBox.warning(
+                #    None,
+                #    "Warning",
+                #    "No directory was selected!")
                 return None
-    else:
-        print("User cancelled")
-        return None
+    else: return None
