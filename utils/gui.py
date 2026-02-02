@@ -29,7 +29,6 @@ except:
     from exe_manager import *
 
 SHOW_MSG_TIME = 10000000
-SOURCE_DIR    = None # stupid
 
 class StdoutRedirector(QObject):
     text_written = pyqtSignal(str)
@@ -238,8 +237,9 @@ class ReorderOnlyTable(QTableWidget):
 
 
 class EditableComboBox(QComboBox):
-    def __init__(self, parent=None):
-        super().__init__(parent)
+    def __init__(self, upper=None):
+        super().__init__(None)
+        self.upper=upper
         self.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.customContextMenuRequested.connect(self.show_context_menu)
     
@@ -253,6 +253,12 @@ class EditableComboBox(QComboBox):
         
         if action == open_action:
             self.open_in_editor()
+        if action == rename_action:
+            self.upper.rename_preset()
+        if action == duplicate_action:
+            self.upper.dup_preset()
+        if action == delete_action:
+            self.upper.del_preset()
     
     def open_in_editor(self):
         file_path = str(LOAD_ORDER)
@@ -272,8 +278,6 @@ class ModLoaderUserInterface(QMainWindow):
     def __init__(self):
         super().__init__()
         self.cfg = read_cfg(sync=False)
-        global SOURCE_DIR
-        SOURCE_DIR=self.cfg["SOURCE_DIR"]
         self.command_queue = OrderedDict() # ordered set
 
         self.setWindowTitle("BrainDead Simple Modloader (BDSM "+VERSION+")")
@@ -440,7 +444,7 @@ class ModLoaderUserInterface(QMainWindow):
         ini_man.triggered.connect(self.open_ini_manager)
         
         preset_layout.addWidget(QLabel("Preset:"))
-        self.preset_combo = EditableComboBox()
+        self.preset_combo = EditableComboBox(upper=self)
         #self.preset_combo.setFixedWidth(150)
         self.preset_combo.setSizePolicy(self.preset_combo.sizePolicy().horizontalPolicy().Expanding,
                                         self.preset_combo.sizePolicy().verticalPolicy().Preferred)
@@ -468,7 +472,7 @@ class ModLoaderUserInterface(QMainWindow):
         preset_layout.addStretch()
 
         preset_layout.addWidget(QLabel("Binary:"))
-        self.bin_combo = EditableComboBox()
+        self.bin_combo = QComboBox()
         #self.bin_combo.setFixedWidth(150)
         self.bin_combo.setSizePolicy(self.bin_combo.sizePolicy().horizontalPolicy().Expanding,
                                      self.bin_combo.sizePolicy().verticalPolicy().Preferred)
@@ -688,7 +692,7 @@ class ModLoaderUserInterface(QMainWindow):
             self.file_explorer.clear()
         elif not self.is_separator_row(row):
             self.explorer_label.setText(mod_name)
-            self.populate_file_explorer(Path(SOURCE_DIR) / Path(mod_name))
+            self.populate_file_explorer(Path(self.cfg["SOURCE_DIR"]) / Path(mod_name))
     
     def populate_file_explorer(self, path):
         self.file_explorer.clear()
@@ -860,6 +864,34 @@ class ModLoaderUserInterface(QMainWindow):
         self.update_priority_numbers()
         self.auto_save_load_order()
 
+    def move_mod_top(self):
+        selected_rows = sorted(set(item.row() for item in self.mod_table.selectedItems()))
+        if not selected_rows or min(selected_rows) <= 0:
+            return
+        nrow=0
+        nsrows=[]
+        for row in selected_rows:
+            self.move_row(row, nrow)
+            nrow+=1
+            nsrows.append(nrow-1)
+        self._reselect_rows(nsrows)
+        self.update_priority_numbers()
+        self.auto_save_load_order()
+    
+    def move_mod_bot(self):
+        selected_rows = sorted(set(item.row() for item in self.mod_table.selectedItems()))
+        if not selected_rows or max(selected_rows) >= self.mod_table.rowCount() - 1:
+            return
+        nr=self.mod_table.rowCount()-1
+        sr=[]
+        for row in reversed(selected_rows):
+            self.move_row(row, nr)
+            sr.append(nr)
+            nr-=1
+        self._reselect_rows(sr)
+        self.update_priority_numbers()
+        self.auto_save_load_order()
+
     def get_separator_children_rows(self, separator_row):
         children = []
         for r in range(separator_row + 1, self.mod_table.rowCount()):
@@ -918,13 +950,13 @@ class ModLoaderUserInterface(QMainWindow):
                     mods.append(mod_name if is_enabled else '~' + mod_name)
         return mods
 
-    def auto_save_load_order(self):
+    def auto_save_load_order(self,instant=False):
         global RELOAD_ON_INSTALL
         if self._loading: return
         try:
-            mods = self._collect_load_order()
             self.cfg=read_cfg(sync=False) # check for update
-            self.save_load_order()
+            if instant: self.save_load_order()
+            else: self.executor.add_command(self.save_load_order, tuple())
             if self.cfg["RELOAD_ON_INSTALL"]:
                 #self.save_load_order()
                 self.load_mods()
@@ -1088,6 +1120,8 @@ class ModLoaderUserInterface(QMainWindow):
             
             move_up_action = menu.addAction("Move Up")
             move_down_action = menu.addAction("Move Down")
+            to_top_action = menu.addAction("Move Top")
+            to_bot_action = menu.addAction("Move Bottom")
             menu.addSeparator()
             enable_action = menu.addAction("Enable")
             disable_action = menu.addAction("Disable")
@@ -1101,16 +1135,13 @@ class ModLoaderUserInterface(QMainWindow):
             
             action = menu.exec(self.mod_table.viewport().mapToGlobal(position))
             
-            if action == rename_action:
-                self.rename_selected_mod()
-            elif action == move_up_action:
-                self.move_mod_up()
-            elif action == move_down_action:
-                self.move_mod_down()
-            elif action == enable_action:
-                self.enable_selected_mods()
-            elif action == disable_action:
-                self.disable_selected_mods()
+            if action == rename_action: self.rename_selected_mod()
+            elif action == move_up_action: self.move_mod_up()
+            elif action == move_down_action: self.move_mod_down()
+            elif action == to_top_action: self.move_mod_top()
+            elif action == to_bot_action: self.move_mod_bot()
+            elif action == enable_action: self.enable_selected_mods()
+            elif action == disable_action: self.disable_selected_mods()
             elif action == add_sep_above_action:
                 selected = self.mod_table.selectedItems()
                 if selected:
@@ -1119,10 +1150,8 @@ class ModLoaderUserInterface(QMainWindow):
                 selected = self.mod_table.selectedItems()
                 if selected:
                     self.add_separator_at(selected[0].row() + 1)
-            elif action == remove_action:
-                self.remove_selected_mod()
-            elif action == open_folder_action:
-                self.open_mod_folder()
+            elif action == remove_action: self.remove_selected_mod()
+            elif action == open_folder_action: self.open_mod_folder()
 
 
     def select_preset(self, text):
@@ -1130,7 +1159,6 @@ class ModLoaderUserInterface(QMainWindow):
         load_order=str(PRESET_DIR / Path(text))
         self.cfg["LOAD_ORDER"]=load_order
         write_cfg(self.cfg)
-        #read_cfg()
         sync_loadorder()
         self._init_ui(verbose=self.log_output.toPlainText())
         self._load_initial_data()
@@ -1148,12 +1176,42 @@ class ModLoaderUserInterface(QMainWindow):
             name=name.removesuffix(".txt")+".txt"
             if name in os.listdir(PRESET_DIR):
                 print("error: preset already exists")
+                QMessageBox.warning(self, "Preset Error", f"Preset already exists: {name}")
                 return
             Path(str(PRESET_DIR / name)).touch() 
             self.select_preset(name)
 
+    def rename_preset(self):
+        name, ok = QInputDialog.getText(
+            self, "Rename Preset", "Preset name",
+            QLineEdit.EchoMode.Normal, self.preset_combo.currentText())
+        if name:
+            if name in os.listdir(PRESET_DIR):
+                print("error: preset already exists")
+                QMessageBox.warning(self, "Preset Error", f"Preset already exists: {name}")
+                return
+            name=name.removesuffix(".txt")+".txt"
+            new_name=PRESET_DIR/name
+            os.rename(self.cfg["LOAD_ORDER"], new_name)
+            self.cfg["LOAD_ORDER"]=new_name
+            self.preset_combo.setItemText(self.preset_combo.currentIndex(),name)
+
+    def dup_preset(self):
+        name, ok = QInputDialog.getText(
+            self, "Duplicate Preset", "Preset name",
+            QLineEdit.EchoMode.Normal, self.preset_combo.currentText())
+        if name:
+            if name in os.listdir(PRESET_DIR):
+                print("error: preset already exists")
+                QMessageBox.warning(self, "Preset Error", f"Preset already exists: {name}")
+                return
+            name=name.removesuffix(".txt")+".txt"
+            new_name=PRESET_DIR/name
+            shutil.copy(self.cfg["LOAD_ORDER"],new_name)
+            self.cfg["LOAD_ORDER"]=new_name
+            self.select_preset(name)
+
     def del_preset(self):
-        global LOAD_ORDER
         reply = QMessageBox.question(
             self, "Confirm Removal",
             "Remove this preset?",
@@ -1161,7 +1219,6 @@ class ModLoaderUserInterface(QMainWindow):
         if reply == QMessageBox.StandardButton.Yes:
             print("removing "+str(self.cfg["LOAD_ORDER"]))
             os.unlink(self.cfg["LOAD_ORDER"])
-            print(self.cfg["LOAD_ORDER"])
             preset_idx=self.preset_combo.currentIndex()
             if self.preset_combo.count()>1:
                 self.preset_combo.removeItem(preset_idx)
@@ -1319,7 +1376,7 @@ class ModLoaderUserInterface(QMainWindow):
                 rename_mod(old_name, new_name)
                 self.mod_table.item(row, 2).setText(new_name)
                 self.explorer_label.setText(new_name)
-                self.populate_file_explorer(Path(SOURCE_DIR) / Path(new_name))
+                self.populate_file_explorer(Path(self.cfg["SOURCE_DIR"]) / Path(new_name))
                 self.auto_save_load_order()
                 self.statusBar().showMessage(f"Renamed '{old_name}' to '{new_name}'", SHOW_MSG_TIME)
             except Exception as e:
@@ -1335,7 +1392,7 @@ class ModLoaderUserInterface(QMainWindow):
         
         row = selected_items[0].row()
         mod_name = self.mod_table.item(row, 2).text()
-        mod_path = Path(SOURCE_DIR) / Path(mod_name)
+        mod_path = Path(self.cfg["SOURCE_DIR"]) / Path(mod_name)
         
         if not mod_path.exists():
             QMessageBox.warning(self, "Error", f"Mod folder not found:\n{mod_path}")
@@ -1356,7 +1413,7 @@ class ModLoaderUserInterface(QMainWindow):
         
         row = selected_items[0].row()
         mod_name = self.mod_table.item(row, 2).text()
-        full_path = Path(SOURCE_DIR) / mod_name / Path(*path_parts)
+        full_path = Path(self.cfg["SOURCE_DIR"]) / mod_name / Path(*path_parts)
         
         if not full_path.exists():
             QMessageBox.warning(self, "Error", f"Path not found:\n{full_path}")
@@ -1501,13 +1558,13 @@ class ModLoaderUserInterface(QMainWindow):
 
     def closeEvent(self, event):
         print("saving load order...")
-        if self.cfg["UPDATE_ON_CLOSE"]: self.auto_save_load_order()
+        if self.cfg["UPDATE_ON_CLOSE"]: self.auto_save_load_order(instant=True)
         event.accept()
 
     def on_play(self):
         if os.name=="posix":
             if self.cfg["LINK_ON_LAUNCH"]: 
-                self.auto_save_load_order()
+                self.auto_save_load_order(instant=True)
                 perform_copy()
             c=self.cfg["COMPAT_DIR"].split("pfx")[0]
             with open(Path(c)/"config_info",'r') as f: 
@@ -1524,7 +1581,7 @@ class ModLoaderUserInterface(QMainWindow):
             os.system(cmd) 
 
 if __name__ == "__main__":
-    read_cfg()
+    read_cfg(gui=True)
     app = QApplication(sys.argv)
     window = ModLoaderUserInterface()
     window.show()

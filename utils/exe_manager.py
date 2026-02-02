@@ -115,16 +115,16 @@ class ExeManager(QMainWindow):
         right_layout.addLayout(form_layout)
         
         # Use as Steam executable button
-        steam_layout = QHBoxLayout()
-        self.steam_button = QPushButton("Use as Steam executable")
-        self.steam_button.setFixedWidth(180)
-        self.steam_button.setToolTip("Swap this executable with the original Steam launcher so this is launched in its stead")
-        self.steam_button.clicked.connect(self.use_as_steam_executable)
-        self.steam_button.setEnabled(False)
-        steam_layout.addWidget(self.steam_button)
-        right_layout.addLayout(steam_layout)
-        
-        right_layout.addStretch()
+        #steam_layout = QHBoxLayout()
+        #self.steam_button = QPushButton("Use as Steam executable")
+        #self.steam_button.setFixedWidth(180)
+        #self.steam_button.setToolTip("Swap this executable with the original Steam launcher so this is launched in its stead")
+        #self.steam_button.clicked.connect(self.use_as_steam_executable)
+        #self.steam_button.setEnabled(False)
+        #steam_layout.addWidget(self.steam_button)
+        #right_layout.addLayout(steam_layout)
+        #
+        #right_layout.addStretch()
         
         # Apply button layout
         apply_layout = QHBoxLayout()
@@ -153,7 +153,7 @@ class ExeManager(QMainWindow):
         self.title_edit.setEnabled(enabled)
         self.path_edit.setEnabled(enabled)
         self.params_edit.setEnabled(enabled)
-        self.steam_button.setEnabled(enabled)
+        #self.steam_button.setEnabled(enabled)
         
     def mark_pending_changes(self):
         """Mark that there are pending changes"""

@@ -40,14 +40,17 @@ VERBOSITY        =False
 OPERATION_TIMEOUT=500 # 0.5s
 
 
-def create_cfg(gui=False, target=None):
+def create_cfg(gui=False):
     # prompt user choice
-    if not gui:
+    if gui:
+        target=select_directory()
+        if not target: sys.exit()
+        if not target.endswith("Data"): target=os.path.realpath(os.path.join(target,"Data"))
+    else:
         choice = input("currently no config file exists or is not configured\nwould you like to create one? [Y/n] ").strip().lower()
         if (not choice.startswith("y")) and (choice!=""): return
         target = input("enter absolute path to target dir: ").rstrip("/")+"/Data/"
         if not os.path.exists(target): print("error: invalid target dir: "+target); sys.exit()
-    else: target=Path(target)
     compat = str(game_specific.infer_compat_path(Path(target)))
     if not compat: compat=target
     if not os.path.exists(compat): print("error: could not infer comapt dir: "+compat); sys.exit()
@@ -74,10 +77,10 @@ def create_cfg(gui=False, target=None):
     read_cfg()
 
     
-def read_cfg(sync=True):
+def read_cfg(sync=True, gui=False):
     global SOURCE_DIR, TARGET_DIR, COMPAT_DIR, LOAD_ORDER, INI_DIR, RELOAD_ON_INSTALL, UPDATE_ON_CLOSE, LINK_ON_LAUNCH
     # TODO: make this smarter, add missing entries automatically
-    if not os.path.exists(CONFIG_FILE): create_cfg(); return
+    if not os.path.exists(CONFIG_FILE): create_cfg(gui); return
     with open(CONFIG_FILE, "r") as f: cfg_dict = OrderedDict(yaml.safe_load(f))
     SOURCE_DIR=Path(cfg_dict["SOURCE_DIR"])
     TARGET_DIR=Path(cfg_dict["TARGET_DIR"])
