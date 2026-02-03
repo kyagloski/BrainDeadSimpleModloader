@@ -12,58 +12,58 @@ from collections import OrderedDict
 try:    from utils.utils import *
 except: from utils import * 
 
-COMPACT_GAME_LIST = ["Fallout4",
-                     "Skyrim Special Edition",
-                     "Fallout3", 
-                     "FalloutNV"]
-
-GAME_PLUGINS = { "Fallout3" : "Anchorage.esm\nBrokenSteel.esm\nFallout3.esm\nPointLookout.esm\nThePitt.esm\nZeta.esm\n",
-                 "FalloutNV": "FalloutNV.esm\nCaravanPack.esm\nClassicPack.esm\nDeadMoney.esm\nGunRunnersArsenal.esm\nHonestHearts.esm\nLonesomeRoad.esm\nMercenaryPack.esm\nOldWorldBlues.esm\nTribalPack.esm\n",
-                 "Fallout4" : "",
-                 "Skyrim Special Edition" : "",
-                 "Default"  : ""}
-
-PLUGINS_FILE = { "Fallout3" : "plugins.txt",
-                 "FalloutNV": "plugins.txt",
-                 "Fallout4" : "Plugins.txt",
-                 "Skyrim Special Edition"   : "Plugins.txt",
-                 "Default"  : "Plugins.txt"}
-
+# preloaded plugins required in plugins.txt file
+GAME_PLUGINS      = { "Fallout3" : "Anchorage.esm\nBrokenSteel.esm\nFallout3.esm\nPointLookout.esm\nThePitt.esm\nZeta.esm\n",
+                      "FalloutNV": "FalloutNV.esm\nCaravanPack.esm\nClassicPack.esm\nDeadMoney.esm\nGunRunnersArsenal.esm\nHonestHearts.esm\nLonesomeRoad.esm\nMercenaryPack.esm\nOldWorldBlues.esm\nTribalPack.esm\n",
+                      "Fallout4" : "",
+                      "Skyrim Special Edition" : "",
+                      "Default"  : ""}
+# file names for plugins.txt
+PLUGINS_FILE      = { "Fallout3" : "plugins.txt",
+                      "FalloutNV": "plugins.txt",
+                      "Fallout4" : "Plugins.txt",
+                      "Skyrim Special Edition"   : "Plugins.txt",
+                      "Default"  : "Plugins.txt"}
+# vanilla game launcher executables
 VANILLA_LAUNCHERS = { "Fallout3" : "Fallout3Launcher.exe",
                       "FalloutNV": "FalloutNVLauncher.exe",
                       "Fallout4" : "Fallout4Launcher.exe",
                       "Skyrim Special Edition" : "SkyrimSELauncher.exe",
                       "Default"  : ""}
-
+# vanilla game executables
 VANILLA_GAMES     = { "Fallout3" : "Fallout3.exe",
                       "FalloutNV": "FalloutNV.exe",
                       "Fallout4" : "Fallout4.exe",
                       "Skyrim Special Edition" : "SkyrimSE.exe",
                       "Default"  : ""}
-
+# script extender executables
 SCRIPT_EXTENDERS  = { "Fallout3" : "fose_loader.exe",
                       "FalloutNV": "nvse_loader.exe",
                       "Fallout4" : "f4se_loader.exe",
                       "Skyrim Special Edition" : "skse64_loader.exe",
                       "Default"  : ""}
-
-INIS = { "Fallout3"  : ["FalloutCustom.ini", "Fallout.ini", "FalloutPrefs.ini"],
-         "FalloutNV" : ["FalloutCustom.ini", "Fallout.ini", "FalloutPrefs.ini"],
-         "Fallout4"  : ["Fallout4Custom.ini", "Fallout4.ini", "Fallout4Prefs.ini"],
-         "Skyrim Special Edition" : ["SkyrimCustom.ini", "Skyrim.ini", "SkyrimPrefs.ini"],
-         "Default"   : ["Fallout.ini", "FalloutPrefs.ini"] } # testing
-
-GAME_IDS = { "Fallout 3 goty"         : 22370,
-             "Fallout 3"              : 22300,
-             "Fallout New Vegas"      : 22380,
-             "Fallout 4"              : 377160,
-             "Skyrim Special Edition" : 489830,
-             "Skyrim VR"              : "", # TODO: add support for ALL beth game 
-             "Default"                : "" }
-
-GAME_COMPAT = { "Fallout 3 goty"    : "Fallout3",
-                "Fallout 3"         : "Fallout3",
-                "Fallout New Vegas" : "FalloutNV"}
+# file names for ini configs
+INIS              = { "Fallout3"  : ["FalloutCustom.ini", "Fallout.ini", "FalloutPrefs.ini"],
+                      "FalloutNV" : ["FalloutCustom.ini", "Fallout.ini", "FalloutPrefs.ini"],
+                      "Fallout4"  : ["Fallout4Custom.ini", "Fallout4.ini", "Fallout4Prefs.ini"],
+                      "Skyrim Special Edition" : ["SkyrimCustom.ini", "Skyrim.ini", "SkyrimPrefs.ini"],
+                      "Default"   : ["Fallout.ini", "FalloutPrefs.ini"] } # testing
+# steam game ids
+GAME_IDS          = { "Fallout 3 goty"         : 22370,
+                      "Fallout 3"              : 22300,
+                      "Fallout New Vegas"      : 22380,
+                      "Fallout 4"              : 377160,
+                      "Skyrim Special Edition" : 489830,
+                      "Skyrim VR"              : "", # TODO: add support for ALL beth game 
+                      "Default"                : "" }
+# AppData directory names
+GAME_COMPAT       = { "Fallout 3 goty"    : "Fallout3",
+                      "Fallout 3"         : "Fallout3",
+                      "Fallout New Vegas" : "FalloutNV",
+                      "Fallout 4"         : "Fallout4",
+                      "Skyrim VR"         : "", # TODO: add support for ALL beth game 
+                      "Skyrim Special Edition" : "Skyrim Special Edition",
+                      "Default"           : ""}
 
 
 def determine_game(compat_dir):

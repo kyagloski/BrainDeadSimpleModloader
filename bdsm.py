@@ -19,25 +19,24 @@ except:
     import installer
     import game_specific
 
-VERSION="v0.1"
-LOCAL_DIR=Path(os.path.dirname(os.path.realpath(__file__)))
-CONFIG_FILE=LOCAL_DIR/"config.yaml"
-LOAD_ORDER=LOCAL_DIR/"manifest"/"loadorders"/"loadorder.txt"
-PRESET_DIR=LOCAL_DIR/"manifest"/"loadorders"
-BACKUP_DIR=LOCAL_DIR/"manifest"
-INI_DIR=LOCAL_DIR/"inis"
-COPY_MANIFEST=BACKUP_DIR/"copy_manifest.txt"
-BACKUP_MANIFEST=BACKUP_DIR/"backup_manifest.txt"
+VERSION           = "v0.1"
+LOCAL_DIR         = Path(os.path.dirname(os.path.realpath(__file__)))
+CONFIG_FILE       = LOCAL_DIR/"config.yaml"
+LOAD_ORDER        = LOCAL_DIR/"manifest"/"loadorders"/"loadorder.txt"
+PRESET_DIR        = LOCAL_DIR/"manifest"/"loadorders"
+BACKUP_DIR        = LOCAL_DIR/"manifest"
+INI_DIR           = LOCAL_DIR/"inis"
+COPY_MANIFEST     = BACKUP_DIR/"copy_manifest.txt"
+BACKUP_MANIFEST   = BACKUP_DIR/"backup_manifest.txt"
+SOURCE_DIR        = LOCAL_DIR/"mods"
+TARGET_DIR        = LOCAL_DIR/"target"
+COMPAT_DIR        = TARGET_DIR/"compat"
+RELOAD_ON_INSTALL = False
+UPDATE_ON_CLOSE   = True
+LINK_ON_LAUNCH    = True
 
-SOURCE_DIR=LOCAL_DIR/"mods"
-TARGET_DIR=LOCAL_DIR/"target"
-COMPAT_DIR=TARGET_DIR/"compat"
-
-RELOAD_ON_INSTALL=False
-UPDATE_ON_CLOSE=True
-LINK_ON_LAUNCH=True
-VERBOSITY        =False
-OPERATION_TIMEOUT=500 # 0.5s
+VERBOSITY         = False
+OPERATION_TIMEOUT = 500 # 0.5s
 
 
 def create_cfg(gui=False):

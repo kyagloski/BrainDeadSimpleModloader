@@ -11,10 +11,10 @@ from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, 
     QTreeWidget, QTreeWidgetItem, QTableWidget, QTableWidgetItem, 
     QPushButton, QSplitter, QLabel, QLineEdit, QMenu, QMessageBox, QComboBox,
-    QFileDialog, QInputDialog, QTextEdit, QToolButton
+    QFileDialog, QInputDialog, QTextEdit, QToolButton, QSplashScreen
 )
-from PyQt6.QtCore import Qt, QItemSelectionModel, QObject, QThread, QWaitCondition, pyqtSignal, QMutex, QMutexLocker, QTimer, QPoint
-from PyQt6.QtGui import QIcon, QFont, QTextCursor, QCursor
+from PyQt6.QtCore import Qt, QItemSelectionModel, QObject, QThread, QWaitCondition, pyqtSignal, QMutex, QMutexLocker, QTimer, QPoint, QSize
+from PyQt6.QtGui import QIcon, QFont, QTextCursor, QCursor, QPixmap
 
 try:
     sys.path.append(str(Path(__file__).parent.parent))
@@ -281,7 +281,10 @@ class ModLoaderUserInterface(QMainWindow):
         self.command_queue = OrderedDict() # ordered set
 
         self.setWindowTitle("BrainDead Simple Modloader (BDSM "+VERSION+")")
-        self.setWindowIcon(QIcon("logo.png"))
+        icon=QIcon()
+        try:icon.addFile(str(LOCAL_DIR/"utils"/'icon.png'), QSize(256, 256))
+        except:pass
+        self.setWindowIcon(QIcon(icon))
         self.resize(1000, 600)
         
         self._loading = True
@@ -1585,8 +1588,13 @@ class ModLoaderUserInterface(QMainWindow):
         os.system(cmd)
 
 if __name__ == "__main__":
-    read_cfg(gui=True)
+    cfg=read_cfg(gui=True)
     app = QApplication(sys.argv)
     window = ModLoaderUserInterface()
-    window.show()
+    try: 
+        splash = QSplashScreen(QPixmap(str(LOCAL_DIR/"utils"/'splash.png')))
+        splash.show()
+        QTimer.singleShot(1500, splash.close)
+    except: pass
+    QTimer.singleShot(500, window.show)
     sys.exit(app.exec())
