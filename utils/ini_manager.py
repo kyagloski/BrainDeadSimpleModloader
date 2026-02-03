@@ -356,8 +356,10 @@ class INIManager(QMainWindow):
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
         if reply == QMessageBox.StandardButton.Yes:
             # backup files
-            backup_ini(self.compat_dir, self.backup_dir)
-        
+            res=backup_ini(self.compat_dir, self.backup_dir)
+            if res: QMessageBox.information(self, "Success", f"Backed up to dir:\n{self.backup_dir}")
+            else: QMessageBox.information(self, "Failure", f"Failed to backup ini files")
+
             # Refresh left tree
             self.left_model.setRootPath("")
             self.left_tree.setRootIndex(self.left_model.index(str(self.backup_dir)))

@@ -61,6 +61,10 @@ GAME_IDS = { "Fallout 3 goty"         : 22370,
              "Skyrim VR"              : "", # TODO: add support for ALL beth game 
              "Default"                : "" }
 
+GAME_COMPAT = { "Fallout 3 goty"    : "Fallout3",
+                "Fallout 3"         : "Fallout3",
+                "Fallout New Vegas" : "FalloutNV"}
+
 
 def determine_game(compat_dir):
     game=""
@@ -91,16 +95,13 @@ def get_ini_path(compat_dir):
 
 def infer_compat_path(target_dir, verbose=False):
     if os.name == "posix":
-        game_id = determine_game_id(target_dir)  
+        game_id = determine_game_id(target_dir)
+        game=GAME_COMPAT[Path(target_dir).parent.name]
         u_compat=target_dir.parent.parent.parent/"compatdata"/game_id/"pfx"/"drive_c"/"users"/"steamuser"/"AppData"/"Local"
-        try: match = next((s for s in COMPACT_GAME_LIST if os.path.isdir(os.path.join(str(u_compat), s))), None).rstrip("/") + "/"
-        except: 
-            if verbose: print("error: cannot determine game for compat inference"); 
-            return ""
-        compat_dir = u_compat/match
+        compat_dir = u_compat/game
     elif os.name == "nt":
-        match = next((s for s in COMPACT_GAME_LIST if os.path.isdir(os.path.join(compat, s))), None).rstrip("/") + "/"
-        compat_dir=Path("C:\\Users\\"+os.getlogin()+"\\AppData\\Local\\"+match)
+        game=GAME_COMPAT[Path(target_dir).parent.name]
+        compat_dir=Path("C:\\Users\\"+os.getlogin()+"\\AppData\\Local\\")/game
     return compat_dir
         
     
@@ -172,7 +173,8 @@ def backup_ini(compat_dir, back_dir):
     ensure_dir(back_dir)
     for i in INIS[game]:
         try:
-            f=Path(fix_path_case(str(ini_dir/i)))
+            if os.name=="posix": f=Path(fix_path_case(str(ini_dir/i)))
+            else: f=Path(str(ini_dir/i))
             shutil.copy(f, back_dir)
         except:
             print("error: could find file "+i)
@@ -210,6 +212,7 @@ def get_launchers(target_dir,compat_dir):
     game_exe=game_dir/VANILLA_GAMES[game]
     se_exe=game_dir/SCRIPT_EXTENDERS[game]
     exes=[launcher_exe,game_exe,se_exe]
+    print(exes)
     launchers=dict()
     if game=="Default": return {"Default":{"PATH":"\"\"","PARAMS":""}}
     for exe in exes:

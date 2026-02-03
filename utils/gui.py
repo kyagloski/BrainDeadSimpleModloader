@@ -423,14 +423,13 @@ class ModLoaderUserInterface(QMainWindow):
         preset_layout = QHBoxLayout()
         
         self.settings_button = QPushButton("⚙")
-        self.settings_button.setFixedWidth(35)
-        self.settings_button.setToolTip("Settings")
+        self.settings_button.setFixedSize(35, 35)
         self.settings_button.clicked.connect(self.open_settings)
         preset_layout.addWidget(self.settings_button)
 
         self.tools_button = QToolButton()
         self.tools_button.setText("⚒")
-        self.tools_button.setFixedWidth(35)
+        self.tools_button.setFixedSize(35, 35)
         self.tools_button.setToolTip("Tools")
         #self.tools_button.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
         #self.tools_button.clicked.connect(self.open_settings)
@@ -453,13 +452,13 @@ class ModLoaderUserInterface(QMainWindow):
         preset_layout.addWidget(self.preset_combo,2)
 
         self.add_preset_button = QPushButton("+")
-        self.add_preset_button.setFixedWidth(35)
+        self.add_preset_button.setFixedSize(35, 35)
         self.add_preset_button.setToolTip("New Preset")
         self.add_preset_button.clicked.connect(self.add_preset)
         preset_layout.addWidget(self.add_preset_button)
 
         self.del_preset_button = QPushButton("-")
-        self.del_preset_button.setFixedWidth(35)
+        self.del_preset_button.setFixedSize(35, 35)
         self.del_preset_button.setToolTip("Delete Preset")
         self.del_preset_button.clicked.connect(self.del_preset)
         preset_layout.addWidget(self.del_preset_button)
@@ -488,14 +487,14 @@ class ModLoaderUserInterface(QMainWindow):
 
 
         self.settings_button = QPushButton("☰")
-        self.settings_button.setFixedWidth(35)
+        self.settings_button.setFixedSize(35, 35)
         self.settings_button.setToolTip("Settings")
         self.settings_button.clicked.connect(self.open_exe_manager)
         preset_layout.addWidget(self.settings_button)
 
 
         self.play_button = QPushButton("▶︎")
-        self.play_button.setFixedWidth(35)
+        self.play_button.setFixedSize(35, 35)
         self.play_button.setToolTip("Settings")
         self.play_button.clicked.connect(self.on_play)
         preset_layout.addWidget(self.play_button)
@@ -543,18 +542,18 @@ class ModLoaderUserInterface(QMainWindow):
         button_layout = QHBoxLayout()
         
         self.add_button = QPushButton("+")
-        self.add_button.setFixedWidth(35)
+        self.add_button.setFixedSize(35, 35)
         self.add_button.setToolTip("Add Mod")
         self.add_button.clicked.connect(self.add_mod_dialog)
         
         self.move_up_button = QPushButton("↑")
-        self.move_up_button.setFixedWidth(35)
+        self.move_up_button.setFixedSize(35, 35)
         self.move_up_button.setToolTip("Move Up")
         self.move_up_button.clicked.connect(self.move_mod_up)
         self.move_up_button.setEnabled(False)
         
         self.move_down_button = QPushButton("↓")
-        self.move_down_button.setFixedWidth(35)
+        self.move_down_button.setFixedSize(35, 35)
         self.move_down_button.setToolTip("Move Down")
         self.move_down_button.clicked.connect(self.move_mod_down)
         self.move_down_button.setEnabled(False)
@@ -1562,10 +1561,10 @@ class ModLoaderUserInterface(QMainWindow):
         event.accept()
 
     def on_play(self):
-        if os.name=="posix":
-            if self.cfg["LINK_ON_LAUNCH"]: 
+        if self.cfg["LINK_ON_LAUNCH"]: 
                 self.auto_save_load_order(instant=True)
                 perform_copy()
+        if os.name=="posix":
             c=self.cfg["COMPAT_DIR"].split("pfx")[0]
             with open(Path(c)/"config_info",'r') as f: 
                 proton=(f.readlines()[1].split("files")[0]+"proton").replace(' ','\\ ')
@@ -1577,13 +1576,13 @@ class ModLoaderUserInterface(QMainWindow):
             cpath="STEAM_COMPAT_DATA_PATH="+c
             spath="STEAM_COMPAT_CLIENT_INSTALL_PATH="+os.path.expanduser("~/.steam/steam")
             cmd=f"cd {exe_dir}; {cpath} {spath} {appid} {gameid} {proton} run \"{exe}\" {params} &"
-            print("Launching using: "+cmd)
-            os.system(cmd) 
         else:
             exe=self.cfg["EXECUTABLES"][self.current_exe]["PATH"]
+            exe_dir=str(Path(exe).parent)
             params=self.cfg["EXECUTABLES"][self.current_exe]["PARAMS"]
-            cmd=f"{cmd} {params}"
-            os.system(cmd)
+            cmd=f"cd \"{exe_dir}\" & \"{exe}\" {params}"
+        print("Launching using: "+cmd)
+        os.system(cmd)
 
 if __name__ == "__main__":
     read_cfg(gui=True)

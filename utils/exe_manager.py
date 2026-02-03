@@ -63,25 +63,25 @@ class ExeManager(QMainWindow):
         
         # Plus button
         self.plus_button = QPushButton("+")
-        self.plus_button.setFixedSize(35, 30)
+        self.plus_button.setFixedSize(35, 35)
         self.plus_button.clicked.connect(self.add_item)
         button_layout.addWidget(self.plus_button)
         
         # Minus button
         self.minus_button = QPushButton("-")
-        self.minus_button.setFixedSize(35, 30)
+        self.minus_button.setFixedSize(35, 35)
         self.minus_button.clicked.connect(self.remove_item)
         button_layout.addWidget(self.minus_button)
         
         # Up arrow button
         self.up_button = QPushButton("↑")
-        self.up_button.setFixedSize(35, 30)
+        self.up_button.setFixedSize(35, 35)
         self.up_button.clicked.connect(self.move_item_up)
         button_layout.addWidget(self.up_button)
         
         # Down arrow button
         self.down_button = QPushButton("↓")
-        self.down_button.setFixedSize(35, 30)
+        self.down_button.setFixedSize(35, 35)
         self.down_button.clicked.connect(self.move_item_down)
         button_layout.addWidget(self.down_button)
         

@@ -11,7 +11,8 @@ def force_symlink(target, link_name):
         if os.path.islink(link_name) or os.path.exists(link_name):
             os.unlink(link_name)
     except FileNotFoundError: pass
-    os.symlink(target, link_name)
+    if os.name=="posix": os.symlink(target, link_name)
+    else: os.link(target, link_name)#; print(f"linked {target} -> {link_name}")
 
 def remove_symlink_rec(target):
     [os.unlink(os.path.join(r,f)) for r,d,fs in os.walk(target) for f in fs+d if os.path.islink(os.path.join(r,f))]

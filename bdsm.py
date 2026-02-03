@@ -175,13 +175,14 @@ def perform_copy():
             rel = os.path.relpath(root, source_path)
             #if rel.startswith("Data"): rel = rel.replace("Data/","",1) # might be broken
             dest_root = os.path.join(TARGET_DIR, rel) if rel != "." else TARGET_DIR
-
+            
             # ensure destination subdirectory exists
             if (dest_root != TARGET_DIR) \
             and (not os.path.isdir(dest_root)): 
                 dest_dir=dest_root.replace(str(TARGET_DIR),'')
                 copied_manifest.append(dest_dir) # add empty dirs
-            dest_root=fix_path_case(str(dest_root))
+            if os.name=="posix": dest_root=fix_path_case(str(dest_root))
+           
             #os.makedirs(dest_root, exist_ok=True)
             try: ensure_dir(dest_root)
             except Exception as e: 
@@ -353,7 +354,8 @@ def main():
     elif args.backup_ini: game_specific.backup_ini(COMPAT_DIR, INI_DIR)
     elif args.restore_ini: game_specific.restore_ini(COMPAT_DIR, INI_DIR)
     else: 
-        cmd="python3 "+str(LOCAL_DIR/"utils"/"gui.py")
+        cmd="python3 '"+str(LOCAL_DIR/ "utils" / "gui.py")+"'"
         os.system(cmd)
+
 if __name__ == "__main__":
     main()
