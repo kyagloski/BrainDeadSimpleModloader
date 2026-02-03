@@ -28,7 +28,7 @@ After initial setup, you can install mods using either of the following methods:
 - Click the **"+"** button on the bottom toolbar
 - Drag and drop one or more mod files into the center window
 
-Installed mods are stored in a staging directory located at `./mods/staging/` within the application's root folder (default configuration).
+Installed mods are stored in a staging directory located at `./BrainDeadSimpleModloader/mods/` within the application's root folder (default configuration).
 
 ## Launching Games
 
