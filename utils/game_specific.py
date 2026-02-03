@@ -212,7 +212,6 @@ def get_launchers(target_dir,compat_dir):
     game_exe=game_dir/VANILLA_GAMES[game]
     se_exe=game_dir/SCRIPT_EXTENDERS[game]
     exes=[launcher_exe,game_exe,se_exe]
-    print(exes)
     launchers=dict()
     if game=="Default": return {"Default":{"PATH":"\"\"","PARAMS":""}}
     for exe in exes:

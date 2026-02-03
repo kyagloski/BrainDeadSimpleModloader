@@ -19,6 +19,11 @@ try:
 except ImportError:
     HAS_RAR = False
 
+try:
+    import py7zr
+    HAS_7Z = True
+except ImportError:
+    HAS_7Z = False
 
 def extract_archive(archive_path, extract_to):
     """Extract zip, 7z, or rar archive."""
@@ -29,13 +34,23 @@ def extract_archive(archive_path, extract_to):
         with zipfile.ZipFile(archive_path, 'r') as zip_ref:
             zip_ref.extractall(extract_to)
     elif ext == '.7z':
-        try:
-            result = subprocess.run(['7z', 'x', str(archive_path), f'-o{extract_to}', '-y'], capture_output=True, text=True)
-            if result.returncode == 0: print("Extraction complete!"); return True
-            else: print(f"7z command failed: {result.stderr}")
-        except FileNotFoundError: pass
-        print("error: Could not extract 7z file. Install py7zr (pip install py7zr) or 7z command line tool")
-        return False
+        if HAS_7Z:
+            try:
+                with py7zr.SevenZipFile(archive_path, 'r') as archive:
+                    archive.extractall(path=extract_to)
+                print("Extraction complete!")
+                return True
+            except Exception as e:
+                print(f"py7zr failed ({e}), trying system 7z command...")
+        else:
+            print("Extracting file "+archive_path+" with 7z...")
+            try:
+                result = subprocess.run(['7z', 'x', str(archive_path), f'-o{extract_to}', '-y'], capture_output=True, text=True)
+                if result.returncode == 0: print("Extraction complete!"); return True
+                else: print(f"7z command failed: {result.stderr}")
+            except FileNotFoundError: pass
+            print("error: Could not extract 7z file. Install py7zr (pip install py7zr) or 7z command line tool")
+            return False
     elif ext == '.rar':
         # Try rarfile first
         if HAS_RAR:
@@ -48,6 +63,7 @@ def extract_archive(archive_path, extract_to):
                 print(f"rarfile failed ({e}), trying system unrar command...")
         # Try system unrar command as fallback
         try:
+            print("Extracting file "+archive_path+" with unrar...")
             result = subprocess.run(['unrar', 'x', '-y', str(archive_path), str(extract_to)],
                                     capture_output=True, text=True)
             if result.returncode == 0:
