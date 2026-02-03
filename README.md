@@ -20,8 +20,7 @@ Upon launching the application for the first time, you will be prompted to speci
 The tool will install mods to the `Data` folder within your game directory. While you can manually select the `Data` folder during setup, the application will automatically append it to your specified path if not already included.
 
 After configuring your target path you should be greeted with a screen such as this:
-<img width="1249" height="785" alt="gui" src="https://github.com/user-attachments/assets/e58fe368-ad09-455b-8e43-3870b176a6a9" />
-
+<img width="1250" height="783" alt="gui" src="https://github.com/user-attachments/assets/705c85a7-7951-4575-a25a-c3ebd62199b4" />
 
 ## Installing Mods
 
