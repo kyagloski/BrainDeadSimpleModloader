@@ -4,7 +4,7 @@
 ## Overview
 A Python-based mod management tool designed as an alternative to Mod Organizer 2 for Linux and Windows platforms. This application enables efficient management of mod collections for Bethesda games, including Skyrim, Fallout 3, Fallout 4, and Fallout: New Vegas.
 
-Currently this tool works on Linux, it is eventually meant to work on Windows but is currently completely untested. Good luck!
+Currently this tool is supported on both Linux and Windows. Its primary maintenance focus will be on Linux, however.
 
 ## Features
 - **Multi-File Drag-and-Drop Installation**: Install multiple mods simultaneously with intuitive drag-and-drop functionality
