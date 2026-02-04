@@ -1,5 +1,5 @@
 # BrainDead Simple Modloader
-<img width="959" height="984" alt="splash" src="https://github.com/user-attachments/assets/3f8824c6-5eb0-4b5c-8f85-f30ed5be0a61" />
+<img width="972" height="845" alt="splash" src="https://github.com/user-attachments/assets/a51a7bfb-e412-4407-8779-eacf569d4502" />
 
 ## Overview
 A Python-based mod management tool designed as an alternative to Mod Organizer 2 for Linux and Windows platforms. This application enables efficient management of mod collections for Bethesda games, including Skyrim, Fallout 3, Fallout 4, and Fallout: New Vegas.
@@ -20,7 +20,7 @@ Upon launching the application for the first time, you will be prompted to speci
 The tool will install mods to the `Data` folder within your game directory. While you can manually select the `Data` folder during setup, the application will automatically append it to your specified path if not already included.
 
 After configuring your target path you should be greeted with a screen such as this:
-<img width="1250" height="783" alt="gui" src="https://github.com/user-attachments/assets/705c85a7-7951-4575-a25a-c3ebd62199b4" />
+<img width="1249" height="782" alt="test" src="https://github.com/user-attachments/assets/0d86590c-72a6-4df7-b277-e2ddf318ac32" />
 
 ## Installing Mods
 
