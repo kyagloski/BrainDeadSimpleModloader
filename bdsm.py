@@ -353,7 +353,8 @@ def main():
     elif args.backup_ini: game_specific.backup_ini(COMPAT_DIR, INI_DIR)
     elif args.restore_ini: game_specific.restore_ini(COMPAT_DIR, INI_DIR)
     else: 
-        cmd="python3 '"+str(LOCAL_DIR/ "utils" / "gui.py")+"'"
+        if os.name=="posix": cmd="python3 '"+str(LOCAL_DIR/ "utils" / "gui.py")+"'"
+        else: cmd="python3 "+str(LOCAL_DIR/ "utils" / "gui.py")
         os.system(cmd)
 
 if __name__ == "__main__":

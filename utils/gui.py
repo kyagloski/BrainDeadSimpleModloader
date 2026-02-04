@@ -282,7 +282,7 @@ class ModLoaderUserInterface(QMainWindow):
 
         self.setWindowTitle("BrainDead Simple Modloader (BDSM "+VERSION+")")
         icon=QIcon()
-        try:icon.addFile(str(LOCAL_DIR/"utils"/'icon.png'), QSize(256, 256))
+        try:icon.addFile(str(LOCAL_DIR/"utils"/"resources"/"icon.png"), QSize(256, 256))
         except:pass
         self.setWindowIcon(QIcon(icon))
         self.resize(1000, 600)
@@ -1592,9 +1592,14 @@ if __name__ == "__main__":
     app = QApplication(sys.argv)
     window = ModLoaderUserInterface()
     try: 
-        splash = QSplashScreen(QPixmap(str(LOCAL_DIR/"utils"/'splash.png')))
+        splash = QSplashScreen(QPixmap(str(LOCAL_DIR/"utils"/"resources"/"splash.png")))
         splash.show()
-        QTimer.singleShot(1500, splash.close)
+        QTimer.singleShot(1700, splash.close)
+        stylesheet = load_stylesheet(Path(LOCAL_DIR)/utils/stylesheets/'dark.qss')
+        app.applyStyleSheet(stylesheet)
     except: pass
-    QTimer.singleShot(500, window.show)
+    stylesheet = load_stylesheet(Path(LOCAL_DIR)/"utils"/"resources"/"stylesheets"/"dark.qss")
+    app.setStyleSheet(stylesheet)
+    #QTimer.singleShot(500, window.show)
+    window.show()
     sys.exit(app.exec())

@@ -5,6 +5,7 @@ import os
 import sys
 import traceback
 from PyQt6.QtWidgets import QApplication, QMessageBox, QFileDialog
+from PyQt6.QtCore import QFile, QTextStream
 
 def force_symlink(target, link_name):
     try:
@@ -79,3 +80,12 @@ def select_directory():
                 #    "No directory was selected!")
                 return None
     else: return None
+
+def load_stylesheet(filename):
+    file = QFile(str(filename))
+    if file.open(QFile.OpenModeFlag.ReadOnly | QFile.OpenModeFlag.Text):
+        stream = QTextStream(file)
+        stylesheet = stream.readAll()
+        file.close()
+        return stylesheet
+    return ""
