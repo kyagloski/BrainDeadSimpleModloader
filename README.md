@@ -1,10 +1,10 @@
 # BrainDead Simple Modloader
-<img width="959" height="984" alt="splash" src="https://github.com/user-attachments/assets/44d4af07-9406-464f-a461-9fbf83fa81b7" />
+<img width="959" height="984" alt="splash" src="https://github.com/user-attachments/assets/3f8824c6-5eb0-4b5c-8f85-f30ed5be0a61" />
 
 ## Overview
 A Python-based mod management tool designed as an alternative to Mod Organizer 2 for Linux and Windows platforms. This application enables efficient management of mod collections for Bethesda games, including Skyrim, Fallout 3, Fallout 4, and Fallout: New Vegas.
 
-Currently this tool works on Linux, it is eventually meant to work on Windows but is currently completely untested. Good luck!
+Currently this tool is supported on both Linux and Windows. Its primary maintenance focus will be on Linux, however.
 
 ## Features
 - **Multi-File Drag-and-Drop Installation**: Install multiple mods simultaneously with intuitive drag-and-drop functionality
@@ -19,13 +19,16 @@ Upon launching the application for the first time, you will be prompted to speci
 
 The tool will install mods to the `Data` folder within your game directory. While you can manually select the `Data` folder during setup, the application will automatically append it to your specified path if not already included.
 
+After configuring your target path you should be greeted with a screen such as this:
+<img width="1250" height="783" alt="gui" src="https://github.com/user-attachments/assets/705c85a7-7951-4575-a25a-c3ebd62199b4" />
+
 ## Installing Mods
 
 After initial setup, you can install mods using either of the following methods:
 - Click the **"+"** button on the bottom toolbar
 - Drag and drop one or more mod files into the center window
 
-Installed mods are stored in a staging directory located at `./mods/staging/` within the application's root folder (default configuration).
+Installed mods are stored in a staging directory located at `./BrainDeadSimpleModloader/mods/` within the application's root folder (default configuration).
 
 ## Launching Games
 
