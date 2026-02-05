@@ -4,7 +4,6 @@
 import os
 import sys
 import traceback
-from PyQt6.QtWidgets import QApplication, QMessageBox, QFileDialog
 from PyQt6.QtCore import QFile, QTextStream
 
 def force_symlink(target, link_name):
