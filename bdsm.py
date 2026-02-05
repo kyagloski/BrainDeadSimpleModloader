@@ -18,6 +18,7 @@ except:
     from utils import * 
     import installer
     import game_specific
+    from gui import *
 
 VERSION           = "v0.1"
 LOCAL_DIR         = Path(os.path.dirname(os.path.realpath(__file__)))
@@ -44,13 +45,14 @@ def create_cfg(gui=False):
     if gui:
         target=select_directory()
         if not target: sys.exit()
-        if not target.endswith("Data"): target=os.path.join(target,"Data")
     else:
         choice = input("currently no config file exists or is not configured\nwould you like to create one? [Y/n] ").strip().lower()
         if (not choice.startswith("y")) and (choice!=""): return
-        target = input("enter absolute path to target dir: ").rstrip("/")+"/Data/"
+        target = input("enter absolute path to target dir: ")
         if not os.path.exists(target): print("error: invalid target dir: "+target); sys.exit()
-    compat = str(game_specific.infer_compat_path(Path(target)))
+        if not target.endswith("Data"): target=os.path.join(target,"Data")
+    try: compat = str(game_specific.infer_compat_path(Path(target)))
+    except: print("error: path is invalid"); sys.exit()
     if not compat: compat=target
     if not os.path.exists(compat): print("error: could not infer comapt dir: "+compat); sys.exit()
     # write data
@@ -75,11 +77,14 @@ def create_cfg(gui=False):
     print("created new config!")
     read_cfg()
 
-    
 def read_cfg(sync=True, gui=False):
     global SOURCE_DIR, TARGET_DIR, COMPAT_DIR, LOAD_ORDER, INI_DIR, RELOAD_ON_INSTALL, UPDATE_ON_CLOSE, LINK_ON_LAUNCH
     # TODO: make this smarter, add missing entries automatically
-    if not os.path.exists(CONFIG_FILE): create_cfg(gui); return
+    if not os.path.exists(CONFIG_FILE): 
+        try: create_cfg(gui); return
+        except Exception as e: 
+            os.remove(CONFIG_FILE)
+            print(f"error: could not create config file, exception: {e}")
     with open(CONFIG_FILE, "r") as f: cfg_dict = OrderedDict(yaml.safe_load(f))
     SOURCE_DIR=Path(cfg_dict["SOURCE_DIR"])
     TARGET_DIR=Path(cfg_dict["TARGET_DIR"])
@@ -89,6 +94,7 @@ def read_cfg(sync=True, gui=False):
     RELOAD_ON_INSTALL=bool(cfg_dict["RELOAD_ON_INSTALL"])
     UPDATE_ON_CLOSE=bool(cfg_dict["UPDATE_ON_CLOSE"])
     LINK_ON_LAUNCH=bool(cfg_dict["LINK_ON_LAUNCH"])
+    # TODO: make sure executables are somewhat populated here
 
     ensure_dir(PRESET_DIR)
     ensure_dir(SOURCE_DIR)

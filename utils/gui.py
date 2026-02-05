@@ -1587,6 +1587,57 @@ class ModLoaderUserInterface(QMainWindow):
         print("Launching using: "+cmd)
         os.system(cmd)
 
+
+def select_directory():
+    """Show detailed prompt then directory picker with confirmation"""
+    app = QApplication(sys.argv)
+    msg = QMessageBox()
+    msg.setIcon(QMessageBox.Icon.Question)
+    msg.setWindowTitle("Target Directory Required")
+    msg.setText("Select the root of your game directory:")
+    msg.setInformativeText(
+        "Choose the directory containing the \"Data\" folder.\n\n"
+        "Click OK to choose a directory."
+    )
+    msg.setStandardButtons(
+        QMessageBox.StandardButton.Ok | 
+        QMessageBox.StandardButton.Cancel
+    )
+    msg.setDefaultButton(QMessageBox.StandardButton.Ok)
+    result = msg.exec()
+    if result == QMessageBox.StandardButton.Ok:
+        while True:
+            directory = QFileDialog.getExistingDirectory(
+                None,
+                "Select Target Directory",
+                "/home",
+                QFileDialog.Option.ShowDirsOnly | QFileDialog.Option.DontResolveSymlinks)
+            if directory:
+                directory=os.path.realpath(directory)
+                if not directory.endswith("Data"): directory=os.path.join(directory,"Data")
+                try: compat = str(infer_compat_path(Path(directory))) # test path validity
+                except Exception as e: 
+                    directory=Path(directory).parent
+                    QMessageBox.warning(None, "Warning", f"Path is invalid: {directory}\nChoose a game with a Data directory in it")
+                    continue
+                confirm = QMessageBox.question(
+                    None,
+                    "Confirm Directory",
+                    f"Are you sure you want to use this directory?\n\n{directory}",
+                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                    QMessageBox.StandardButton.Yes)
+                
+                if confirm == QMessageBox.StandardButton.Yes: return directory
+                else: continue
+            else:
+                QMessageBox.warning(
+                    None,
+                    "Error",
+                    "No directory was selected!")
+                return None
+    else: return None
+
+
 if __name__ == "__main__":
     cfg=read_cfg(gui=True)
     app = QApplication(sys.argv)

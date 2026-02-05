@@ -39,49 +39,6 @@ def ensure_dir(path):
 def print_traceback():
     for line in traceback.format_stack()[:-1]: print(line.strip())
 
-def select_directory():
-    """Show detailed prompt then directory picker with confirmation"""
-    app = QApplication(sys.argv)
-    msg = QMessageBox()
-    msg.setIcon(QMessageBox.Icon.Question)
-    msg.setWindowTitle("Target Directory Required")
-    msg.setText("Select the root of your game directory:")
-    msg.setInformativeText(
-        "• Choose the directory containing the \"Data\" folder.\n\n"
-        "Click OK to choose a directory."
-    )
-    msg.setStandardButtons(
-        QMessageBox.StandardButton.Ok | 
-        QMessageBox.StandardButton.Cancel
-    )
-    msg.setDefaultButton(QMessageBox.StandardButton.Ok)
-    result = msg.exec()
-    if result == QMessageBox.StandardButton.Ok:
-        while True:
-            directory = QFileDialog.getExistingDirectory(
-                None,
-                "Select Target Directory",
-                "/home",
-                QFileDialog.Option.ShowDirsOnly | QFileDialog.Option.DontResolveSymlinks)
-            if directory:
-                directory=os.path.realpath(directory)
-                confirm = QMessageBox.question(
-                    None,
-                    "Confirm Directory",
-                    f"Are you sure you want to use this directory?\n\n{directory}",
-                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-                    QMessageBox.StandardButton.Yes)
-                
-                if confirm == QMessageBox.StandardButton.Yes: return directory
-                else: continue
-            else:
-                #QMessageBox.warning(
-                #    None,
-                #    "Warning",
-                #    "No directory was selected!")
-                return None
-    else: return None
-
 def load_stylesheet(filename):
     file = QFile(str(filename))
     if file.open(QFile.OpenModeFlag.ReadOnly | QFile.OpenModeFlag.Text):
