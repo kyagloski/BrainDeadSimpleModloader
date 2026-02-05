@@ -44,7 +44,7 @@ def create_cfg(gui=False):
     if gui:
         target=select_directory()
         if not target: sys.exit()
-        if not target.endswith("Data"): target=os.path.realpath(os.path.join(target,"Data"))
+        if not target.endswith("Data"): target=os.path.join(target,"Data")
     else:
         choice = input("currently no config file exists or is not configured\nwould you like to create one? [Y/n] ").strip().lower()
         if (not choice.startswith("y")) and (choice!=""): return

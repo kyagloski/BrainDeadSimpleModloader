@@ -64,6 +64,7 @@ def select_directory():
                 "/home",
                 QFileDialog.Option.ShowDirsOnly | QFileDialog.Option.DontResolveSymlinks)
             if directory:
+                directory=os.path.realpath(directory)
                 confirm = QMessageBox.question(
                     None,
                     "Confirm Directory",
