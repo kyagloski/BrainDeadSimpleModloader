@@ -6,6 +6,22 @@ A Python-based mod management tool designed as an alternative to Mod Organizer 2
 
 Currently this tool is supported on both Linux and Windows. Its primary maintenance focus will be on Linux, however.
 
+## Supported Games
+
+### Currently Supported
+- Fallout 3 GOTY
+- Fallout New Vegas
+- Fallout 4
+- Skyrim Special Edition
+
+### In Development
+- Fallout 3 (non-GOTY)
+- Fallout 4 VR
+- Skyrim (Legacy Version)
+- Skyrim VR
+- Oblivion
+- Oblivion Remastered
+
 ## Features
 - **Multi-File Drag-and-Drop Installation**: Install multiple mods simultaneously with intuitive drag-and-drop functionality
 - **INI Editor and Backup System**: Edit configuration files with built-in backup protection
