@@ -12,6 +12,7 @@ Currently this tool is supported on both Linux and Windows. Its primary maintena
 - **Game Executable Management**: Launch game executables directly from the application
 - **Multiple Preset Support**: Create and manage different mod configurations
 - **Mod File Explorer**: Browse and manage mod files with ease
+- **FOMOD Installer Support**: Guided installation for mods with FOMOD installers
 
 ## Initial Setup
 
