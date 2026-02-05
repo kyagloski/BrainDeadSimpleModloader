@@ -31,7 +31,7 @@ After initial setup, you can install mods using either of the following methods:
 
 Installed mods are stored in a staging directory located at `./BrainDeadSimpleModloader/mods/` within the application's root folder (default configuration).
 
-Here is an example of a bulk mod install by dragging and dropping files, with FOMODs throughout (install order is based off timestamp)
+Example of a bulk mod install by dragging and dropping files, with FOMODs throughout (install order is based off timestamp)
 ![test2(2)](https://github.com/user-attachments/assets/7cbfc76e-adf8-4f71-9bd2-2164b78726a0)
 
 ## Launching Games
