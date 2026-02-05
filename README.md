@@ -52,3 +52,12 @@ The modloader operates similarly to Mod Organizer 2's portable mode, with each i
 3. **File Management**: The tool maintains a manifest of all file operations, ensuring that overwritten files are tracked and all load/restore operations are idempotent (can be repeated safely without unintended effects)
 
 This approach ensures clean mod management while preserving your original game files.
+
+## INI Manager
+The INI Manager can manage backups for your INI files because Bethesda is really good at breaking INI configurations.
+
+Upon Opening there are two columns, your backups, and your current game files.
+
+Example
+<img width="1746" height="1031" alt="aaa" src="https://github.com/user-attachments/assets/5650c9e0-b9d0-4bf9-a9a6-d23f8255209b" />
+
