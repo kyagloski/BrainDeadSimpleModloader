@@ -54,10 +54,9 @@ The modloader operates similarly to Mod Organizer 2's portable mode, with each i
 This approach ensures clean mod management while preserving your original game files.
 
 ## INI Manager
-The INI Manager can manage backups for your INI files because Bethesda is really good at breaking INI configurations.
+The INI Manager can manage backups for your INI files because Bethesda is really good at breaking INI configurations. Upon opening you'll find two columns, your backups, and your current game files. By clicking `Backup` it will create a timestamped backup in the root folder of your instance under the `./BrainDeadSimpleModloader/inis/` directory.
 
-Upon Opening there are two columns, your backups, and your current game files.
-
-Example
+Example of INI Manager
 <img width="1746" height="1031" alt="aaa" src="https://github.com/user-attachments/assets/5650c9e0-b9d0-4bf9-a9a6-d23f8255209b" />
+(Soon there will be a diff mode to view changes across files)
 
