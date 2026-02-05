@@ -1,5 +1,5 @@
 # BrainDead Simple Modloader
-<img width="972" height="845" alt="splash" src="https://github.com/user-attachments/assets/a51a7bfb-e412-4407-8779-eacf569d4502" />
+<img width="959" height="984" alt="splash" src="https://github.com/user-attachments/assets/22bd78d5-1bc6-491d-a9a1-9b6ad3eb8b71" />
 
 ## Overview
 A Python-based mod management tool designed as an alternative to Mod Organizer 2 for Linux and Windows platforms. This application enables efficient management of mod collections for Bethesda games, including Skyrim, Fallout 3, Fallout 4, and Fallout: New Vegas.
