@@ -77,7 +77,7 @@ Example of INI Manager
 The modloader operates similarly to Mod Organizer 2's portable mode, with each instance managing a single game installation. The workflow is as follows:
 
 1. **Mod Installation**: Mods are placed in a staging directory upon installation
-2. **Mod Loading**: When launching the game or clicking the **"Load Mods"** button, all files from the staging directory are symlinked to your game's `Data` directory
+2. **Mod Loading**: When launching the game or clicking the **"Load Mods"** button, all files from the staging directory are symlinked to your game's `Data` directory. Symlinking is key here because it is orders of mangitude faster than copying files around (on Windows hard links are used).
 3. **File Management**: The tool maintains a manifest of all file operations, ensuring that overwritten files are tracked and all load/restore operations are idempotent (can be repeated safely without unintended effects)
 
 This approach ensures clean mod management while preserving your original game files.
