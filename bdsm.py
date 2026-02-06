@@ -292,7 +292,7 @@ def sync_loadorder():
 def install_mod(mod_path, gui=False, parent=None):  
     read_cfg(sync=False)
     name = installer.run(mod_path, SOURCE_DIR, gui, parent)
-    if not name: return None
+    if not name: print(f"error: failed to install {mod_path}"); return None
     with open(LOAD_ORDER, "a", encoding="utf-8") as f:
         f.write(name+'\n')
     if RELOAD_ON_INSTALL: perform_copy() #restore(); perform_copy()

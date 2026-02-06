@@ -1642,15 +1642,13 @@ if __name__ == "__main__":
     cfg=read_cfg(gui=True)
     app = QApplication(sys.argv)
     window = ModLoaderUserInterface()
+    stylesheet = load_stylesheet(Path(LOCAL_DIR)/"utils"/"resources"/"stylesheets"/"dark.qss")
+    app.setStyleSheet(stylesheet)
+    if os.name!="posix": window.show()
     try: 
         splash = QSplashScreen(QPixmap(str(LOCAL_DIR/"utils"/"resources"/"splash.png")))
         splash.show()
         QTimer.singleShot(1700, splash.close)
-        stylesheet = load_stylesheet(Path(LOCAL_DIR)/utils/stylesheets/'dark.qss')
-        app.applyStyleSheet(stylesheet)
     except: pass
-    stylesheet = load_stylesheet(Path(LOCAL_DIR)/"utils"/"resources"/"stylesheets"/"dark.qss")
-    app.setStyleSheet(stylesheet)
-    #QTimer.singleShot(500, window.show)
     window.show()
     sys.exit(app.exec())

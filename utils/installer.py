@@ -341,7 +341,6 @@ def parse_groups(groups_elem, ns):
 def process_fomod_cli(fomod_path, extract_dir, output_dir):
     """Process FOMOD configuration using CLI (original implementation)"""
     fomod_data = parse_fomod_structure(fomod_path, extract_dir)
-    
     print(f"\n{'='*60}")
     print(f"Installing: {fomod_data['mod_name']}")
     print(f"{'='*60}\n")
@@ -425,7 +424,6 @@ def process_fomod_cli(fomod_path, extract_dir, output_dir):
         install_fomod_files(all_files, extract_dir, output_dir)
     else:
         print("\nNo files selected for installation.")
-    
     return selected_files
 
 
@@ -437,7 +435,7 @@ def evaluate_conditional_installs(conditional_installs, condition_flags, ns):
         if evaluate_dependencies_element(deps_elem, condition_flags, ns):
             files.extend(pattern['files'])
             # Only first matching pattern applies (FOMOD spec)
-            break
+            # break # this might be necessary but i dont see why
     return files
 
 
@@ -530,21 +528,16 @@ def process_fomod_gui(fomod_path, extract_dir, output_dir, parent=None):
     if result and (not dialog.user_cancelled):
         # Get results
         results = dialog.get_results()
-        
         # Evaluate conditional file installs based on final flags
         conditional_files = evaluate_conditional_installs(
             fomod_data.get('conditional_installs', []),
             dialog.condition_flags,
-            fomod_data['namespace']
-        )
-        
+            fomod_data['namespace'])
         # Install files
         all_files = fomod_data['required_files'] + results['selected_files'] + conditional_files
         if all_files:
             install_fomod_files(all_files, extract_dir, output_dir)
-        
-        return results['selected_files']
-    
+        return results['selected_files']+conditional_files # idk about this one
     return None  # User cancelled
 
 
@@ -629,9 +622,9 @@ def extract_files_info(files_elem, ns):
         source = folder_elem.get('source', '')
         destination = folder_elem.get('destination', '')
         if sys.platform=='linux': destination=destination.replace('\\','/')
+        if destination=="": destination="."
         if source and destination:
             file_list.append(('folder', source, destination))
-    
     return file_list
 
 
