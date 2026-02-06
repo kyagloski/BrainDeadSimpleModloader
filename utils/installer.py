@@ -694,7 +694,7 @@ def run(archive_path=None, output_dir=None, gui=False, parent=None):
     output_dir = next(
         p for i in range(10**9)
         if not (p := Path(output_dir).parent / f"{archive_name}{'' if i == 0 else f'_{i}'}").exists())
-    archive_name = Path(output_dir).stem # reassign in case of change
+    archive_name = str(Path(output_dir).name) # reassign in case of change
 
     try:
         temp_dir = Path(tempfile.mkdtemp())
