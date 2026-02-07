@@ -1498,8 +1498,8 @@ class ModLoaderUserInterface(QMainWindow):
             Path(url.toLocalFile())
             for url in event.mimeData().urls()
             if Path(url.toLocalFile()).suffix.lower() in valid_extensions and Path(url.toLocalFile()).is_file()
-        ]
-        
+        ] 
+    
         valid_files.sort(key=lambda p: p.stat().st_mtime)
         
         for file_path in valid_files:
@@ -1611,6 +1611,7 @@ def select_directory():
             if directory:
                 directory=os.path.realpath(directory)
                 if not directory.endswith("Data"): directory=os.path.join(directory,"Data")
+                compat = str(infer_compat_path(Path(directory))) # test path validity
                 try: compat = str(infer_compat_path(Path(directory))) # test path validity
                 except Exception as e: 
                     directory=Path(directory).parent

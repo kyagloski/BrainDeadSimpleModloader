@@ -13,80 +13,108 @@ try:    from utils.utils import *
 except: from utils import * 
 
 # preloaded plugins required in plugins.txt file
-GAME_PLUGINS      = { "Fallout3" : "Anchorage.esm\nBrokenSteel.esm\nFallout3.esm\nPointLookout.esm\nThePitt.esm\nZeta.esm\n",
-                      "FalloutNV": "FalloutNV.esm\nCaravanPack.esm\nClassicPack.esm\nDeadMoney.esm\nGunRunnersArsenal.esm\nHonestHearts.esm\nLonesomeRoad.esm\nMercenaryPack.esm\nOldWorldBlues.esm\nTribalPack.esm\n",
-                      "Fallout4" : "",
+GAME_PLUGINS      = { "Fallout3"               : "Anchorage.esm\nBrokenSteel.esm\nFallout3.esm\nPointLookout.esm\nThePitt.esm\nZeta.esm\n",
+                      "FalloutNV"              : "FalloutNV.esm\nCaravanPack.esm\nClassicPack.esm\nDeadMoney.esm\nGunRunnersArsenal.esm\nHonestHearts.esm\nLonesomeRoad.esm\nMercenaryPack.esm\nOldWorldBlues.esm\nTribalPack.esm\n",
+                      "Fallout4"               : "",
+                      "Fallout4VR"             : "",
+                      "Oblivion"               : "DLCHorseArmor.esp\nDLCMehrunesRazor.esp\nKnights.esp\nDLCShiveringIsles.esp\nDLCVileLair.esp\nDLCFrostcrag.esp\nDLCBattlehornCastle.esp\nDLCSpellTomes.esp\nDLCThievesDen.esp\n",
+                      "Skyrim"                 : "Dawnguard.esm\nDragonborn.esm\nHearthFires.esm\nHighResTexturePack01.esp\nHighResTexturePack02.esp\nHighResTexturePack03.esp\n",
                       "Skyrim Special Edition" : "",
-                      "Default"  : ""}
-# file names for plugins.txt
-PLUGINS_FILE      = { "Fallout3" : "plugins.txt",
-                      "FalloutNV": "plugins.txt",
-                      "Fallout4" : "Plugins.txt",
-                      "Skyrim Special Edition"   : "Plugins.txt",
-                      "Default"  : "Plugins.txt"}
+                      "Skyrim VR"              : "",
+                      "Default"                : "" }
+# file names for plugins.txt (experiences issues with this file capitalization)
+PLUGINS_FILE      = { "Fallout3"               : "plugins.txt",
+                      "FalloutNV"              : "plugins.txt",
+                      "Fallout4"               : "Plugins.txt",
+                      "Fallout4VR"             : "Plugins.txt",
+                      "Oblivion"               : "Plugins.txt",
+                      "Skyrim"                 : "plugins.txt",
+                      "Skyrim Special Edition" : "Plugins.txt",
+                      "Skyrim VR"              : "Plugins.txt",
+                      "Default"                : "Plugins.txt" }
 # vanilla game launcher executables
-VANILLA_LAUNCHERS = { "Fallout3" : "Fallout3Launcher.exe",
-                      "FalloutNV": "FalloutNVLauncher.exe",
-                      "Fallout4" : "Fallout4Launcher.exe",
+VANILLA_LAUNCHERS = { "Fallout3"               : "Fallout3Launcher.exe",
+                      "FalloutNV"              : "FalloutNVLauncher.exe",
+                      "Fallout4"               : "Fallout4Launcher.exe",
+                      "Fallout4VR"             : "",
+                      "Oblivion"               : "OblivionLauncher.exe",
+                      "Skyrim"                 : "SkyrimLauncher.exe",
                       "Skyrim Special Edition" : "SkyrimSELauncher.exe",
-                      "Default"  : ""}
+                      "Skyrim VR"              : "",
+                      "Default"                : "" }
 # vanilla game executables
-VANILLA_GAMES     = { "Fallout3" : "Fallout3.exe",
-                      "FalloutNV": "FalloutNV.exe",
-                      "Fallout4" : "Fallout4.exe",
+VANILLA_GAMES     = { "Fallout3"               : "Fallout3.exe",
+                      "FalloutNV"              : "FalloutNV.exe",
+                      "Fallout4"               : "Fallout4.exe",
+                      "Fallout4VR"             : "Fallout4VR.exe",
+                      "Oblivion"               : "Oblivion.exe",
+                      "Skyrim"                 : "TESV.exe",
                       "Skyrim Special Edition" : "SkyrimSE.exe",
-                      "Default"  : ""}
+                      "Skyrim VR"              : "SkyrimVR.exe",
+                      "Default"                : "" }
 # script extender executables
-SCRIPT_EXTENDERS  = { "Fallout3" : "fose_loader.exe",
-                      "FalloutNV": "nvse_loader.exe",
-                      "Fallout4" : "f4se_loader.exe",
+SCRIPT_EXTENDERS  = { "Fallout3"               : "fose_loader.exe",
+                      "FalloutNV"              : "nvse_loader.exe",
+                      "Fallout4"               : "f4se_loader.exe",
+                      "Fallout4VR"             : "f4sevr_loader.exe",
+                      "Oblivion"               : "obse_loader.exe",
+                      "Skyrim"                 : "skse_loader.exe",
                       "Skyrim Special Edition" : "skse64_loader.exe",
-                      "Default"  : ""}
+                      "Skyrim VR"              : "sksevr_loader.exe",
+                      "Default"                : "" }
 # file names for ini configs
-INIS              = { "Fallout3"  : ["FalloutCustom.ini", "Fallout.ini", "FalloutPrefs.ini"],
-                      "FalloutNV" : ["FalloutCustom.ini", "Fallout.ini", "FalloutPrefs.ini"],
-                      "Fallout4"  : ["Fallout4Custom.ini", "Fallout4.ini", "Fallout4Prefs.ini"],
+INIS              = { "Fallout3"               : ["FalloutCustom.ini", "Fallout.ini", "FalloutPrefs.ini"],
+                      "FalloutNV"              : ["FalloutCustom.ini", "Fallout.ini", "FalloutPrefs.ini"],
+                      "Fallout4"               : ["Fallout4Custom.ini", "Fallout4.ini", "Fallout4Prefs.ini"],
+                      "Fallout4VR"             : ["Fallout4Custom.ini", "Fallout4.ini", "Fallout4Prefs.ini"],
+                      "Oblivion"               : ["OblivionCustom.ini", "Oblivion.ini", "OblivionPrefs.ini"],
+                      "Skyrim"                 : ["SkyrimCustom.ini", "Skyrim.ini", "SkyrimPrefs.ini"],
                       "Skyrim Special Edition" : ["SkyrimCustom.ini", "Skyrim.ini", "SkyrimPrefs.ini"],
-                      "Default"   : ["Fallout.ini", "FalloutPrefs.ini"] } # testing
+                      "Skyrim VR"              : ["SkyrimCustom.ini", "Skyrim.ini", "SkyrimPrefs.ini"],
+                      "Default"                : ["Fallout.ini", "FalloutPrefs.ini"] }
 # steam game ids
-GAME_IDS          = { "Fallout 3 goty"         : 22370,
-                      "Fallout 3"              : 22300,
+GAME_IDS          = { "Fallout 3"              : 22300,
+                      "Fallout 3 goty"         : 22370,
                       "Fallout New Vegas"      : 22380,
                       "Fallout 4"              : 377160,
+                      "Fallout 4 VR"           : 611660,
+                      "Oblivion"               : 22330,
+                      "Skyrim"                 : 72850,
                       "Skyrim Special Edition" : 489830,
-                      "Skyrim VR"              : "", # TODO: add support for ALL beth game 
-                      "Default"                : "" }
+                      "SkyrimVR"               : 611670,  
+                      "Default"                : -1 }
 # AppData directory names
-GAME_COMPAT       = { "Fallout 3 goty"    : "Fallout3",
-                      "Fallout 3"         : "Fallout3",
-                      "Fallout New Vegas" : "FalloutNV",
-                      "Fallout 4"         : "Fallout4",
-                      "Skyrim VR"         : "", # TODO: add support for ALL beth game 
+GAME_COMPAT       = { "Fallout 3"              : "Fallout3",
+                      "Fallout 3 goty"         : "Fallout3",
+                      "Fallout New Vegas"      : "FalloutNV",
+                      "Fallout 4"              : "Fallout4",
+                      "Fallout 4 VR"           : "Fallout4VR",
+                      "Oblivion"               : "Oblivion",
+                      "Skyrim"                 : "Skyrim",
                       "Skyrim Special Edition" : "Skyrim Special Edition",
-                      "Default"           : ""}
+                      "SkyrimVR"               : "Skyrim VR", # ass backards
+                      "Default"                : "" } # testing
 
 
 def determine_game(compat_dir):
     game=""
-    if   "Fallout3"  in str(compat_dir): game="Fallout3"
-    elif "FalloutNV" in str(compat_dir): game="FalloutNV"
-    elif "Fallout4"  in str(compat_dir): game="Fallout4"
-    elif "Skyrim" in str(compat_dir): game="Skyrim Special Edition"
-    else: 
+    compats=sorted(GAME_COMPAT.values())[::-1] # reverse so we get largest name first
+    game=[game for game in compats if game in str(compat_dir)]
+    if game==[]:
         print("error: cannot detect game name from compat dir: "+compat_dir)
-        game="Default"
-    return game
-
+        game=["Default"]
+    return game[0]
+   
+ 
 def determine_game_id(target_dir):
-    id=0
-    if   "Fallout 3 goty"    in str(target_dir): id=GAME_IDS["Fallout 3 goty"]
-    elif "Fallout 3"         in str(target_dir): id=GAME_IDS["Fallout 3"]
-    elif "Fallout New Vegas" in str(target_dir): id=GAME_IDS["Fallout New Vegas"]
-    elif "Fallout 4"         in str(target_dir): id=GAME_IDS["Fallout 4"]
-    elif "Skyrim" in str(target_dir): id = GAME_IDS["Skyrim Special Edition"]
-    else: print("error: cannot detect game id")
-    return str(id)
-
+    gid=0
+    ids=sorted(GAME_IDS.keys())[::-1] # reverse so we get largest name first
+    gid=[gid for gid in ids if gid in str(target_dir)]
+    if gid==[]:
+        print("error: cannot detect game id")
+        gid=[-1]
+    return str(GAME_IDS[gid[0]])
+    
 
 def get_ini_path(compat_dir):
     game=determine_game(compat_dir)
@@ -114,7 +142,7 @@ def write_plugins(compat_dir, backup_dir, plugins):
         f.write("# Please do not modify this file.\n")
         f.write(defps)
         for name in plugins:
-            if game in ["Fallout4","Skyrim"]: name='*'+name
+            if game in ["Fallout4","Skyrim Special Edition"]: name='*'+name # TODO: determine what other peices of shit do this
             f.write(name + "\n")
     #os.chmod(compat_dir / pfile, stat.S_IREAD)
     force_symlink(compat_dir/pfile, backup_dir/pfile)
@@ -204,6 +232,7 @@ def restore_ini(compat_dir, back_dir, ui=False):
         return False,str(e)
     print("successfully restored inis from backup!")
     return True,None
+
 
 def get_launchers(target_dir,compat_dir):
     game=determine_game(compat_dir)

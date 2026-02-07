@@ -33,20 +33,23 @@ except ImportError:
 DEBUG=False
 
 def extract_archive(archive_path, extract_to):
-    """Extract zip, 7z, or rar archive."""
     archive_path = Path(archive_path)
+    # install dir as is
+    if os.path.isdir(archive_path): shutil.copytree(archive_path, extract_to); return
+    # continue w/ archive extraction
     ext = archive_path.suffix.lower()
     print(f"Extracting {archive_path.name}...")
     if ext == '.zip':
         with zipfile.ZipFile(archive_path, 'r') as zip_ref:
             zip_ref.extractall(extract_to)
     elif ext == '.7z':
-        if HAS_7Z:
+        try:
+            if not HAS_7Z: raise Exception
             with py7zr.SevenZipFile(archive_path, 'r') as archive:
                 archive.extractall(path=extract_to)
             print("Extraction complete!")
             return True
-        else:
+        except:
             print("Extracting file "+str(archive_path)+" with 7z...")
             result = subprocess.run(['7z', 'x', str(archive_path), f'-o{extract_to}', '-y'], capture_output=True, text=True)
             if result.returncode == 0: print("Extraction complete!"); return True
@@ -54,12 +57,13 @@ def extract_archive(archive_path, extract_to):
             print("error: Could not extract 7z file. Install py7zr (pip install py7zr) or 7z command line tool")
             return False
     elif ext == '.rar':
-        if HAS_RAR:
+        try:
+            if not HAS_RAR: raise Exception
             with rarfile.RarFile(archive_path, 'r') as rar_ref:
                 rar_ref.extractall(extract_to)
             print("Extraction complete!")
             return True
-        else:
+        except:
             print("Extracting file "+str(archive_path)+" with unrar...")
             result = subprocess.run(['unrar', 'x', '-y', str(archive_path), str(extract_to)],
                                     capture_output=True, text=True)
