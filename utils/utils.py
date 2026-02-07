@@ -4,7 +4,8 @@
 import os
 import sys
 import traceback
-from PyQt6.QtCore import QFile, QTextStream
+import subprocess
+from pathlib import Path
 
 def force_symlink(target, link_name):
     try:
@@ -38,11 +39,33 @@ def ensure_dir(path):
 def print_traceback():
     for line in traceback.format_stack()[:-1]: print(line.strip())
 
-def load_stylesheet(filename):
-    file = QFile(str(filename))
-    if file.open(QFile.OpenModeFlag.ReadOnly | QFile.OpenModeFlag.Text):
-        stream = QTextStream(file)
-        stylesheet = stream.readAll()
-        file.close()
-        return stylesheet
-    return ""
+def is_steam_running():
+    if os.name=="posix":
+        cmd=["pgrep","-x","steam"]
+        result = subprocess.run(cmd,capture_output=True)
+        return result.returncode == 0
+    else:
+        cmd=['tasklist', '/FI', 'IMAGENAME eq steam.exe']
+        result = subprocess.run(cmd, capture_output=True,text=True)
+        return 'steam.exe' in result.stdout.lower()
+
+def launch_game(cfg,game_exe):
+    if os.name=="posix":
+        c=cfg["COMPAT_DIR"].split("pfx")[0]
+        with open(Path(c)/"config_info",'r') as f: # read steam config for proton path
+            proton=(f.readlines()[1].split("files")[0]+"proton").replace(' ','\\ ')
+        exe=cfg["EXECUTABLES"][game_exe]["PATH"]
+        exe_dir=str(Path(exe).parent).replace(' ','\\ ')
+        params=cfg["EXECUTABLES"][game_exe]["PARAMS"]
+        appid="SteamAppId="+str(Path(c).name)
+        gameid="SteamGameId="+str(Path(c).name)
+        cpath="STEAM_COMPAT_DATA_PATH="+c
+        spath="STEAM_COMPAT_CLIENT_INSTALL_PATH="+os.path.expanduser("~/.steam/steam")
+        cmd=f"cd {exe_dir}; {cpath} {spath} {appid} {gameid} {proton} run \"{exe}\" {params} &"
+    else:
+        exe=cfg["EXECUTABLES"][game_exe]["PATH"]
+        exe_dir=str(Path(exe).parent)
+        params=cfg["EXECUTABLES"][game_exe]["PARAMS"]
+        cmd=f"cd \"{exe_dir}\" & \"{exe}\" {params}"
+    print("Launching using: "+cmd)
+    os.system(cmd)

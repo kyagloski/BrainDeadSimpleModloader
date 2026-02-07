@@ -525,12 +525,10 @@ class FomodInstallerDialog(QDialog):
         if self.current_step < len(self.steps_data):
             selections = self._collect_step_selections()
             if selections is None: return
-            
             if len(self.step_selections) <= self.current_step:
                 self.step_selections.append(selections)
             else:
                 self.step_selections[self.current_step] = selections
-            
             # Collect flags from current selections
             self._collect_flags_from_current_step()
         

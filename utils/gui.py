@@ -13,7 +13,7 @@ from PyQt6.QtWidgets import (
     QPushButton, QSplitter, QLabel, QLineEdit, QMenu, QMessageBox, QComboBox,
     QFileDialog, QInputDialog, QTextEdit, QToolButton, QSplashScreen
 )
-from PyQt6.QtCore import Qt, QItemSelectionModel, QObject, QThread, QWaitCondition, pyqtSignal, QMutex, QMutexLocker, QTimer, QPoint, QSize
+from PyQt6.QtCore import Qt, QItemSelectionModel, QObject, QThread, QWaitCondition, pyqtSignal, QMutex, QMutexLocker, QTimer, QPoint, QSize, QFile, QTextStream
 from PyQt6.QtGui import QIcon, QFont, QTextCursor, QCursor, QPixmap
 
 try:
@@ -1564,29 +1564,25 @@ class ModLoaderUserInterface(QMainWindow):
         event.accept()
 
     def on_play(self):
+        if not is_steam_running():
+            QMessageBox.warning(None,
+                        "Launch Error",
+                        f"Steam is required to launch the game\nPlease open steam to launch executable")
+            return
         if self.cfg["LINK_ON_LAUNCH"]: 
-                self.auto_save_load_order(instant=True)
-                perform_copy()
-        if os.name=="posix":
-            c=self.cfg["COMPAT_DIR"].split("pfx")[0]
-            with open(Path(c)/"config_info",'r') as f: 
-                proton=(f.readlines()[1].split("files")[0]+"proton").replace(' ','\\ ')
-            exe=self.cfg["EXECUTABLES"][self.current_exe]["PATH"]
-            exe_dir=str(Path(exe).parent).replace(' ','\\ ')
-            params=self.cfg["EXECUTABLES"][self.current_exe]["PARAMS"]
-            appid="SteamAppId="+str(Path(c).name)
-            gameid="SteamGameId="+str(Path(c).name)
-            cpath="STEAM_COMPAT_DATA_PATH="+c
-            spath="STEAM_COMPAT_CLIENT_INSTALL_PATH="+os.path.expanduser("~/.steam/steam")
-            cmd=f"cd {exe_dir}; {cpath} {spath} {appid} {gameid} {proton} run \"{exe}\" {params} &"
-        else:
-            exe=self.cfg["EXECUTABLES"][self.current_exe]["PATH"]
-            exe_dir=str(Path(exe).parent)
-            params=self.cfg["EXECUTABLES"][self.current_exe]["PARAMS"]
-            cmd=f"cd \"{exe_dir}\" & \"{exe}\" {params}"
-        print("Launching using: "+cmd)
-        os.system(cmd)
+            self.auto_save_load_order(instant=True)
+            perform_copy()
+        launch_game(self.cfg, self.current_exe) 
 
+
+def load_stylesheet(filename):
+    file = QFile(str(filename))
+    if file.open(QFile.OpenModeFlag.ReadOnly | QFile.OpenModeFlag.Text):
+        stream = QTextStream(file)
+        stylesheet = stream.readAll()
+        file.close()
+        return stylesheet
+    return ""
 
 def select_directory():
     """Show detailed prompt then directory picker with confirmation"""
