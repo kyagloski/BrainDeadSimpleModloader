@@ -320,6 +320,7 @@ class FomodInstallerDialog(QDialog):
             expected_value = flag_dep.get('value', 'On')
             actual_value = self.condition_flags.get(flag_name, 'Off')
             if DEBUG and actual_value=="Active": print(flag_name,'->',actual_value)
+            if expected_value=="": expected_value="Off"
             results.append(actual_value == expected_value)
         
         if operator == 'And': return all(results)
