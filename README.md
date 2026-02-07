@@ -10,14 +10,14 @@ Currently this tool is supported on both Linux and Windows. Its primary maintena
 
 ### Currently Supported
 - Fallout 3 GOTY
+- Fallout 3 (non-GOTY)
 - Fallout New Vegas
 - Fallout 4
-- Skyrim Special Edition
-- Fallout 3 (non-GOTY)
 - Fallout 4 VR
+- Oblivion
+- Skyrim Special Edition
 - Skyrim (Legacy Version)
 - Skyrim VR
-- Oblivion
 
 ### In Development
 - Oblivion Remastered
