@@ -42,42 +42,31 @@ def extract_archive(archive_path, extract_to):
             zip_ref.extractall(extract_to)
     elif ext == '.7z':
         if HAS_7Z:
-            try:
-                with py7zr.SevenZipFile(archive_path, 'r') as archive:
-                    archive.extractall(path=extract_to)
-                print("Extraction complete!")
-                return True
-            except Exception as e:
-                print(f"py7zr failed ({e}), trying system 7z command...")
+            with py7zr.SevenZipFile(archive_path, 'r') as archive:
+                archive.extractall(path=extract_to)
+            print("Extraction complete!")
+            return True
         else:
-            print("Extracting file "+archive_path+" with 7z...")
-            try:
-                result = subprocess.run(['7z', 'x', str(archive_path), f'-o{extract_to}', '-y'], capture_output=True, text=True)
-                if result.returncode == 0: print("Extraction complete!"); return True
-                else: print(f"7z command failed: {result.stderr}")
-            except FileNotFoundError: pass
+            print("Extracting file "+str(archive_path)+" with 7z...")
+            result = subprocess.run(['7z', 'x', str(archive_path), f'-o{extract_to}', '-y'], capture_output=True, text=True)
+            if result.returncode == 0: print("Extraction complete!"); return True
+            else: print(f"7z command failed: {result.stderr}")
             print("error: Could not extract 7z file. Install py7zr (pip install py7zr) or 7z command line tool")
             return False
     elif ext == '.rar':
-        # Try rarfile first
         if HAS_RAR:
-            try:
-                with rarfile.RarFile(archive_path, 'r') as rar_ref:
-                    rar_ref.extractall(extract_to)
-                print("Extraction complete!")
-                return True
-            except Exception as e:
-                print(f"rarfile failed ({e}), trying system unrar command...")
-        # Try system unrar command as fallback
-        try:
-            print("Extracting file "+archive_path+" with unrar...")
+            with rarfile.RarFile(archive_path, 'r') as rar_ref:
+                rar_ref.extractall(extract_to)
+            print("Extraction complete!")
+            return True
+        else:
+            print("Extracting file "+str(archive_path)+" with unrar...")
             result = subprocess.run(['unrar', 'x', '-y', str(archive_path), str(extract_to)],
                                     capture_output=True, text=True)
             if result.returncode == 0:
                 print("Extraction complete!")
                 return True
             else: print(f"unrar command failed: {result.stderr}")
-        except FileNotFoundError: pass
         print("error: Could not extract rar file. Install rarfile (pip install rarfile) or unrar command line tool")
         return False
     else:
@@ -525,7 +514,7 @@ def run(archive_path=None, output_dir=None, gui=False, parent=None):
 
     try:
         temp_dir = Path(tempfile.mkdtemp())
-        if not extract_archive(archive_path, temp_dir): raise Exception("No available extraction tool for archive format!")
+        extract_archive(archive_path, temp_dir)
         temp_dir = find_mod_base_dir(Path(temp_dir))
         config_path = find_fomod_config(temp_dir)
         if config_path:
@@ -534,6 +523,10 @@ def run(archive_path=None, output_dir=None, gui=False, parent=None):
         if not config_path or not res:
             res = install_mod_files(temp_dir, output_dir)
     except Exception as e:
+        if gui:
+            QMessageBox.warning(parent,
+                        "Installation Error",
+                        f"Encountered exception during mod installation! \n\nException:\n"+str(e))
         print("error: encountered exception: "+str(e)+" when installing mod, giving up")
         return None
     try: shutil.rmtree(temp_dir); print("removed tmp extract dir")
@@ -543,7 +536,7 @@ def run(archive_path=None, output_dir=None, gui=False, parent=None):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(
-        description='install Bethesda mods with FOMOD support',
+        description='install mods with FOMOD support',
         formatter_class=argparse.RawDescriptionHelpFormatter,)
     parser.add_argument('archive', 
                         help='Path to the mod archive (zip, 7z, or rar)')
