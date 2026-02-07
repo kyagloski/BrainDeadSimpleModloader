@@ -1611,7 +1611,6 @@ def select_directory():
             if directory:
                 directory=os.path.realpath(directory)
                 if not directory.endswith("Data"): directory=os.path.join(directory,"Data")
-                compat = str(infer_compat_path(Path(directory))) # test path validity
                 try: compat = str(infer_compat_path(Path(directory))) # test path validity
                 except Exception as e: 
                     directory=Path(directory).parent
