@@ -11,6 +11,7 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt, QSize, pyqtSignal
 from PyQt6.QtGui import QPixmap, QFont
 
+DEBUG=False
 
 class OptionListItem(QListWidgetItem):
     """Custom list item that stores plugin data"""
@@ -53,6 +54,7 @@ class FomodInstallerDialog(QDialog):
         self.selected_files = []
         self.user_cancelled = False
         self.extract_dir = None
+        self.step_index=0
         
         # For dynamic step rebuilding
         self.fomod_data = None  # Will be set by process_fomod_gui
@@ -62,6 +64,7 @@ class FomodInstallerDialog(QDialog):
     
     def _init_ui(self):
         """Initialize the UI layout"""
+        if DEBUG: print("FomodInstallerDialog._init_ui")
         layout = QVBoxLayout(self)
         layout.setContentsMargins(8, 8, 8, 8)
         layout.setSpacing(8)
@@ -175,12 +178,14 @@ class FomodInstallerDialog(QDialog):
     
     def _clear_details(self):
         """Clear the details panel"""
+        if DEBUG: print("_clear_details")
         self.detail_name.setText("Select an option to see details")
         self.detail_image.clear()
         self.detail_description.clear()
     
     def _show_details(self, plugin_data):
         """Show details for a plugin"""
+        #if DEBUG: print("_show_details")
         if not plugin_data:
             self._clear_details()
             return
@@ -210,6 +215,7 @@ class FomodInstallerDialog(QDialog):
     
     def show_required_files(self, required_files):
         """Display required files that will be installed automatically"""
+        if DEBUG: print("show_required_files")
         self._clear_groups()
         
         self.step_title.setText("Required Files")
@@ -242,6 +248,7 @@ class FomodInstallerDialog(QDialog):
     
     def add_step(self, step_name, groups_data, extract_dir):
         """Add an installation step with its groups (legacy method)"""
+        if DEBUG: print("add_step")
         self.steps_data.append({
             'name': step_name,
             'groups': groups_data,
@@ -254,6 +261,7 @@ class FomodInstallerDialog(QDialog):
         Rebuild the list of visible steps based on current condition_flags.
         This is called before showing each step to handle conditional steps.
         """
+        if DEBUG: print("rebuild_steps_dynamically")
         if not self.fomod_data:
             return
         
@@ -262,7 +270,7 @@ class FomodInstallerDialog(QDialog):
         # Clear current steps but preserve selections
         old_steps_data = self.steps_data.copy()
         self.steps_data = []
-        
+       
         for step in self.fomod_data['steps']:
             # Check step visibility
             if step.get('visible_elem') is not None:
@@ -293,41 +301,37 @@ class FomodInstallerDialog(QDialog):
     
     def _evaluate_visibility(self, visible_elem, ns):
         """Evaluate visibility conditions based on current flags."""
-        if visible_elem is None:
-            return True
+        #if DEBUG: print("_evaluate_visibility")
+        if visible_elem is None: return True
         
         # Get dependencies element
         deps_elem = visible_elem.find('.//dependencies', ns) if ns else visible_elem.find('.//dependencies')
-        if deps_elem is None:
-            return True
+        if deps_elem is None: return True
         
         operator = deps_elem.get('operator', 'And')
         
         # Find all flag dependencies
         flag_deps = deps_elem.findall('.//flagDependency', ns) if ns else deps_elem.findall('.//flagDependency')
-        
-        if not flag_deps:
-            return True
+        if not flag_deps: return True
         
         results = []
         for flag_dep in flag_deps:
             flag_name = flag_dep.get('flag', '')
             expected_value = flag_dep.get('value', 'On')
             actual_value = self.condition_flags.get(flag_name, 'Off')
+            if DEBUG and actual_value=="Active": print(flag_name,'->',actual_value)
             results.append(actual_value == expected_value)
         
-        if operator == 'And':
-            return all(results)
-        elif operator == 'Or':
-            return any(results)
-        else:
-            return all(results)
+        if operator == 'And': return all(results)
+        elif operator == 'Or':return any(results)
+        else: return all(results)
     
     def show_step(self, step_index):
         """Display a specific installation step"""
+        if DEBUG: print("show_step")
         if step_index < 0 or step_index >= len(self.steps_data):
             return
-        
+        self.step_index=step_index 
         self._clear_groups()
         self.button_groups.clear()
         self.checkbox_groups.clear()
@@ -356,6 +360,7 @@ class FomodInstallerDialog(QDialog):
     
     def _clear_groups(self):
         """Clear all group widgets"""
+        if DEBUG: print("_clear_groups")
         while self.groups_layout.count():
             item = self.groups_layout.takeAt(0)
             if item.widget():
@@ -363,6 +368,7 @@ class FomodInstallerDialog(QDialog):
     
     def _add_group_widget(self, group_data, step_index, group_idx):
         """Add a compact group widget"""
+        #if DEBUG: print("_add_group_widget")
         group_type = group_data['type']
         
         # Type hints
@@ -389,6 +395,7 @@ class FomodInstallerDialog(QDialog):
     
     def _add_radio_options(self, layout, group_data, step_index, group_idx):
         """Add radio button options"""
+        #if DEBUG: print("_add_radio_options")
         button_group = QButtonGroup(self)
         button_group.setExclusive(True)
         
@@ -408,6 +415,8 @@ class FomodInstallerDialog(QDialog):
             radio.toggled.connect(
                 lambda checked, p=plugin: self._on_plugin_toggled(p, checked)
             )
+            # update selection table
+            self._on_plugin_toggled(plugin,False)
             # Store plugin data and install event filter for hover
             radio.setProperty('plugin_data', plugin)
             radio.installEventFilter(self)
@@ -417,6 +426,7 @@ class FomodInstallerDialog(QDialog):
             # Auto-select first for SelectExactlyOne
             if group_data['type'] == 'SelectExactlyOne' and idx == 0:
                 radio.setChecked(True)
+                #self._on_pluggin_toggled(radio.plugin,True)
             
             layout.addWidget(radio)
         
@@ -424,6 +434,7 @@ class FomodInstallerDialog(QDialog):
     
     def _add_checkbox_options(self, layout, group_data, step_index, group_idx):
         """Add checkbox options"""
+        #if DEBUG: print("_add_checkbox_options")
         checkboxes = []
         
         for idx, plugin in enumerate(group_data['plugins']):
@@ -431,6 +442,8 @@ class FomodInstallerDialog(QDialog):
             checkbox.toggled.connect(
                 lambda checked, p=plugin: self._on_plugin_toggled(p, checked)
             )
+            # reupdate selection table
+            self._on_plugin_toggled(plugin,False)
             # Show details on hover
             checkbox.setProperty('plugin_data', plugin)
             checkbox.installEventFilter(self)
@@ -442,14 +455,20 @@ class FomodInstallerDialog(QDialog):
     
     def _on_plugin_toggled(self, plugin, checked):
         """Handle plugin selection toggle - update flags immediately"""
-        if checked:
-            self._show_details(plugin)
-            # Update condition flags when a plugin is selected
-            for flag_name, flag_value in plugin.get('flags', {}).items():
-                self.condition_flags[flag_name] = flag_value
+        if DEBUG: print("_on_plugin_toggled", plugin["flags"])
+        #if checked:
+        self._show_details(plugin)
+        # Update condition flags when a plugin is selected
+        for flag_name, flag_value in plugin.get('flags', {}).items():
+            if checked: self.condition_flags[flag_name] = "Active"
+            else: self.condition_flags[flag_name] = "Off"
+        self.rebuild_steps_dynamically()
+        self.next_button.setText("Install" if self.step_index == len(self.steps_data) - 1 else "Next")
+        self.step_indicator.setText(f"Step {self.step_index + 1} of {len(self.steps_data)}")
     
     def eventFilter(self, obj, event):
         """Handle hover events for radio buttons and checkboxes"""
+        #if DEBUG: print("eventFilter")
         from PyQt6.QtCore import QEvent
         if event.type() in (QEvent.Type.Enter, QEvent.Type.HoverEnter, QEvent.Type.MouseMove):
             plugin_data = obj.property('plugin_data')
@@ -462,6 +481,7 @@ class FomodInstallerDialog(QDialog):
     
     def _find_image_path(self, image_path, extract_dir):
         """Find image path case-insensitively"""
+        if DEBUG: print("_find_image_path")
         extract_path = Path(extract_dir)
         image_parts = image_path.replace('\\', '/').split('/')
         
@@ -487,20 +507,23 @@ class FomodInstallerDialog(QDialog):
     
     def go_back(self):
         """Go to previous step"""
+        if DEBUG: print("go_back")
         if self.current_step > 0:
             # Rebuild steps in case conditions changed
-            self.rebuild_steps_dynamically()
             new_step = min(self.current_step - 1, len(self.steps_data) - 1)
             if new_step >= 0:
                 self.current_step = new_step
                 self.show_step(self.current_step)
-    
+            #self.rebuild_steps_dynamically()
+            #self.next_button.setText("Install" if self.step_index == len(self.steps_data) - 1 else "Next")
+            #self.step_indicator.setText(f"Step {self.step_index + 1} of {len(self.steps_data)}")
+ 
     def go_next(self):
         """Go to next step or finish installation"""
+        if DEBUG: print("go_next")
         if self.current_step < len(self.steps_data):
             selections = self._collect_step_selections()
-            if selections is None:
-                return
+            if selections is None: return
             
             if len(self.step_selections) <= self.current_step:
                 self.step_selections.append(selections)
@@ -522,8 +545,8 @@ class FomodInstallerDialog(QDialog):
     
     def _collect_flags_from_current_step(self):
         """Collect all flags from selections in the current step"""
-        if self.current_step >= len(self.steps_data):
-            return
+        if DEBUG: print("_collect_flags_from_current_step")
+        if self.current_step >= len(self.steps_data): return
         
         step_data = self.steps_data[self.current_step]
         
@@ -549,6 +572,7 @@ class FomodInstallerDialog(QDialog):
     
     def _collect_step_selections(self):
         """Collect user selections for the current step"""
+        if DEBUG: print("_collect_step_selections")
         step_data = self.steps_data[self.current_step]
         selections = []
         
@@ -592,20 +616,18 @@ class FomodInstallerDialog(QDialog):
     
     def _process_all_selections(self):
         """Process all user selections"""
+        if DEBUG: print("_process_all_selections")
         for step_idx, step_selections in enumerate(self.step_selections):
-            if step_idx >= len(self.steps_data):
-                continue
+            if step_idx >= len(self.steps_data): continue
             step_data = self.steps_data[step_idx]
             
             for selection in step_selections:
                 group_idx = selection['group_idx']
-                if group_idx >= len(step_data['groups']):
-                    continue
+                if group_idx >= len(step_data['groups']): continue
                 group_data = step_data['groups'][group_idx]
                 
                 for plugin_idx in selection['plugin_indices']:
-                    if plugin_idx >= len(group_data['plugins']):
-                        continue
+                    if plugin_idx >= len(group_data['plugins']): continue
                     plugin = group_data['plugins'][plugin_idx]
                     
                     for flag_name, flag_value in plugin.get('flags', {}).items():
@@ -614,21 +636,12 @@ class FomodInstallerDialog(QDialog):
                     self.selected_files.extend(plugin.get('files', []))
     
     def cancel_installation(self):
-        """Cancel the installation"""
-        reply = QMessageBox.question(
-            self,
-            "Cancel Installation",
-            "Are you sure you want to cancel?",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-            QMessageBox.StandardButton.No
-        )
-        
-        if reply == QMessageBox.StandardButton.Yes:
-            self.user_cancelled = True
-            self.reject()
-    
+        self.user_cancelled = True
+        self.reject()
+
     def get_results(self):
         """Get installation results"""
+        if DEBUG: print("get_results")
         return {
             'cancelled': self.user_cancelled,
             'condition_flags': self.condition_flags,

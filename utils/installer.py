@@ -9,9 +9,14 @@ import xml.etree.ElementTree as ET
 from pathlib import Path
 import argparse
 import subprocess
+from PyQt6.QtWidgets import QApplication, QMessageBox
 
-try:    from utils.utils import *
-except: from utils import * 
+try:
+    from fomod_gui import FomodInstallerDialog
+    from utils import * 
+except:
+    from utils.fomod_gui import FomodInstallerDialog
+    from utils.utils import * 
 
 try:
     import rarfile
@@ -24,6 +29,8 @@ try:
     HAS_7Z = True
 except ImportError:
     HAS_7Z = False
+
+DEBUG=False
 
 def extract_archive(archive_path, extract_to):
     """Extract zip, 7z, or rar archive."""
@@ -132,7 +139,7 @@ def find_mod_base_dir(mod_path):
     return mod_path
 
 
-def parse_fomod(xml_path):
+def read_fomod(xml_path):
     try:
         # Read raw bytes to detect encoding
         with open(xml_path, 'rb') as f: raw_content = f.read()
@@ -165,15 +172,13 @@ def parse_fomod(xml_path):
         print(f"Unexpected error reading XML: {e}")
         return #sys.exit(1)
 
-
 def get_text(element, default=''):
     """Safely get text from element."""
     return element.text.strip() if element is not None and element.text else default
 
-
 def parse_fomod_structure(fomod_path, extract_dir):
     """Parse FOMOD structure and return data for GUI or CLI processing"""
-    root, namespace = parse_fomod(fomod_path)
+    root, namespace = read_fomod(fomod_path)
     ns = {'': namespace.strip('{}')} if namespace else {}
     
     # Get module name
@@ -188,7 +193,7 @@ def parse_fomod_structure(fomod_path, extract_dir):
     
     # Find install steps (modern format)
     install_steps = root.find('.//installSteps', ns) if ns else root.find('.//installSteps')
-    
+   
     # Parse conditional file installs
     conditional_installs = parse_conditional_installs(root, ns)
     
@@ -197,55 +202,42 @@ def parse_fomod_structure(fomod_path, extract_dir):
         optional_groups = root.find('.//optionalFileGroups', ns) if ns else root.find('.//optionalFileGroups')
         if optional_groups is not None:
             # Legacy format: create a single step with all groups
-            steps_data = [{
-                'name': 'Installation Options',
-                'groups': parse_groups(optional_groups, ns),
-                'visible_elem': None
-            }]
-            return {
-                'mod_name': mod_name,
-                'required_files': required_files,
-                'steps': steps_data,
-                'conditional_installs': conditional_installs,
-                'namespace': ns
-            }
+            steps_data = [{ 'name': 'Installation Options',
+                            'groups': parse_groups(optional_groups, ns),
+                            'visible_elem': None }]
+            return { 'mod_name': mod_name,
+                     'required_files': required_files,
+                     'steps': steps_data,
+                     'conditional_installs': conditional_installs,
+                     'namespace': ns }
         else:
             # No steps or groups found
-            return {
-                'mod_name': mod_name,
-                'required_files': required_files,
-                'steps': [],
-                'conditional_installs': conditional_installs,
-                'namespace': ns
-            }
+            return { 'mod_name': mod_name,
+                     'required_files': required_files,
+                     'steps': [],
+                     'conditional_installs': conditional_installs,
+                     'namespace': ns }
     
     steps_data = []
     
     # Process each install step (modern format)
     for step in install_steps.findall('.//installStep', ns) if ns else install_steps.findall('.//installStep'):
         step_name = step.get('name', 'Installation Step')
-        
         # Store visibility conditions for later evaluation
         visible_elem = step.find('.//visible', ns) if ns else step.find('.//visible')
-        
         # Process optional file groups
         groups = step.find('.//optionalFileGroups', ns) if ns else step.find('.//optionalFileGroups')
         groups_data = parse_groups(groups, ns) if groups is not None else []
         
-        steps_data.append({
-            'name': step_name,
-            'groups': groups_data,
-            'visible_elem': visible_elem
-        })
+        steps_data.append({'name': step_name,
+                           'groups': groups_data,
+                           'visible_elem': visible_elem })
     
-    return {
-        'mod_name': mod_name,
-        'required_files': required_files,
-        'steps': steps_data,
-        'conditional_installs': conditional_installs,
-        'namespace': ns
-    }
-
+    return { 'mod_name': mod_name,
+             'required_files': required_files,
+             'steps': steps_data,
+             'conditional_installs': conditional_installs,
+             'namespace': ns }
 
 def parse_conditional_installs(root, ns):
     """Parse conditionalFileInstalls section for pattern-based file installation."""
@@ -265,13 +257,9 @@ def parse_conditional_installs(root, ns):
         
         if deps_elem is not None and files_elem is not None:
             files = extract_files_info(files_elem, ns)
-            conditional_installs.append({
-                'dependencies_elem': deps_elem,
-                'files': files
-            })
+            conditional_installs.append({'dependencies_elem': deps_elem, 'files': files})
     
     return conditional_installs
-
 
 def parse_groups(groups_elem, ns):
     """Parse group elements and return group data"""
@@ -319,112 +307,19 @@ def parse_groups(groups_elem, ns):
             # Get typeDescriptor for dependency checking
             type_desc_elem = plugin.find('.//typeDescriptor', ns) if ns else plugin.find('.//typeDescriptor')
             
-            plugins_data.append({
-                'name': plugin_name,
-                'description': description,
-                'image': image_path,
-                'flags': flags,
-                'files': files,
-                'visible_elem': visible_elem,
-                'type_desc_elem': type_desc_elem
-            })
+            plugins_data.append({'name': plugin_name,
+                                 'description': description,
+                                 'image': image_path,
+                                 'flags': flags,
+                                 'files': files,
+                                 'visible_elem': visible_elem,
+                                 'type_desc_elem': type_desc_elem})
         
-        groups_data.append({
-            'name': group_name,
-            'type': group_type,
-            'plugins': plugins_data
-        })
+        groups_data.append({'name': group_name,
+                            'type': group_type,
+                            'plugins': plugins_data})
     
     return groups_data
-
-
-def process_fomod_cli(fomod_path, extract_dir, output_dir):
-    """Process FOMOD configuration using CLI (original implementation)"""
-    fomod_data = parse_fomod_structure(fomod_path, extract_dir)
-    print(f"\n{'='*60}")
-    print(f"Installing: {fomod_data['mod_name']}")
-    print(f"{'='*60}\n")
-    
-    # Track conditional flags
-    condition_flags = {}
-    
-    # Show required files
-    if fomod_data['required_files']:
-        print("\n--- Required Files ---")
-        print("The following files will be installed automatically:\n")
-        for file_info in fomod_data['required_files']:
-            if isinstance(file_info, tuple):
-                file_type, source, dest = file_info
-                print(f"  • {source} → {dest}")
-        print()
-    
-    # Check if there are any steps
-    if not fomod_data['steps']:
-        print("No installation options found. Installing required files only.")
-        all_files = fomod_data['required_files']
-        if all_files:
-            install_fomod_files(all_files, extract_dir, output_dir)
-        return fomod_data['required_files']
-    
-    selected_files = []
-    
-    # Process each step
-    for step in fomod_data['steps']:
-        # Check step visibility
-        if step['visible_elem'] is not None and not evaluate_conditions(step['visible_elem'], condition_flags, fomod_data['namespace']):
-            continue
-        
-        print(f"\n--- {step['name']} ---\n")
-        
-        for group in step['groups']:
-            # Filter visible plugins
-            visible_plugins = []
-            for plugin in group['plugins']:
-                if plugin['visible_elem'] is None or evaluate_conditions(plugin['visible_elem'], condition_flags, fomod_data['namespace']):
-                    visible_plugins.append(plugin)
-            
-            if not visible_plugins:
-                continue
-            
-            print('\n'*8+f"\n\033[92m{group['name']}\033[0m")
-            print(f"Selection Type: {group['type']}")
-            print("-" * 60)
-            
-            # Display options
-            for idx, plugin in enumerate(visible_plugins, 1):
-                print(f"\n\033[96m{idx}. {plugin['name']}\033[0m")
-                if plugin['description']:
-                    # Clean up description (remove extra whitespace)
-                    desc = ' '.join(plugin['description'].split())
-                    print(f"   {desc}")
-            # Get user selection
-            print()
-            selections = get_user_selection(len(visible_plugins), group['type'])
-            # Process selections
-            for selection in selections:
-                plugin = visible_plugins[selection - 1]
-                # Update flags
-                for flag_name, flag_value in plugin['flags'].items():
-                    condition_flags[flag_name] = flag_value
-                    print(f"  [Set flag: {flag_name} = {flag_value}]")
-                # Add files
-                selected_files.extend(plugin['files'])
-    
-    # Process conditional file installs based on final flags
-    conditional_files = evaluate_conditional_installs(
-        fomod_data.get('conditional_installs', []),
-        condition_flags,
-        fomod_data['namespace']
-    )
-    selected_files.extend(conditional_files)
-    
-    # Install all files
-    all_files = fomod_data['required_files'] + selected_files
-    if all_files:
-        install_fomod_files(all_files, extract_dir, output_dir)
-    else:
-        print("\nNo files selected for installation.")
-    return selected_files
 
 
 def evaluate_conditional_installs(conditional_installs, condition_flags, ns):
@@ -435,119 +330,32 @@ def evaluate_conditional_installs(conditional_installs, condition_flags, ns):
         if evaluate_dependencies_element(deps_elem, condition_flags, ns):
             files.extend(pattern['files'])
             # Only first matching pattern applies (FOMOD spec)
-            # break # this might be necessary but i dont see why
+            #break
     return files
 
 
 def evaluate_dependencies_element(deps_elem, condition_flags, ns):
     """Evaluate a dependencies element directly."""
-    if deps_elem is None:
-        return True
-    
+    if deps_elem is None: return True
     operator = deps_elem.get('operator', 'And')
-    
     # Find all flag dependencies
     flag_deps = deps_elem.findall('.//flagDependency', ns) if ns else deps_elem.findall('.//flagDependency')
     
-    if not flag_deps:
-        return True
+    if not flag_deps: return True
     
-    results = []
+    results = [] # user choice combo active/off
+    options = []   # available choice combo names
+    choice = condition_flags.keys() # user choice names
     for flag_dep in flag_deps:
         flag_name = flag_dep.get('flag', '')
+        options.append(flag_name)
         expected_value = flag_dep.get('value', 'On')
         actual_value = condition_flags.get(flag_name, 'Off')
+        if expected_value=="": expected_value="Off"
         results.append(actual_value == expected_value)
-    
-    if operator == 'And':
-        return all(results)
-    elif operator == 'Or':
-        return any(results)
-    else:
-        return all(results)
-
-
-def process_fomod_gui(fomod_path, extract_dir, output_dir, parent=None):
-    """Process FOMOD configuration using GUI with dynamic step evaluation"""
-    from PyQt6.QtWidgets import QApplication, QMessageBox
-    from fomod_gui import FomodInstallerDialog
-    
-    # Parse FOMOD structure
-    fomod_data = parse_fomod_structure(fomod_path, extract_dir)
-    
-    # Check if there are any steps/options
-    if not fomod_data['steps'] and not fomod_data['required_files']:
-        QMessageBox.information(
-            parent,
-            "No Options",
-            f"Mod '{fomod_data['mod_name']}' has no installation options.\nAll files will be copied."
-        )
-        return []
-    
-    # Create GUI dialog with full fomod_data for dynamic evaluation
-    if parent:
-        app = None
-        dialog = FomodInstallerDialog(fomod_data['mod_name'], parent)
-    else:
-        app = QApplication.instance()
-        if app is None:
-            app = QApplication(sys.argv)
-        dialog = FomodInstallerDialog(fomod_data['mod_name'])
-    
-    # Store fomod_data in dialog for dynamic step building
-    dialog.fomod_data = fomod_data
-    dialog.extract_dir = extract_dir
-    dialog.condition_flags = {}
-    
-    # If no steps, just show required files and install
-    if not fomod_data['steps']:
-        if fomod_data['required_files']:
-            result = dialog.exec()
-            if result and not dialog.user_cancelled:
-                install_fomod_files(fomod_data['required_files'], extract_dir, output_dir)
-                return fomod_data['required_files']
-        return None
-    
-    # Build initial visible steps dynamically
-    dialog.rebuild_steps_dynamically()
-    
-    # Show first step
-    if dialog.steps_data:
-        dialog.show_step(0)
-    else:
-        # No visible steps, just install required files if any
-        if fomod_data['required_files']:
-            result = dialog.exec()
-            if result and not dialog.user_cancelled:
-                install_fomod_files(fomod_data['required_files'], extract_dir, output_dir)
-                return fomod_data['required_files']
-        return None
-    
-    # Run dialog
-    result = dialog.exec()
-    if result and (not dialog.user_cancelled):
-        # Get results
-        results = dialog.get_results()
-        # Evaluate conditional file installs based on final flags
-        conditional_files = evaluate_conditional_installs(
-            fomod_data.get('conditional_installs', []),
-            dialog.condition_flags,
-            fomod_data['namespace'])
-        # Install files
-        all_files = fomod_data['required_files'] + results['selected_files'] + conditional_files
-        if all_files:
-            install_fomod_files(all_files, extract_dir, output_dir)
-        return results['selected_files']+conditional_files # idk about this one
-    return None  # User cancelled
-
-
-def process_fomod(fomod_path, extract_dir, output_dir, gui=False, parent=None):
-    """Process FOMOD configuration - wrapper that chooses GUI or CLI"""
-    if gui:
-        return process_fomod_gui(fomod_path, extract_dir, output_dir, parent)
-    else:
-        return process_fomod_cli(fomod_path, extract_dir, output_dir)
-
+    if operator == 'And':  return all(results)
+    elif operator == 'Or': return any(results)
+    else: return all(results)
 
 def evaluate_conditions(visible_elem, condition_flags, ns):
     """Evaluate visibility conditions based on current flags."""
@@ -555,55 +363,6 @@ def evaluate_conditions(visible_elem, condition_flags, ns):
     deps_elem = visible_elem.find('.//dependencies', ns) if ns else visible_elem.find('.//dependencies')
     if deps_elem is None: return True
     return evaluate_dependencies_element(deps_elem, condition_flags, ns)
-
-
-def get_user_selection(num_options, selection_type):
-    """Get user selection based on group type."""
-    while True:
-        if selection_type == 'SelectExactlyOne':
-            prompt = f"Select one option (1-{num_options}): "
-            try:
-                choice = int(input('\033[1m'+prompt+'\033[0m'))
-                if 1 <= choice <= num_options:
-                    return [choice]
-                print(f"Please enter a number between 1 and {num_options}")
-            except ValueError:
-                print("Please enter a valid number")
-        elif selection_type == 'SelectAtMostOne':
-            prompt = f"Select one option (1-{num_options}) or 0 to skip: "
-            try:
-                choice = int(input('\033[1m'+prompt+'\033[0m'))
-                if choice == 0:
-                    return []
-                if 1 <= choice <= num_options:
-                    return [choice]
-                print(f"Please enter a number between 0 and {num_options}")
-            except ValueError:
-                print("Please enter a valid number")
-        
-        elif selection_type == 'SelectAtLeastOne':
-            prompt = f"Select options (comma-separated, 1-{num_options}): "
-            try:
-                choices = [int(x.strip()) for x in input('\033[1m'+prompt+'\033[0m').split(',')]
-                if all(1 <= c <= num_options for c in choices) and len(choices) > 0:
-                    return choices
-                print(f"Please enter valid numbers between 1 and {num_options}")
-            except ValueError:
-                print("Please enter valid numbers separated by commas")
-        
-        else:  # SelectAny or other
-            prompt = f"Select options (comma-separated, 1-{num_options}) or 0 to skip: "
-            try:
-                user_input = input('\033[1m'+prompt+'\033[0m').strip()
-                if user_input == '0':
-                    return []
-                choices = [int(x.strip()) for x in user_input.split(',')]
-                if all(1 <= c <= num_options for c in choices):
-                    return choices
-                print(f"Please enter valid numbers between 1 and {num_options}")
-            except ValueError:
-                print("Please enter valid numbers separated by commas")
-
 
 def extract_files_info(files_elem, ns):
     """Extract file and folder information from XML."""
@@ -627,6 +386,75 @@ def extract_files_info(files_elem, ns):
             file_list.append(('folder', source, destination))
     return file_list
 
+def process_fomod(fomod_path, extract_dir, output_dir, parent=None):
+    """Process FOMOD configuration using GUI with dynamic step evaluation"""
+    
+    # Parse FOMOD structure
+    fomod_data = parse_fomod_structure(fomod_path, extract_dir)
+    
+    # Check if there are any steps/options
+    if not fomod_data['steps'] and not fomod_data['required_files']:
+        QMessageBox.information(
+            parent,
+            "No Options",
+            f"Mod '{fomod_data['mod_name']}' has no installation options.\nAll files will be copied."
+        )
+        return []
+    
+    # Create GUI dialog with full fomod_data for dynamic evaluation
+    if parent:
+        app = None
+        dialog = FomodInstallerDialog(fomod_data['mod_name'], parent)
+    else:
+        app = QApplication.instance()
+        if app is None: app = QApplication(sys.argv)
+        dialog = FomodInstallerDialog(fomod_data['mod_name'])
+    
+    # Store fomod_data in dialog for dynamic step building
+    dialog.fomod_data = fomod_data
+    dialog.extract_dir = extract_dir
+    dialog.condition_flags = {}
+    
+    # If no steps, just show required files and install
+    if not fomod_data['steps']:
+        if fomod_data['required_files']:
+            result = dialog.exec()
+            if result and not dialog.user_cancelled:
+                install_fomod_files(fomod_data['required_files'], extract_dir, output_dir)
+                return fomod_data['required_files']
+        return None
+    
+    # Build initial visible steps dynamically
+    dialog.rebuild_steps_dynamically()
+    
+    # Show first step
+    if dialog.steps_data: dialog.show_step(0)
+    else:
+        # No visible steps, just install required files if any
+        if fomod_data['required_files']:
+            result = dialog.exec()
+            if result and not dialog.user_cancelled:
+                install_fomod_files(fomod_data['required_files'], extract_dir, output_dir)
+                return fomod_data['required_files']
+        return None
+    
+    # Run dialog
+    result = dialog.exec()
+    if result and (not dialog.user_cancelled):
+        # Get results of user choice
+        results = dialog.get_results()
+        # Evaluate conditional file installs based on final flags
+        conditional_files = evaluate_conditional_installs(
+            fomod_data.get('conditional_installs', []),
+            dialog.condition_flags,
+            fomod_data['namespace'])
+        # Install files
+        all_files = fomod_data['required_files'] + results['selected_files'] + conditional_files
+        if all_files:
+            install_fomod_files(all_files, extract_dir, output_dir)
+        #return results['selected_files']+conditional_files # idk about this one
+        return all_files
+    return None  # User cancelled
 
 def install_fomod_files(file_list, extract_dir, output_dir):
     """Copy selected files to output directory."""
@@ -667,7 +495,6 @@ def install_fomod_files(file_list, extract_dir, output_dir):
                 print(f"installed folder: {current_path} to {destination}")
     print(f"\ninstallation complete! files installed to: {output_path}")
 
-
 def install_mod_files(temp_dir, output_dir):
     print("copying files from non-FOMOD archive...")
     # Copy everything from temp to output
@@ -702,7 +529,7 @@ def run(archive_path=None, output_dir=None, gui=False, parent=None):
         temp_dir = find_mod_base_dir(Path(temp_dir))
         config_path = find_fomod_config(temp_dir)
         if config_path:
-            res = process_fomod(config_path, temp_dir, output_dir, gui, parent)
+            res = process_fomod(config_path, temp_dir, output_dir, parent)
             if not res: return None
         if not config_path or not res:
             res = install_mod_files(temp_dir, output_dir)
