@@ -5,6 +5,7 @@ import subprocess
 import platform
 import yaml
 import tempfile
+import random
 from pathlib import Path
 from collections import OrderedDict
 from time import sleep
@@ -12,10 +13,14 @@ from copy import deepcopy
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, 
     QTreeWidget, QTreeWidgetItem, QTableWidget, QTableWidgetItem, 
-    QPushButton, QSplitter, QLabel, QLineEdit, QMenu, QMessageBox, QComboBox,
-    QFileDialog, QInputDialog, QTextEdit, QToolButton, QSplashScreen
+    QPushButton, QSplitter, QLabel, QLineEdit, QMenu, QMessageBox, 
+    QComboBox, QFileDialog, QInputDialog, QTextEdit, QToolButton, 
+    QSplashScreen
 )
-from PyQt6.QtCore import Qt, QItemSelectionModel, QObject, QThread, QWaitCondition, pyqtSignal, QMutex, QMutexLocker, QTimer, QPoint, QSize, QFile, QTextStream
+from PyQt6.QtCore import ( Qt, QItemSelectionModel, QObject, QThread, 
+    QWaitCondition, pyqtSignal, QMutex, QMutexLocker, QTimer, QPoint, 
+    QSize, QFile, QTextStream, QMetaObject
+)
 from PyQt6.QtGui import QIcon, QFont, QTextCursor, QCursor, QPixmap
 
 try:
@@ -92,52 +97,78 @@ class CommandExecutorThread(QThread):
         self.wait()
 
 class ExtractorThread(QThread):
-    archive_extracted = pyqtSignal(str,str)  # mod name
+    #archive_extracted = pyqtSignal(str,str)  # mod name
+    call_handle_mod_install = pyqtSignal(str, str)
     progress = pyqtSignal(str)
     complete = pyqtSignal()
+    temp_complete = pyqtSignal()
     
     def __init__(self, file_paths, output_dir, parent):
         super().__init__()
         self.file_paths = file_paths
         self.output_dir = output_dir
-        self.parent_widget = parent
+        self.parent = parent
+        self.call_handle_mod_install.connect(
+            parent.handle_mod_install,
+            Qt.ConnectionType.BlockingQueuedConnection
+        )
 
     def run(self): # this is dumb
         for archive_path in self.file_paths:
-            self.progress.emit(str(Path(archive_path).name))
+            self.progress.emit(str(Path(archive_path)))
             archive_name = Path(archive_path).stem
             output_dir = Path(self.output_dir) / f"{archive_name}"
             output_dir = next(
                 p for i in range(10**9)
                 if not (p := Path(output_dir).parent / f"{archive_name}{'' if i == 0 else f'_{i}'}").exists())
-
+                
             temp_dir = Path(tempfile.mkdtemp())
-            result=extract_archive(archive_path, temp_dir)
-            if result: self.archive_extracted.emit(str(temp_dir),str(archive_path))
-            else: self.archive_extracted.emit(None,str(archive_path))
+            if os.path.isdir(archive_path):  # handle dir install
+                shutil.copytree(archive_path,temp_dir,dirs_exist_ok=True)
+                result=True
+            else: result=extract_archive(archive_path, temp_dir)
+            self.temp_complete.emit()
+            #if result: self.archive_extracted.emit(str(temp_dir),str(archive_path))
+            #else: self.archive_extracted.emit(None,str(archive_path))
+            if result: self.call_handle_mod_install.emit(str(temp_dir), str(archive_path))
+            else: self.call_handle_mod_install.emit(None, str(archive_path))
+                
         self.complete.emit()
 
 class StatusThread(QThread):
-    def __init__(self, status_widget, name):
+    def __init__(self, status_widget, file):
         super().__init__()
         self.status=status_widget
-        self.name=name
+        self.file=file
+        self.temp_complete=False
         self.stopped=False
        
-    def set_name(self,name):
-        self.name=name
+    def set_file(self,file):
+        self.file=file
+        self.temp_complete=False
  
     def run(self):
         i=0
         a=["|","/","-","\\"]
         while not self.stopped:
+            if self.temp_complete:
+                if os.path.isdir(self.file): self.status.setText("Copying complete!")
+                else: self.status.setText("Extraction complete!")
+                sleep(0.2)
+                continue
             if i>len(a)-1:i=0
-            self.status.setText(f"Extracting {self.name}  {a[i]}")
+            name=Path(self.file).name
+            if os.path.isdir(self.file): self.status.setText(f"Copying {name}  {a[i]}")
+            else: self.status.setText(f"Extracting {name}  {a[i]}")
             sleep(0.5)
             i+=1
-        self.status.setText("Extraction complete!")
+        if os.path.isdir(self.file): self.status.setText("Copying complete!")
+        else: self.status.setText("Extraction complete!")
         sleep(2)
         self.status.setText("")
+
+    def set_temp_complete(self):
+        self.temp_complete=True 
 
     def done(self):
         self.stopped=True
@@ -337,6 +368,7 @@ class ModLoaderUserInterface(QMainWindow):
         self._separator_rows = {}
         self._is_sorted_alphabetically = False
         self._sort_ascending = True
+        self.showing_fomod = False
         
         self.setAcceptDrops(True)
         self._init_ui()
@@ -1436,9 +1468,10 @@ class ModLoaderUserInterface(QMainWindow):
 
     def dragEnterEvent(self, event):
         if event.mimeData().hasUrls():
-            valid_extensions = {'.7z', '.zip', '.rar'}
+            valid_extensions = {'.7z', '.zip', '.rar',''}
             for url in event.mimeData().urls():
-                if Path(url.toLocalFile()).suffix.lower() in valid_extensions:
+                if (Path(url.toLocalFile()).suffix.lower() in valid_extensions) \
+                or os.path.isdir(Path(url.toLocalFile())):
                     event.acceptProposedAction()
                     self.setStyleSheet("QMainWindow { border: 3px dashed #4CAF50; }")
                     return
@@ -1502,23 +1535,25 @@ class ModLoaderUserInterface(QMainWindow):
             event.ignore()
 
     def handle_file_drop(self, event):
-        valid_extensions = {'.7z', '.zip', '.rar'}
+        valid_extensions = {'.7z', '.zip', '.rar',''}
         installed_count = 0
         
         file_paths = [
             Path(url.toLocalFile())
             for url in event.mimeData().urls()
-            if Path(url.toLocalFile()).suffix.lower() in valid_extensions and Path(url.toLocalFile()).is_file()
+            if (Path(url.toLocalFile()).suffix.lower() in valid_extensions and Path(url.toLocalFile()).is_file())
+            or os.path.isdir(Path(url.toLocalFile()))
         ] 
         file_paths.sort(key=lambda p: p.stat().st_mtime)
          
         extract_thread=ExtractorThread(file_paths, self.cfg["SOURCE_DIR"], self) 
-        status_thread=StatusThread(self.status_label,Path(file_paths[0]).name)
+        status_thread=StatusThread(self.status_label,Path(file_paths[0]))
         self.extract_threads.append(extract_thread)
         self.status_threads.append(status_thread)
 
-        extract_thread.archive_extracted.connect(lambda path,archive: self.handle_mod_install(path,archive))
-        extract_thread.progress.connect(lambda name: status_thread.set_name(name))
+        #extract_thread.archive_extracted.connect(lambda path,archive: self.handle_mod_install(path,archive))
+        extract_thread.progress.connect(lambda file: status_thread.set_file(file))
+        extract_thread.temp_complete.connect(status_thread.set_temp_complete)
         extract_thread.complete.connect(status_thread.done)
         extract_thread.start()
         status_thread.start()
@@ -1539,7 +1574,10 @@ class ModLoaderUserInterface(QMainWindow):
         self.extract_threads.append(extract_thread)
         self.status_threads.append(status_thread)
 
-        extract_thread.archive_extracted.connect(lambda path,archive: self.handle_mod_install(path,archive))
+        #extract_thread.archive_extracted.connect(lambda path,archive: self.handle_mod_install(path,archive))
+        extract_thread.progress.connect(lambda file: status_thread.set_file(file))
+        extract_thread.temp_complete.connect(status_thread.set_temp_complete)
+        extract_thread.complete.connect(status_thread.done)
         extract_thread.start()
         status_thread.start()
  
@@ -1549,6 +1587,7 @@ class ModLoaderUserInterface(QMainWindow):
                         "Installation Error",
                         f"Encountered exception during mod extraction for archive:\n{Path(archive_path).name}")
             return
+        
         name=install_mod(archive_path=archive_path, temp_dir=temp_dir, gui=True, parent=self)
         if name: 
             self.add_mod(name, enabled=True)
@@ -1562,7 +1601,7 @@ class ModLoaderUserInterface(QMainWindow):
             self.cfg["EXECUTABLES"][exe]["SELECTED"]=False
         self.cfg["EXECUTABLES"][self.current_exe]["SELECTED"]=True
         write_cfg(self.cfg) 
-
+    
     def open_ini_manager(self):
         #cfg_dict=read_cfg(sync=False)
         ensure_dir(Path(self.cfg["INI_DIR"]))

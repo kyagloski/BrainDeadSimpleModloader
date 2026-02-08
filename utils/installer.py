@@ -389,7 +389,7 @@ def process_fomod(archive_path, extract_dir, output_dir, parent=None):
                 return mod_name
         return None
     
-    # Run dialog
+    # run dialog 
     result = dialog.exec()
     if result and (not dialog.user_cancelled):
         # Get results of user choice
@@ -410,7 +410,8 @@ def process_fomod(archive_path, extract_dir, output_dir, parent=None):
 def install_fomod_files(archive_path, file_list, extract_dir, output_dir):
     """Copy selected files to output directory."""
     extract_dir = Path(extract_dir)
-    mod_name = Path(archive_path).stem
+    if os.path.isdir(archive_path): mod_name=Path(archive_path).name
+    else: mod_name = Path(archive_path).stem
     output_dir = Path(output_dir)/mod_name
     if os.path.isdir(output_dir): output_dir, mod_name=fix_dirname_used(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -442,10 +443,8 @@ def install_fomod_files(archive_path, file_list, extract_dir, output_dir):
                 shutil.copy2(current_path, dest_path)
                 print(f"installed: {current_path} to {destination}")
             elif file_type == 'folder' and current_path.is_dir():
-                #if dest_path.exists():
-                #    shutil.rmtree(dest_path)
                 shutil.copytree(current_path, dest_path, dirs_exist_ok=True)
-                print(f"installed folder: {current_path} to {destination}")
+                #print(f"installed folder: {current_path} to {destination}")
     print(f"\ninstallation complete! files installed to: {output_dir}")
     return mod_name
 

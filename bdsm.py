@@ -291,7 +291,8 @@ def sync_loadorder():
     for mod in os.listdir(SOURCE_DIR):
         if mod not in clean_loadorder: additions.append('~'+mod)
     for mod in loadorder:
-        if any(mod.startswith(sub) for sub in ['~','*','#']): continue
+        #if any(mod.startswith(sub) for sub in ['~','*','#']): continue
+        if any(mod.startswith(sub) for sub in ['#']): continue
         if mod not in os.listdir(SOURCE_DIR): exclusions.append(mod)
     loadorder = [x for x in loadorder if x not in exclusions] # remove exclusions
     loadorder = [item for i, item in enumerate(loadorder) if item.startswith('#') or item not in loadorder[:i]]

@@ -48,6 +48,7 @@ class FomodInstallerDialog(QDialog):
         super().__init__(parent)
         self.setWindowTitle(f"FOMOD Installer - {mod_name}")
         self.resize(900, 550)
+        self.setModal(True)
         
         self.mod_name = mod_name
         self.condition_flags = {}
@@ -641,11 +642,9 @@ class FomodInstallerDialog(QDialog):
     def get_results(self):
         """Get installation results"""
         if DEBUG: print("get_results")
-        return {
-            'cancelled': self.user_cancelled,
-            'condition_flags': self.condition_flags,
-            'selected_files': self.selected_files
-        }
+        return { 'cancelled': self.user_cancelled,
+                 'condition_flags': self.condition_flags,
+                 'selected_files': self.selected_files }
 
 
 # Demo/test code
