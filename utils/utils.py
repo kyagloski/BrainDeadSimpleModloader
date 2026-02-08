@@ -3,6 +3,7 @@
 
 import os
 import sys
+import stat
 import traceback
 import subprocess
 from pathlib import Path
@@ -43,6 +44,15 @@ def fix_dirname_used(output_dir):
         if not (p := Path(output_dir).parent / f"{name}{'' if i == 0 else f'_{i}'}").exists())
     name = str(Path(output_dir).name)
     return output_dir, name
+
+def set_full_perms_dir(d):
+    d = Path(d)
+    mode = stat.S_IRWXU | stat.S_IRWXG | stat.S_IRWXO
+    try: d.chmod(mode)
+    except Exception as e: print(f"{str(e)} when setting permissions on {str(d)}")
+    for item in d.rglob('*'):
+        try: item.chmod(mode)
+        except Exception as e: print(f"{str(e)} when setting permissions on {str(item)}")
 
 def print_traceback():
     for line in traceback.format_stack()[:-1]: print(line.strip())

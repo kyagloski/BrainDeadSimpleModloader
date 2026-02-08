@@ -39,7 +39,6 @@ LINK_ON_LAUNCH    = True
 VERBOSITY         = False
 OPERATION_TIMEOUT = 500 # 0.5s
 
-
 def create_cfg(gui=False):
     # prompt user choice
     if gui:
@@ -291,8 +290,8 @@ def sync_loadorder():
     for mod in os.listdir(SOURCE_DIR):
         if mod not in clean_loadorder: additions.append('~'+mod)
     for mod in loadorder:
-        #if any(mod.startswith(sub) for sub in ['~','*','#']): continue
-        if any(mod.startswith(sub) for sub in ['#']): continue
+        if any(mod.startswith(sub) for sub in ['~','*','#']): continue
+        #if any(mod.startswith(sub) for sub in ['#']): continue
         if mod not in os.listdir(SOURCE_DIR): exclusions.append(mod)
     loadorder = [x for x in loadorder if x not in exclusions] # remove exclusions
     loadorder = [item for i, item in enumerate(loadorder) if item.startswith('#') or item not in loadorder[:i]]
@@ -328,8 +327,9 @@ def delete_mod(mod_name, gui=False):
         for line in lines:
             if line.strip() != mod: f.write(line)
     # delete dir
+    set_full_perms_dir(SOURCE_DIR/mod)
     try: shutil.rmtree(SOURCE_DIR/mod)
-    except: print(f"error: could not delete {mod_name} or mod does not exist in {str(SOURCE_DIR)}")
+    except Exception as e: print(f"error: encountered exception {str(e)} during deleting of mod {mod}")
     if RELOAD_ON_INSTALL: perform_copy() #restore(); perform_copy()
     print("deleted mod "+mod+"!")
 

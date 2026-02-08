@@ -1385,6 +1385,7 @@ class ModLoaderUserInterface(QMainWindow):
             
             self.update_priority_numbers()
             self.update_status()
+            #sync_loadorder()
             self.auto_save_load_order()
             read_cfg() # check for update
             if RELOAD_ON_INSTALL: self.load_mods()
@@ -1718,11 +1719,9 @@ if __name__ == "__main__":
     window = ModLoaderUserInterface()
     stylesheet = load_stylesheet(Path(LOCAL_DIR)/"utils"/"resources"/"stylesheets"/"dark.qss")
     app.setStyleSheet(stylesheet)
+    splash = QSplashScreen(QPixmap(str(LOCAL_DIR/"utils"/"resources"/"splash.png")))
     if os.name!="posix": window.show()
-    try: 
-        splash = QSplashScreen(QPixmap(str(LOCAL_DIR/"utils"/"resources"/"splash.png")))
-        splash.show()
-        QTimer.singleShot(1700, splash.close)
-    except: pass
+    splash.show()
+    QTimer.singleShot(1700, splash.close)
     window.show()
     sys.exit(app.exec())
