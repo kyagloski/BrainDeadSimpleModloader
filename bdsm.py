@@ -20,7 +20,7 @@ except:
     import game_specific
     from gui import *
 
-VERSION           = "v0.1"
+VERSION           = "v0.2"
 LOCAL_DIR         = Path(os.path.dirname(os.path.realpath(__file__)))
 CONFIG_FILE       = LOCAL_DIR/"config.yaml"
 LOAD_ORDER        = LOCAL_DIR/"manifest"/"loadorders"/"loadorder.txt"
@@ -209,7 +209,7 @@ def perform_copy():
                         TARGET_DIR
                     )
                 except Exception as e:
-                    print(f"encountered exception {str(e)} when restoring {filename}")
+                    print(f"encountered exception {str(e)} when restoring {file}")
                 
     # only get latest copies
     copied_manifest = list(dict.fromkeys(copied_manifest))
