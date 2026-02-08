@@ -12,10 +12,6 @@ import subprocess
 
 from PyQt6.QtWidgets import QApplication, QMessageBox
 
-# Add .local to path
-local_site_packages = os.path.expanduser('~/.local/lib/python3.13/site-packages')
-if local_site_packages not in sys.path:
-    sys.path.insert(0, local_site_packages)
 import patoolib
 
 try:
