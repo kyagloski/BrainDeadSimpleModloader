@@ -445,6 +445,7 @@ def install_fomod_files(archive_path, file_list, extract_dir, output_dir):
             elif file_type == 'folder' and current_path.is_dir():
                 shutil.copytree(current_path, dest_path, dirs_exist_ok=True)
                 #print(f"installed folder: {current_path} to {destination}")
+    set_full_perms_dir(output_dir)
     print(f"\ninstallation complete! files installed to: {output_dir}")
     return mod_name
 
@@ -466,6 +467,7 @@ def install_mod_files(archive_path, temp_dir, output_dir):
                 shutil.rmtree(dest)
             shutil.copytree(item, dest)
             print(f"copied folder: {item.name}")
+    set_full_perms_dir(output_dir)
     print(f"\nall files copied to: {output_dir}")
     return mod_name
 
