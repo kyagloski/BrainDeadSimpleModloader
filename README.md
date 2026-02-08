@@ -52,7 +52,7 @@ Installed mods are stored in a staging directory located at `./BrainDeadSimpleMo
 
 Example of multiple mod install by dragging and dropping files
 (install order is based off timestamp)
-![test2(2)](https://github.com/user-attachments/assets/7cbfc76e-adf8-4f71-9bd2-2164b78726a0)
+![test](https://github.com/user-attachments/assets/98c2e6e1-e909-4022-aa74-aecdb13d2045)
                                   (50+ mods installed in <15s! let's see mo2 do that!)
 
 ## Launching Games
