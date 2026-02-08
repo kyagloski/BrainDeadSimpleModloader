@@ -6,7 +6,7 @@ from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QHBoxLayout,
                              QLabel, QMessageBox, QFormLayout)
 from PyQt6.QtCore import Qt, pyqtSignal
 
-from bdsm import *
+import bdsm
 from game_specific import *
 
 class ListItem:
@@ -26,7 +26,7 @@ class ExeManager(QMainWindow):
     
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.cfg = read_cfg(sync=False)
+        self.cfg = bdsm.read_cfg(sync=False)
         self.items = []
         self.current_item_index = -1
         self.has_pending_changes = False
@@ -334,7 +334,7 @@ class ExeManager(QMainWindow):
             item.params = self.params_edit.text()
             self.cfg["EXECUTABLES"][item.title]["PATH"]=item.path
             self.cfg["EXECUTABLES"][item.title]["PARAMS"]=item.params
-            write_cfg(self.cfg)
+            bdsm.write_cfg(self.cfg)
 
             # Update list widget item text
             self.list_widget.item(self.current_item_index).setText(str(item))

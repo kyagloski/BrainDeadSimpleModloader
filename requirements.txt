@@ -1,5 +1,4 @@
 PyYAML>=6.0.3
-rarfile>=4.2
-py7zr>=1.0.0
+patool>=4.0.4
 PyQt6>=6.9.0
 

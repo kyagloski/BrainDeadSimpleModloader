@@ -4,8 +4,10 @@ import sys
 import subprocess
 import platform
 import yaml
+import tempfile
 from pathlib import Path
 from collections import OrderedDict
+from time import sleep
 from copy import deepcopy
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, 
@@ -19,14 +21,12 @@ from PyQt6.QtGui import QIcon, QFont, QTextCursor, QCursor, QPixmap
 try:
     sys.path.append(str(Path(__file__).parent.parent))
     from ..bdsm import *
-    from game_specific import *
-    from ini_manager import *
-    from exe_manager import *
 except:
     from bdsm import *
-    from game_specific import *
-    from ini_manager import *
-    from exe_manager import *
+from game_specific import *
+from ini_manager import *
+from exe_manager import *
+from installer import *
 
 SHOW_MSG_TIME = 10000000
 
@@ -52,14 +52,14 @@ class CommandExecutorThread(QThread):
     
     def __init__(self):
         super().__init__()
-        self.commands = {}  # Dict to store latest version of each unique command
+        self.commands = {}  # dict to store latest version of each unique command
         self.mutex = QMutex()
         self.timer = None
         self.is_running = True
         
     def add_command(self, command_id, command_data):
         with QMutexLocker(self.mutex):
-            # Store/update the latest version of this command
+            # store/update the latest version of this command
             self.commands[command_id] = command_data
         self.reset_timer()
         
@@ -90,6 +90,58 @@ class CommandExecutorThread(QThread):
         if self.timer: self.timer.stop()
         self.quit()
         self.wait()
+
+class ExtractorThread(QThread):
+    archive_extracted = pyqtSignal(str,str)  # mod name
+    progress = pyqtSignal(str)
+    complete = pyqtSignal()
+    
+    def __init__(self, file_paths, output_dir, parent):
+        super().__init__()
+        self.file_paths = file_paths
+        self.output_dir = output_dir
+        self.parent_widget = parent
+
+    def run(self): # this is dumb
+        for archive_path in self.file_paths:
+            self.progress.emit(str(Path(archive_path).name))
+            archive_name = Path(archive_path).stem
+            output_dir = Path(self.output_dir) / f"{archive_name}"
+            output_dir = next(
+                p for i in range(10**9)
+                if not (p := Path(output_dir).parent / f"{archive_name}{'' if i == 0 else f'_{i}'}").exists())
+
+            temp_dir = Path(tempfile.mkdtemp())
+            result=extract_archive(archive_path, temp_dir)
+            if result: self.archive_extracted.emit(str(temp_dir),str(archive_path))
+            else: self.archive_extracted.emit(None,str(archive_path))
+        self.complete.emit()
+
+class StatusThread(QThread):
+    def __init__(self, status_widget, name):
+        super().__init__()
+        self.status=status_widget
+        self.name=name
+        self.stopped=False
+       
+    def set_name(self,name):
+        self.name=name
+ 
+    def run(self):
+        i=0
+        a=["|","/","-","\\"]
+        while not self.stopped:
+            if i>len(a)-1:i=0
+            self.status.setText(f"Extracting {self.name}  {a[i]}")
+            sleep(0.5)
+            i+=1
+        self.status.setText("Extraction complete!")
+        sleep(2)
+        self.status.setText("")
+
+    def done(self):
+        self.stopped=True
+
 
 class ReorderOnlyTable(QTableWidget):
     def __init__(self, *args, **kwargs):
@@ -251,14 +303,10 @@ class EditableComboBox(QComboBox):
         delete_action = menu.addAction("Delete")
         action = menu.exec(self.mapToGlobal(pos))
         
-        if action == open_action:
-            self.open_in_editor()
-        if action == rename_action:
-            self.upper.rename_preset()
-        if action == duplicate_action:
-            self.upper.dup_preset()
-        if action == delete_action:
-            self.upper.del_preset()
+        if action == open_action:      self.open_in_editor()
+        if action == rename_action:    self.upper.rename_preset()
+        if action == duplicate_action: self.upper.dup_preset()
+        if action == delete_action:    self.upper.del_preset()
     
     def open_in_editor(self):
         file_path = str(LOAD_ORDER)
@@ -266,12 +314,9 @@ class EditableComboBox(QComboBox):
         if not os.path.isfile(file_path):
             print("error: could not open "+file_path)
             return
-        if sys.platform == 'win32':
-            os.startfile(file_path)
-        elif sys.platform == 'darwin':
-            subprocess.run(['open', file_path])
-        else:  # Linux
-            subprocess.run(['xdg-open', file_path])
+        if sys.platform == 'win32':    os.startfile(file_path)
+        elif sys.platform == 'darwin': subprocess.run(['open', file_path])
+        else: subprocess.run(['xdg-open', file_path]) # linux
 
 
 class ModLoaderUserInterface(QMainWindow):
@@ -299,10 +344,18 @@ class ModLoaderUserInterface(QMainWindow):
         self._load_initial_data()
         self._loading = False
 
+        self.status_label=QLabel("")
+        self.status_label.setStyleSheet("font-weight: bold;")
+        self.status_label.setFont(QFont("Courier"))
+        self.statusBar().addPermanentWidget(self.status_label)
+
         # Create the command executor thread
         self.executor = CommandExecutorThread()
         self.executor.commands_finished.connect(self.load_plugins_list)
         self.executor.start()
+        # threads
+        self.extract_threads=[]
+        self.status_threads=[]
 
     def _setup_stdout_redirect(self):
         self._stdout_redirector = StdoutRedirector(sys.stdout)
@@ -459,7 +512,7 @@ class ModLoaderUserInterface(QMainWindow):
         self.add_preset_button.setToolTip("New Preset")
         self.add_preset_button.clicked.connect(self.add_preset)
         preset_layout.addWidget(self.add_preset_button)
-
+        
         self.del_preset_button = QPushButton("-")
         self.del_preset_button.setFixedSize(35, 35)
         self.del_preset_button.setToolTip("Delete Preset")
@@ -639,9 +692,9 @@ class ModLoaderUserInterface(QMainWindow):
             
             for filename in ['Plugins.txt', 'plugins.txt']:
                 potential_path = backup_path / filename
-                if potential_path.exists():
-                    plugins_file = potential_path
-                    break
+                if not potential_path.exists(): continue
+                plugins_file = potential_path
+                break
             
             if plugins_file:
                 with open(plugins_file, 'r', encoding='utf-8', errors='ignore') as f:
@@ -677,8 +730,7 @@ class ModLoaderUserInterface(QMainWindow):
             self.explorer_label.setText("Select a mod to view files")
         
         name_item = self.mod_table.item(row, 2)
-        if not name_item:
-            return
+        if not name_item: return
             
         mod_name = name_item.text()
         
@@ -698,8 +750,7 @@ class ModLoaderUserInterface(QMainWindow):
     
     def populate_file_explorer(self, path):
         self.file_explorer.clear()
-        if not path.exists() or not path.is_dir():
-            return
+        if not path.exists() or not path.is_dir(): return
         self.add_directory_to_tree(path, self.file_explorer.invisibleRootItem())
         self.file_explorer.expandAll()
     
@@ -737,8 +788,7 @@ class ModLoaderUserInterface(QMainWindow):
         return name_item.data(Qt.ItemDataRole.UserRole + 1) if name_item else ""
 
     def toggle_separator_collapse(self, row):
-        if not self.is_separator_row(row):
-            return
+        if not self.is_separator_row(row): return
         
         next_separator = self.mod_table.rowCount()
         for r in range(row + 1, self.mod_table.rowCount()):
@@ -753,48 +803,9 @@ class ModLoaderUserInterface(QMainWindow):
         for r in range(row + 1, next_separator):
             self.mod_table.setRowHidden(r, not is_collapsed)
 
-    def _show_installation_results(self, installed_count, failed_files):
-        """Show results of mod installation"""
-        if installed_count > 0:
-            self.update_status()
-            self.auto_save_load_order()
-            if RELOAD_ON_INSTALL:
-                #restore()
-                #perform_copy()
-                self.executor.add_command(perform_copy, tuple())
-            self.statusBar().showMessage(f"Successfully installed {installed_count} mod(s)", SHOW_MSG_TIME)
-        
-        if failed_files:
-            error_msg = "Failed to install the following mods:\n\n"
-            error_msg += "\n".join(f"• {fn}: {err}" for fn, err in failed_files)
-            QMessageBox.warning(self, "Installation Errors", error_msg)
-
-    def add_mod_dialog(self):
-        file_paths, _ = QFileDialog.getOpenFileNames(
-            self, "Select Mod Archive(s)", "",
-            "Mod Archives (*.7z *.zip *.rar);;All Files (*)"
-        )
-        if not file_paths: return
-        file_paths.sort(key=lambda p: Path(p).stat().st_mtime)
-        installed_count = 0
-        failed_files = []
-        
-        for file_path in file_paths:
-            try:
-                name = install_mod(file_path, gui=True, parent=self)
-                if name:
-                    self.add_mod(name, enabled=True)
-                    installed_count += 1
-            except Exception as e:
-                failed_files.append((Path(file_path).name, str(e)))
-        self._show_installation_results(installed_count, failed_files)
-
-
     def load_mods(self):
         try:
-            #restore()
             read_cfg(sync=False) # check for update
-            #perform_copy()
             self.executor.add_command(perform_copy, tuple())
             self.update_unload_button_state()
             self.load_plugins_list()
@@ -805,7 +816,6 @@ class ModLoaderUserInterface(QMainWindow):
     def unload_mods(self):
         try:
             read_cfg(sync=False) # check for update
-            #restore()
             self.executor.add_command(restore, tuple())
             self.update_unload_button_state()
             self.load_plugins_list()
@@ -1016,8 +1026,7 @@ class ModLoaderUserInterface(QMainWindow):
     def update_priority_numbers(self):
         priority = 1
         for row in range(self.mod_table.rowCount()):
-            if self.is_separator_row(row):
-                continue
+            if self.is_separator_row(row): continue
             priority_item = self.mod_table.item(row, 0)
             if priority_item:
                 priority_item.setText(str(priority))
@@ -1101,17 +1110,18 @@ class ModLoaderUserInterface(QMainWindow):
             menu.addSeparator()
             add_sep_above_action = menu.addAction("Add Separator Above")
             add_sep_below_action = menu.addAction("Add Separator Below")
+            menu.addSeparator()
+            collapse_all_action  = menu.addAction("Collapse All")
+            expand_all_action    = menu.addAction("Expand All")
             
             action = menu.exec(self.mod_table.viewport().mapToGlobal(position))
             
-            if action == rename_sep_action:
-                self.rename_separator(clicked_row)
-            elif action == remove_sep_action:
-                self.remove_separator(clicked_row)
-            elif action == add_sep_above_action:
-                self.add_separator_at(clicked_row)
-            elif action == add_sep_below_action:
-                self.add_separator_at(clicked_row + 1)
+            if action == rename_sep_action:      self.rename_separator(clicked_row)
+            elif action == remove_sep_action:    self.remove_separator(clicked_row)
+            elif action == add_sep_above_action: self.add_separator_at(clicked_row)
+            elif action == add_sep_below_action: self.add_separator_at(clicked_row + 1)
+            elif action == collapse_all_action:  self.collapse_all_seps()
+            elif action == expand_all_action:    self.expand_all_seps()
         else:
             if not self.mod_table.selectedItems():
                 add_sep_action = menu.addAction("Add Separator Here")
@@ -1228,7 +1238,6 @@ class ModLoaderUserInterface(QMainWindow):
                 print("no presets left, creating new preset...")
                 self.add_preset(text="No presets left, creating new preset...\n")
         
-
     def add_separator_at(self, row):
         name, ok = QInputDialog.getText(
             self, "Add Separator", "Separator name:",
@@ -1258,14 +1267,24 @@ class ModLoaderUserInterface(QMainWindow):
         if reply == QMessageBox.StandardButton.Yes:
             next_separator = self.mod_table.rowCount()
             for r in range(row + 1, self.mod_table.rowCount()):
-                if self.is_separator_row(r):
-                    next_separator = r
-                    break
+                if not self.is_separator_row(r): continue
+                next_separator = r
+                break
             for r in range(row + 1, next_separator):
                 self.mod_table.setRowHidden(r, False)
             self.mod_table.removeRow(row)
             self.update_priority_numbers()
             self.auto_save_load_order()
+
+    def collapse_all_seps(self):
+        for r in range(self.mod_table.rowCount()):
+            if not self.is_separator_row(r): continue
+            self._collapse_selected_separators(r)
+
+    def expand_all_seps(self):
+        for r in range(self.mod_table.rowCount()):
+            if not self.is_separator_row(r): continue
+            self._expand_selected_separators(r)
 
     def _set_selected_mods_state(self, state):
         """Set checkbox state for all selected mods"""
@@ -1309,18 +1328,17 @@ class ModLoaderUserInterface(QMainWindow):
         
         has_separator = any(self.is_separator_row(row) for row in selected_rows)
         has_mod = any(not self.is_separator_row(row) for row in selected_rows)
-        
+
+        names=[self.mod_table.collect_row_data(row)["name"] for row in selected_rows]
         if has_separator and has_mod:
-            msg = "Remove selected mods and separators from load order?"
+            msg = f"Remove selected mods and separators from load order?\n{'\n'.join(names)}"
         elif has_separator:
-            msg = "Remove selected separator(s) from load order?\n(Mods beneath will remain)"
+            msg = f"Remove selected separator(s) from load order?\n{'\n'.join(names)}"
         else:
-            msg = "Remove selected mod(s) from load order?\n(This will not delete the mod files)"
+            msg = f"Remove selected mod(s) from load order?\n{'\n'.join(names)}"
         
-        reply = QMessageBox.question(
-            self, "Confirm Removal", msg,
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
-        )
+        reply = QMessageBox.question(self, "Confirm Removal", msg,
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
         
         if reply == QMessageBox.StandardButton.Yes:
             for row in selected_rows:
@@ -1329,20 +1347,19 @@ class ModLoaderUserInterface(QMainWindow):
                     for child_row in children:
                         self.mod_table.setRowHidden(child_row, False)
                 mod_name = self.mod_table.collect_row_data(row)["name"]
-                delete_mod(mod_name, gui=True)
+                if not self.is_separator_row(row): delete_mod(mod_name, gui=True)
+                else: print(f"deleted seperator {mod_name}!")
                 self.mod_table.removeRow(row)
             
             self.update_priority_numbers()
             self.update_status()
             self.auto_save_load_order()
             read_cfg() # check for update
-            if RELOAD_ON_INSTALL:
-                self.load_mods()
+            if RELOAD_ON_INSTALL: self.load_mods()
 
     def toggle_selected_mods(self):
         selected_rows = set(item.row() for item in self.mod_table.selectedItems())
-        if not selected_rows:
-            return
+        if not selected_rows: return
         
         enabled_count = sum(1 for row in selected_rows 
                           if self.mod_table.item(row, 1).checkState() == Qt.CheckState.Checked)
@@ -1350,28 +1367,24 @@ class ModLoaderUserInterface(QMainWindow):
         
         for row in selected_rows:
             row_data = self.mod_table.collect_row_data(row)
-            if row_data["is_separator"]:
-                continue
+            if row_data["is_separator"]: continue
             self.mod_table.item(row, 1).setCheckState(new_state)
         
         self.update_status()
-        #self.auto_save_load_order() # this happens elsewhere (maybe uncomment)
         read_cfg(sync=False) # check for update
         if RELOAD_ON_INSTALL:
             self.load_mods()
 
     def rename_selected_mod(self):
         selected_items = self.mod_table.selectedItems()
-        if not selected_items:
-            return
+        if not selected_items: return
         
         row = selected_items[0].row()
         old_name = self.mod_table.item(row, 2).text()
         
         new_name, ok = QInputDialog.getText(
             self, "Rename Mod", "Enter new name:",
-            QLineEdit.EchoMode.Normal, old_name
-        )
+            QLineEdit.EchoMode.Normal, old_name)
         
         if ok and new_name and new_name != old_name:
             try:
@@ -1389,8 +1402,7 @@ class ModLoaderUserInterface(QMainWindow):
 
     def open_mod_folder(self):
         selected_items = self.mod_table.selectedItems()
-        if not selected_items:
-            return
+        if not selected_items: return
         
         row = selected_items[0].row()
         mod_name = self.mod_table.item(row, 2).text()
@@ -1410,8 +1422,7 @@ class ModLoaderUserInterface(QMainWindow):
             parent = parent.parent()
         
         selected_items = self.mod_table.selectedItems()
-        if not selected_items:
-            return
+        if not selected_items: return
         
         row = selected_items[0].row()
         mod_name = self.mod_table.item(row, 2).text()
@@ -1468,6 +1479,7 @@ class ModLoaderUserInterface(QMainWindow):
             super().keyPressEvent(event)
     
     def apply_scale(self):
+        # TODO: fix this (broken w/ other stylesheets)
         app = QApplication.instance()
         base_size = 9
         new_size = int(base_size * self._scale_factor)
@@ -1492,29 +1504,56 @@ class ModLoaderUserInterface(QMainWindow):
     def handle_file_drop(self, event):
         valid_extensions = {'.7z', '.zip', '.rar'}
         installed_count = 0
-        failed_files = []
         
-        valid_files = [
+        file_paths = [
             Path(url.toLocalFile())
             for url in event.mimeData().urls()
             if Path(url.toLocalFile()).suffix.lower() in valid_extensions and Path(url.toLocalFile()).is_file()
         ] 
-    
-        valid_files.sort(key=lambda p: p.stat().st_mtime)
-        
-        for file_path in valid_files:
-            try:
-                # Use GUI FOMOD installer, passing self as parent window
-                name = install_mod(str(file_path), gui=True, parent=self)
-                if name:
-                    self.add_mod(name, enabled=True)
-                    installed_count += 1
-            except Exception as e:
-                failed_files.append((file_path.name, str(e)))
-        
-        self.setStyleSheet("")
-        self._show_installation_results(installed_count, failed_files)
+        file_paths.sort(key=lambda p: p.stat().st_mtime)
+         
+        extract_thread=ExtractorThread(file_paths, self.cfg["SOURCE_DIR"], self) 
+        status_thread=StatusThread(self.status_label,Path(file_paths[0]).name)
+        self.extract_threads.append(extract_thread)
+        self.status_threads.append(status_thread)
+
+        extract_thread.archive_extracted.connect(lambda path,archive: self.handle_mod_install(path,archive))
+        extract_thread.progress.connect(lambda name: status_thread.set_name(name))
+        extract_thread.complete.connect(status_thread.done)
+        extract_thread.start()
+        status_thread.start()
+ 
+        self.setStyleSheet("") # this seems broken with extra stylesheets
         event.acceptProposedAction()
+
+    def add_mod_dialog(self):
+        file_paths, _ = QFileDialog.getOpenFileNames(
+            self, "Select Mod Archive(s)", "",
+            "Mod Archives (*.7z *.zip *.rar);;All Files (*)"
+        )
+        if not file_paths: return
+        file_paths.sort(key=lambda p: Path(p).stat().st_mtime)
+        
+        extract_thread=ExtractorThread(file_paths, self.cfg["SOURCE_DIR"], self) 
+        status_thread=StatusThread(self.status_label)
+        self.extract_threads.append(extract_thread)
+        self.status_threads.append(status_thread)
+
+        extract_thread.archive_extracted.connect(lambda path,archive: self.handle_mod_install(path,archive))
+        extract_thread.start()
+        status_thread.start()
+ 
+    def handle_mod_install(self, temp_dir, archive_path):
+        if not temp_dir:
+            QMessageBox.warning(self,
+                        "Installation Error",
+                        f"Encountered exception during mod extraction for archive:\n{Path(archive_path).name}")
+            return
+        name=install_mod(archive_path=archive_path, temp_dir=temp_dir, gui=True, parent=self)
+        if name: 
+            self.add_mod(name, enabled=True)
+            self.mod_table.scrollToBottom()
+            self.statusBar().showMessage(f"Successfully installed {name}", SHOW_MSG_TIME)
 
     def select_exe(self, text):
         if text=='': return

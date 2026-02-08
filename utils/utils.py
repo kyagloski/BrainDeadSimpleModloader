@@ -36,6 +36,14 @@ def fix_path_case(path):
 def ensure_dir(path):
     os.makedirs(path, exist_ok=True)
 
+def fix_dirname_used(output_dir):
+    name=output_dir.name
+    output_dir = next(
+        p for i in range(10**9)
+        if not (p := Path(output_dir).parent / f"{name}{'' if i == 0 else f'_{i}'}").exists())
+    name = str(Path(output_dir).name)
+    return output_dir, name
+
 def print_traceback():
     for line in traceback.format_stack()[:-1]: print(line.strip())
 

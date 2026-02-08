@@ -11,12 +11,12 @@ from collections import OrderedDict
 
 try: # can run cl or ui, import accordingly
     from utils.utils import * 
+    from utils.installer import *
     import utils.utils
-    import utils.installer as installer
     import utils.game_specific as game_specific
 except:
     from utils import * 
-    import installer
+    from installer import *
     import game_specific
     from gui import *
 
@@ -202,11 +202,15 @@ def perform_copy():
                 or file.endswith('.esp'):
                     plugins.append(file)
                 src_file = os.path.join(root, file)
-                copy_with_backup(
-                    src_file, dest_root, BACKUP_DIR,
-                    copied_manifest, backedup_manifest,
-                    TARGET_DIR
-                )
+                try:
+                    copy_with_backup(
+                        src_file, dest_root, BACKUP_DIR,
+                        copied_manifest, backedup_manifest,
+                        TARGET_DIR
+                    )
+                except Exception as e:
+                    print(f"encountered exception {str(e)} when restoring {filename}")
+                
     # only get latest copies
     copied_manifest = list(dict.fromkeys(copied_manifest))
     # save manifests
@@ -238,18 +242,23 @@ def restore():
         backedup_files = [line.strip() for line in f if line.strip()]
     # remove copied files
     for filename in copied_files:
-        path = os.path.join(TARGET_DIR, filename)
-        if not os.path.exists(path): continue
-        if VERBOSITY: print("unlinking: "+path) # status
-        if os.path.isdir(path): shutil.rmtree(path)
-        else: os.remove(path)
+        try:
+            path = os.path.join(TARGET_DIR, filename)
+            if not os.path.exists(path): continue
+            if VERBOSITY: print("unlinking: "+path) # status
+            if os.path.isdir(path): shutil.rmtree(path)
+            else: os.remove(path)
+        except Exception as e:
+            print(f"encountered exception {str(e)} when unlinking {filename}")
     # restore originals
     for filename in backedup_files:
         backup_path = os.path.join(BACKUP_DIR, filename)
         target_path = os.path.join(TARGET_DIR, filename)
         if os.path.exists(BACKUP_DIR):
             if VERBOSITY: print("restoring: "+target_path) # status
-            shutil.move(backup_path, target_path)
+            try: shutil.move(backup_path, target_path)
+            except Exception as e: 
+                print(f"encountered exception {str(e)} when restoring {filename}")
     # remove manifests
     os.unlink(COPY_MANIFEST)
     os.unlink(BACKUP_MANIFEST)
@@ -289,10 +298,14 @@ def sync_loadorder():
     if additions!=[] or exclusions!=[]: save_to_loadorder(loadorder+additions, verbose=False)
 
 
-def install_mod(mod_path, gui=False, parent=None):  
+def install_mod(archive_path=None, temp_dir=None, gui=False, parent=None):  
     read_cfg(sync=False)
-    name = installer.run(mod_path, SOURCE_DIR, gui, parent)
-    if not name: print(f"failed to install mod {mod_path}"); return None
+    if not gui:
+        temp_dir = Path(tempfile.mkdtemp())
+        result=extract_archive(archive_path, temp_dir)
+        if not result: print(f"failed to install mod {Path(archive_path).stem}"); return None
+    name = installer_run(archive_path=archive_path, output_dir=SOURCE_DIR, temp_dir=temp_dir, gui=gui, parent=parent)
+    if not name: print(f"failed to install mod {Path(archive_path).stem}"); return None
     with open(LOAD_ORDER, "a", encoding="utf-8") as f:
         f.write(name+'\n')
     if RELOAD_ON_INSTALL: perform_copy() #restore(); perform_copy()
@@ -315,7 +328,7 @@ def delete_mod(mod_name, gui=False):
             if line.strip() != mod: f.write(line)
     # delete dir
     try: shutil.rmtree(SOURCE_DIR/mod)
-    except: print("error: could not delete mod or mod does not exist in "+str(SOURCE_DIR))
+    except: print(f"error: could not delete {mod_name} or mod does not exist in {str(SOURCE_DIR)}")
     if RELOAD_ON_INSTALL: perform_copy() #restore(); perform_copy()
     print("deleted mod "+mod+"!")
 

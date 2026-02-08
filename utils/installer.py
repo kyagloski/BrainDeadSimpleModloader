@@ -9,7 +9,14 @@ import xml.etree.ElementTree as ET
 from pathlib import Path
 import argparse
 import subprocess
+
 from PyQt6.QtWidgets import QApplication, QMessageBox
+
+# Add .local to path
+local_site_packages = os.path.expanduser('~/.local/lib/python3.13/site-packages')
+if local_site_packages not in sys.path:
+    sys.path.insert(0, local_site_packages)
+import patoolib
 
 try:
     from fomod_gui import FomodInstallerDialog
@@ -18,66 +25,18 @@ except:
     from utils.fomod_gui import FomodInstallerDialog
     from utils.utils import * 
 
-try:
-    import rarfile
-    HAS_RAR = True
-except ImportError:
-    HAS_RAR = False
-
-try:
-    import py7zr
-    HAS_7Z = True
-except ImportError:
-    HAS_7Z = False
 
 DEBUG=False
 
-def extract_archive(archive_path, extract_to):
-    archive_path = Path(archive_path)
-    # install dir as is
+def extract_archive(archive_path, extract_path):
+    archive_path=Path(archive_path)
     if os.path.isdir(archive_path): shutil.copytree(archive_path, extract_to); return
-    # continue w/ archive extraction
-    ext = archive_path.suffix.lower()
-    print(f"Extracting {archive_path.name}...")
-    if ext == '.zip':
-        with zipfile.ZipFile(archive_path, 'r') as zip_ref:
-            zip_ref.extractall(extract_to)
-    elif ext == '.7z':
-        try:
-            if not HAS_7Z: raise Exception
-            with py7zr.SevenZipFile(archive_path, 'r') as archive:
-                archive.extractall(path=extract_to)
-            print("Extraction complete!")
-            return True
-        except:
-            print("Extracting file "+str(archive_path)+" with 7z...")
-            result = subprocess.run(['7z', 'x', str(archive_path), f'-o{extract_to}', '-y'], capture_output=True, text=True)
-            if result.returncode == 0: print("Extraction complete!"); return True
-            else: print(f"7z command failed: {result.stderr}")
-            print("error: Could not extract 7z file. Install py7zr (pip install py7zr) or 7z command line tool")
-            return False
-    elif ext == '.rar':
-        try:
-            if not HAS_RAR: raise Exception
-            with rarfile.RarFile(archive_path, 'r') as rar_ref:
-                rar_ref.extractall(extract_to)
-            print("Extraction complete!")
-            return True
-        except:
-            print("Extracting file "+str(archive_path)+" with unrar...")
-            result = subprocess.run(['unrar', 'x', '-y', str(archive_path), str(extract_to)],
-                                    capture_output=True, text=True)
-            if result.returncode == 0:
-                print("Extraction complete!")
-                return True
-            else: print(f"unrar command failed: {result.stderr}")
-        print("error: Could not extract rar file. Install rarfile (pip install rarfile) or unrar command line tool")
+    try:
+        patoolib.extract_archive(archive_path, outdir=extract_path, verbosity=-1)
+        return True
+    except Exception as e:
+        print(f"encountered exception during extract: {str(e)}")
         return False
-    else:
-        print("error: Unsupported archive format for "+str(archive_path))
-        return False
-    print("Extraction complete!")
-    return True
 
 
 def find_fomod_config(extract_dir):
@@ -91,9 +50,9 @@ def find_fomod_config(extract_dir):
     ]
     extract_path = Path(extract_dir)
     for path in common_paths:
-        full_path = Path(fix_path_case(extract_path / path))
+        if os.name=="posix": full_path = Path(fix_path_case(extract_path / path))
+        else: full_path=extract_path/path
         if full_path.exists():
-            print(f"found FOMOD config at: {full_path}")
             return full_path
     
     return None
@@ -379,9 +338,10 @@ def extract_files_info(files_elem, ns):
             file_list.append(('folder', source, destination))
     return file_list
 
-def process_fomod(fomod_path, extract_dir, output_dir, parent=None):
+def process_fomod(archive_path, extract_dir, output_dir, parent=None):
     """Process FOMOD configuration using GUI with dynamic step evaluation"""
-    
+    fomod_path=find_fomod_config(extract_dir)
+    print(f"found FOMOD config at: {fomod_path}")
     # Parse FOMOD structure
     fomod_data = parse_fomod_structure(fomod_path, extract_dir)
     
@@ -392,7 +352,7 @@ def process_fomod(fomod_path, extract_dir, output_dir, parent=None):
             "No Options",
             f"Mod '{fomod_data['mod_name']}' has no installation options.\nAll files will be copied."
         )
-        return []
+        return None
     
     # Create GUI dialog with full fomod_data for dynamic evaluation
     if parent:
@@ -413,8 +373,9 @@ def process_fomod(fomod_path, extract_dir, output_dir, parent=None):
         if fomod_data['required_files']:
             result = dialog.exec()
             if result and not dialog.user_cancelled:
-                install_fomod_files(fomod_data['required_files'], extract_dir, output_dir)
-                return fomod_data['required_files']
+                mod_name = install_fomod_files(fomod_data['required_files'], extract_dir, output_dir)
+                #return fomod_data['required_files']
+                return mod_name
         return None
     
     # Build initial visible steps dynamically
@@ -427,8 +388,9 @@ def process_fomod(fomod_path, extract_dir, output_dir, parent=None):
         if fomod_data['required_files']:
             result = dialog.exec()
             if result and not dialog.user_cancelled:
-                install_fomod_files(fomod_data['required_files'], extract_dir, output_dir)
-                return fomod_data['required_files']
+                mod_name = install_fomod_files(fomod_data['required_files'], extract_dir, output_dir)
+                #return fomod_data['required_files']
+                return mod_name
         return None
     
     # Run dialog
@@ -444,16 +406,18 @@ def process_fomod(fomod_path, extract_dir, output_dir, parent=None):
         # Install files
         all_files = fomod_data['required_files'] + results['selected_files'] + conditional_files
         if all_files:
-            install_fomod_files(all_files, extract_dir, output_dir)
+            mod_name = install_fomod_files(archive_path, all_files, extract_dir, output_dir)
         #return results['selected_files']+conditional_files # idk about this one
-        return all_files
+        return mod_name
     return None  # User cancelled
 
-def install_fomod_files(file_list, extract_dir, output_dir):
+def install_fomod_files(archive_path, file_list, extract_dir, output_dir):
     """Copy selected files to output directory."""
-    extract_path = Path(extract_dir)
-    output_path = Path(output_dir)
-    output_path.mkdir(parents=True, exist_ok=True)
+    extract_dir = Path(extract_dir)
+    mod_name = Path(archive_path).stem
+    output_dir = Path(output_dir)/mod_name
+    if os.path.isdir(output_dir): output_dir, mod_name=fix_dirname_used(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
 
     print("\n" + "="*80)
     print("Installing files...")
@@ -462,7 +426,7 @@ def install_fomod_files(file_list, extract_dir, output_dir):
     for file_type, source, destination in file_list:
         # Try to find source case-insensitively
         source_parts = source.replace('\\', '/').split('/')
-        current_path = extract_path
+        current_path = extract_dir
         
         for part in source_parts:
             found = False
@@ -476,7 +440,7 @@ def install_fomod_files(file_list, extract_dir, output_dir):
                 print(f"warning: Could not find {source}")
                 break
         else:
-            dest_path = output_path / destination
+            dest_path = output_dir / destination
             if file_type == 'file' and current_path.is_file():
                 dest_path.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy2(current_path, dest_path)
@@ -486,11 +450,15 @@ def install_fomod_files(file_list, extract_dir, output_dir):
                 #    shutil.rmtree(dest_path)
                 shutil.copytree(current_path, dest_path, dirs_exist_ok=True)
                 print(f"installed folder: {current_path} to {destination}")
-    print(f"\ninstallation complete! files installed to: {output_path}")
+    print(f"\ninstallation complete! files installed to: {output_dir}")
+    return mod_name
 
-def install_mod_files(temp_dir, output_dir):
+def install_mod_files(archive_path, temp_dir, output_dir):
     print("copying files from non-FOMOD archive...")
     # Copy everything from temp to output
+    mod_name = Path(archive_path).stem
+    output_dir=Path(output_dir)/mod_name
+    if os.path.isdir(output_dir): output_dir,mod_name=fix_dirname_used(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     temp_path = Path(temp_dir)
     for item in temp_path.iterdir():
@@ -504,28 +472,16 @@ def install_mod_files(temp_dir, output_dir):
             shutil.copytree(item, dest)
             print(f"copied folder: {item.name}")
     print(f"\nall files copied to: {output_dir}")
+    return mod_name
 
-
-def run(archive_path=None, output_dir=None, gui=False, parent=None):
-    archive_name = Path(archive_path).stem
-    output_dir = Path(output_dir) / f"{archive_name}"
-    
-    # handle dups
-    output_dir = next(
-        p for i in range(10**9)
-        if not (p := Path(output_dir).parent / f"{archive_name}{'' if i == 0 else f'_{i}'}").exists())
-    archive_name = str(Path(output_dir).name) # reassign in case of change
-
+def installer_run(archive_path=None, output_dir=None, temp_dir=None, gui=False, parent=None):
     try:
-        temp_dir = Path(tempfile.mkdtemp())
-        extract_archive(archive_path, temp_dir)
         temp_dir = find_mod_base_dir(Path(temp_dir))
-        config_path = find_fomod_config(temp_dir)
-        if config_path:
-            res = process_fomod(config_path, temp_dir, output_dir, parent)
-            if not res: return None
-        if not config_path or not res:
-            res = install_mod_files(temp_dir, output_dir)
+        is_fomod = find_fomod_config(temp_dir)
+        if is_fomod:
+            mod_name = process_fomod(archive_path, temp_dir, output_dir, parent)
+        else:
+            mod_name = install_mod_files(archive_path, temp_dir, output_dir)
     except Exception as e:
         if gui:
             QMessageBox.warning(parent,
@@ -535,7 +491,7 @@ def run(archive_path=None, output_dir=None, gui=False, parent=None):
         return None
     try: shutil.rmtree(temp_dir); print("removed tmp extract dir")
     except: print("warning: could not remove tmp extract dir")
-    return archive_name
+    return mod_name
 
 
 if __name__ == '__main__':
@@ -559,4 +515,4 @@ if __name__ == '__main__':
     if args.output: output_dir = Path(args.output)
     else: output_dir = Path.cwd()
 
-    run(archive_path, output_dir, gui=args.gui)
+    installer_run(archive_path, output_dir, gui=args.gui)
