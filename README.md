@@ -44,7 +44,10 @@ After configuring your target path you should be greeted with a screen such as t
 After initial setup, you can install mods using either of the following methods:
 - Click the **"+"** button on the bottom toolbar
 - Drag and drop one or more mod files into the center window
-
+  
+Acceptable File Formats
+- 7z, RAR, Zip, Directories
+  
 Installed mods are stored in a staging directory located at `./BrainDeadSimpleModloader/mods/` within the application's root folder (default configuration).
 
 Example of multiple mod install by dragging and dropping files
