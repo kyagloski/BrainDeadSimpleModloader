@@ -220,14 +220,16 @@ class ReorderOnlyTable(QTableWidget):
 
     def create_row_from_data(self, row, data):
         if data['is_separator']:
-            self._create_separator_items(row, data['collapse_state'], data['name'])
+            self._create_separator_items(row, data['name'])
         else:
             self._create_mod_items(row, data['name'], data['checkbox'])
         
         if data['hidden']:
             self.setRowHidden(row, True)
     
-    def _create_separator_items(self, row, collapse_state, name):
+    def _create_separator_items(self, row, name):
+        if name[0]==">": collapse_state="▶"
+        else: collapse_state="▼"
         priority_item = QTableWidgetItem(collapse_state)
         priority_item.setFlags(Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsSelectable | Qt.ItemFlag.ItemIsDragEnabled)
         priority_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -237,10 +239,11 @@ class ReorderOnlyTable(QTableWidget):
         checkbox_item.setFlags(Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsSelectable | Qt.ItemFlag.ItemIsDragEnabled)
         self.setItem(row, 1, checkbox_item)
         
-        name_item = QTableWidgetItem(name)
+        name_item = QTableWidgetItem(name.lstrip(">v#"))
         name_item.setFlags(Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsSelectable | Qt.ItemFlag.ItemIsDragEnabled)
         font = name_item.font()
         font.setBold(True)
+        font.setUnderline(True)
         name_item.setFont(font)
         name_item.setData(Qt.ItemDataRole.UserRole, "separator")
         name_item.setData(Qt.ItemDataRole.UserRole + 1, name)
@@ -675,12 +678,14 @@ class ModLoaderUserInterface(QMainWindow):
     def _load_initial_data(self, reload=False):
         mods = load_list()
         for mod in mods:
-            if mod.startswith('#'):
-                self.add_separator(mod[1:].strip())
+            if mod.startswith('>#') or mod.startswith('v#') or mod.startswith('#'):
+                self.add_separator(mod)
             elif mod.startswith('*') or mod.startswith('~'):
                 self.add_mod(mod.lstrip("*~"), False)
             else:
                 self.add_mod(mod, True)
+
+        self.reset_all_separator_state()
         
         self.update_status()
         self.update_unload_button_state()
@@ -732,7 +737,7 @@ class ModLoaderUserInterface(QMainWindow):
                 with open(plugins_file, 'r', encoding='utf-8', errors='ignore') as f:
                     for line in f:
                         line = line.strip()
-                        if line and not line.startswith('#'):
+                        if line and not (line.startswith('#') or line.startswith(">#") or line.startswith("v#")):
                             self.plugins_list.addTopLevelItem(QTreeWidgetItem([line]))
         except Exception:
             pass
@@ -799,17 +804,20 @@ class ModLoaderUserInterface(QMainWindow):
     def add_mod(self, name, enabled, is_separator=False):
         row = self.mod_table.rowCount()
         self.mod_table.insertRow(row)
-        
+       
         if is_separator:
-            self.mod_table._create_separator_items(row, "▼", name)
+            self.mod_table._create_separator_items(row, name)
             self._separator_rows[row] = False
         else:
             priority = sum(1 for r in range(row) if not self.is_separator_row(r)) + 1
             self.mod_table._create_mod_items(row, name, Qt.CheckState.Checked if enabled else Qt.CheckState.Unchecked)
             self.mod_table.item(row, 0).setText(str(priority))
 
-    def add_separator(self, name="New Separator"):
-        self.add_mod(name, False, is_separator=True)
+    def add_separator(self, name="v#New Separator"):
+        #if name[0]==">": collapse_state=True
+        #else: collapse_state=False
+        enabled=False
+        self.add_mod(name, enabled, is_separator=True)
 
     def is_separator_row(self, row):
         name_item = self.mod_table.item(row, 2)
@@ -818,6 +826,15 @@ class ModLoaderUserInterface(QMainWindow):
     def get_separator_name(self, row):
         name_item = self.mod_table.item(row, 2)
         return name_item.data(Qt.ItemDataRole.UserRole + 1) if name_item else ""
+
+    def get_separator_from_mod(self,mod_row):
+        sep_row=-1
+        for r in range(mod_row,-1,-1):
+            if not self.is_separator_row(r): continue
+            sep_row=r
+            break
+        return sep_row
+
 
     def toggle_separator_collapse(self, row):
         if not self.is_separator_row(row): return
@@ -834,6 +851,13 @@ class ModLoaderUserInterface(QMainWindow):
         priority_item.setText("▼" if is_collapsed else "▶")
         for r in range(row + 1, next_separator):
             self.mod_table.setRowHidden(r, not is_collapsed)
+
+    def reset_all_separator_state(self):
+        mods = load_list()
+        for r in range(self.mod_table.rowCount()):
+            if not self.is_separator_row(r): continue
+            # toggle twice to hide mods
+            self.toggle_separator_collapse(r);self.toggle_separator_collapse(r)
 
     def load_mods(self):
         try:
@@ -952,7 +976,7 @@ class ModLoaderUserInterface(QMainWindow):
             collapse_state = self.mod_table.item(from_row, 0).text()
             self.mod_table.removeRow(from_row)
             self.mod_table.insertRow(to_row)
-            self.mod_table._create_separator_items(to_row, collapse_state, separator_name)
+            self.mod_table._create_separator_items(to_row, separator_name)
         else:
             checkbox_state = self.mod_table.item(from_row, 1).checkState()
             mod_name = self.mod_table.item(from_row, 2).text()
@@ -974,7 +998,7 @@ class ModLoaderUserInterface(QMainWindow):
             }
             mods = []
             for mod in original_mods:
-                if mod.startswith('#'):
+                if mod.startswith('#') or mod.startswith('>#') or mod.startswith('v#'):
                     mods.append(mod)
                 else:
                     clean_name = mod.lstrip('*~')
@@ -986,7 +1010,10 @@ class ModLoaderUserInterface(QMainWindow):
             mods = []
             for row in range(self.mod_table.rowCount()):
                 if self.is_separator_row(row):
-                    mods.append('#' + self.get_separator_name(row))
+                    collapse_state = self.mod_table.item(row, 0).text()
+                    if collapse_state=="▶": prefix=">#"
+                    else: prefix="v#"
+                    mods.append(prefix+self.get_separator_name(row).lstrip(">v#"))
                 else:
                     if not self.mod_table.item(row,2): continue
                     mod_name = self.mod_table.item(row, 2).text()
@@ -1054,6 +1081,12 @@ class ModLoaderUserInterface(QMainWindow):
         for row in range(self.mod_table.rowCount()):
             mod_name = self.mod_table.item(row, 2).text()
             self.mod_table.setRowHidden(row, text.lower() not in mod_name.lower())
+        if text=="": 
+            # expand seps if items selected under them
+            for item in self.mod_table.selectedItems():
+                self._expand_selected_separators(mod=item.row())
+            # set sep state
+            self.reset_all_separator_state()
     
     def update_priority_numbers(self):
         priority = 1
@@ -1099,7 +1132,7 @@ class ModLoaderUserInterface(QMainWindow):
             self.mod_table.insertRow(row)
             
             if is_sep:
-                self.mod_table._create_separator_items(row, priority_num, separator_name)
+                self.mod_table._create_separator_items(row, separator_name)
             else:
                 self.mod_table._create_mod_items(row, mod_name, checkbox_state)
                 self.mod_table.item(row, 0).setText(priority_num)
@@ -1119,8 +1152,8 @@ class ModLoaderUserInterface(QMainWindow):
         self._loading = True
         mods = load_list()
         for mod in mods:
-            if mod.startswith('#'):
-                self.add_separator(mod[1:].strip())
+            if mod.startswith('>#') or mod.startswith('v#') or mod.startswith('#'):
+                self.add_separator(mod)
             elif mod.startswith('*') or mod.startswith('~'):
                 self.add_mod(mod.lstrip("*~"), False)
             else:
@@ -1276,7 +1309,7 @@ class ModLoaderUserInterface(QMainWindow):
             QLineEdit.EchoMode.Normal, "New Separator")
         if ok and name:
             self.mod_table.insertRow(row)
-            self.mod_table._create_separator_items(row, "▼", name)
+            self.mod_table._create_separator_items(row, name)
             self.update_priority_numbers()
             self.auto_save_load_order()
 
@@ -1326,11 +1359,17 @@ class ModLoaderUserInterface(QMainWindow):
         self.update_status()
         self.auto_save_load_order()
 
-    def _collapse_selected_separators(self, row):
+    def _collapse_selected_separators(self, row=None, mod=None):
+        if mod:
+            row=self.get_separator_from_mod(mod)
+            if row==-1: return
         priority_item = self.mod_table.item(row, 0)
         if priority_item.text() == "▼": self.toggle_separator_collapse(row)
     
-    def _expand_selected_separators(self, row):
+    def _expand_selected_separators(self, row=None, mod=None):
+        if mod:
+            row=self.get_separator_from_mod(mod)
+            if row==-1: return
         priority_item = self.mod_table.item(row, 0)
         if priority_item.text() == "▶": self.toggle_separator_collapse(row)
 
@@ -1552,7 +1591,6 @@ class ModLoaderUserInterface(QMainWindow):
         self.extract_threads.append(extract_thread)
         self.status_threads.append(status_thread)
 
-        #extract_thread.archive_extracted.connect(lambda path,archive: self.handle_mod_install(path,archive))
         extract_thread.progress.connect(lambda file: status_thread.set_file(file))
         extract_thread.temp_complete.connect(status_thread.set_temp_complete)
         extract_thread.complete.connect(status_thread.done)
@@ -1571,11 +1609,10 @@ class ModLoaderUserInterface(QMainWindow):
         file_paths.sort(key=lambda p: Path(p).stat().st_mtime)
         
         extract_thread=ExtractorThread(file_paths, self.cfg["SOURCE_DIR"], self) 
-        status_thread=StatusThread(self.status_label)
+        status_thread=StatusThread(self.status_label,Path(file_paths[0]))
         self.extract_threads.append(extract_thread)
         self.status_threads.append(status_thread)
 
-        #extract_thread.archive_extracted.connect(lambda path,archive: self.handle_mod_install(path,archive))
         extract_thread.progress.connect(lambda file: status_thread.set_file(file))
         extract_thread.temp_complete.connect(status_thread.set_temp_complete)
         extract_thread.complete.connect(status_thread.done)

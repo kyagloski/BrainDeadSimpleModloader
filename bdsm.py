@@ -166,6 +166,8 @@ def perform_copy():
     for dirname in load_order:
         if dirname.startswith('*') \
         or dirname.startswith('#') \
+        or dirname.startswith('>') \
+        or dirname.startswith('v') \
         or dirname.startswith('~'): # skip mods
             continue
         source_path = os.path.join(SOURCE_DIR, dirname)
@@ -290,11 +292,14 @@ def sync_loadorder():
     for mod in os.listdir(SOURCE_DIR):
         if mod not in clean_loadorder: additions.append('~'+mod)
     for mod in loadorder:
-        if any(mod.startswith(sub) for sub in ['~','*','#']): continue
+        if any(mod.startswith(sub) for sub in ['~','*','#','>','v']): continue
         #if any(mod.startswith(sub) for sub in ['#']): continue
         if mod not in os.listdir(SOURCE_DIR): exclusions.append(mod)
     loadorder = [x for x in loadorder if x not in exclusions] # remove exclusions
-    loadorder = [item for i, item in enumerate(loadorder) if item.startswith('#') or item not in loadorder[:i]]
+    loadorder = [item for i, item in enumerate(loadorder) if item.startswith('>#') 
+                                                          or item.startswith('v#')
+                                                          or item.startswith('#')
+                                                          or item not in loadorder[:i]]
     if additions!=[] or exclusions!=[]: save_to_loadorder(loadorder+additions, verbose=False)
 
 
@@ -317,7 +322,7 @@ def delete_mod(mod_name, gui=False):
     read_cfg(sync=False)
     matches = [mod for mod in load_list() if mod_name.lower() in mod.lower()]
     if matches==[]: print("error: could not find mod "+mod_name); return
-    mod = matches[0].lstrip('*~#')
+    mod = matches[0].lstrip('*~#>v')
     if not gui: 
         prompt="are you sure you want to remove mod "+mod+" [y/N] "
         if 'y' not in input(prompt): return
@@ -342,7 +347,7 @@ def rename_mod(old_name, new_name):
         os.rename(Path(SOURCE_DIR) / old_name, Path(SOURCE_DIR) / new_name)
     else: print("error: cannot find mod dir "+str(Path(SOURCE_DIR) / old_name)); return
     loadorder = Path(LOAD_ORDER)
-    llist = [line.strip().lstrip('*~#') for line in loadorder.read_text(encoding="utf-8").splitlines()]
+    llist = [line.strip().lstrip('*~#>v') for line in loadorder.read_text(encoding="utf-8").splitlines()]
     llist[llist.index(old_name)] = new_name
     loadorder.write_text("\n".join(llist), encoding="utf-8")
     print("successfully renamed mod "+old_name+" to "+new_name)
