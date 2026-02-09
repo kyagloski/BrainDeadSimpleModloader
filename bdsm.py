@@ -280,14 +280,15 @@ def restore():
             try: shutil.move(backup_path, target_path)
             except Exception as e: 
                 print(f"encountered exception {str(e)} when restoring {filename}")
+    game_specific.write_plugins(COMPAT_DIR, BACKUP_DIR, []) # write default plugins
     # remove manifests
     os.unlink(COPY_MANIFEST)
     os.unlink(BACKUP_MANIFEST)
     print("deleted manifests...")
     # clean all symlinks (if install broke) (maybe risky idk)
     remove_symlink_rec(TARGET_DIR)
-    if os.path.exists(BACKUP_DIR / Path("plugins.txt")): os.unlink(BACKUP_DIR / Path("plugins.txt"))
-    if os.path.exists(BACKUP_DIR / Path("Plugins.txt")): os.unlink(BACKUP_DIR / Path("Plugins.txt"))
+    #if os.path.exists(BACKUP_DIR / Path("plugins.txt")): os.unlink(BACKUP_DIR / Path("plugins.txt"))
+    #if os.path.exists(BACKUP_DIR / Path("Plugins.txt")): os.unlink(BACKUP_DIR / Path("Plugins.txt"))
     
     print('-'*40)
     print("unload complete!")

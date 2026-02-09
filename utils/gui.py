@@ -173,13 +173,12 @@ class StatusThread(QThread):
     def done(self):
         self.stopped=True
 
-
 class ReorderOnlyTable(QTableWidget):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self._drag_row = -1
         self._drop_row = -1
-    
+
     def is_separator_row(self, row):
         name_item = self.item(row, 2)
         return name_item and name_item.data(Qt.ItemDataRole.UserRole) == "separator"
@@ -745,8 +744,10 @@ class ModLoaderUserInterface(QMainWindow):
     def update_unload_button_state(self):
         try:
             backup_path = Path(BACKUP_DIR)
-            self.unload_button.setEnabled(backup_path.exists() and any(backup_path.iterdir()))
-        except Exception:
+            state=False
+            if backup_path.exists() and "backup_manifest.txt" in os.listdir(backup_path): state=True
+            self.unload_button.setEnabled(state)
+        except Exception as e:
             self.unload_button.setEnabled(False)
 
     def on_mod_selected(self):
@@ -863,8 +864,8 @@ class ModLoaderUserInterface(QMainWindow):
         try:
             read_cfg(sync=False) # check for update
             self.executor.add_command(perform_copy, tuple())
-            self.update_unload_button_state()
-            self.load_plugins_list()
+            self.executor.commands_finished.connect(self.load_plugins_list)
+            self.executor.commands_finished.connect(self.update_unload_button_state)
             self.statusBar().showMessage("Mods loaded successfully", SHOW_MSG_TIME)
         except Exception as e:
             QMessageBox.warning(self, "Load Error", f"Failed to load mods:\n{str(e)}")
@@ -873,8 +874,8 @@ class ModLoaderUserInterface(QMainWindow):
         try:
             read_cfg(sync=False) # check for update
             self.executor.add_command(restore, tuple())
-            self.update_unload_button_state()
-            self.load_plugins_list()
+            self.executor.commands_finished.connect(self.load_plugins_list)
+            self.executor.commands_finished.connect(self.update_unload_button_state)
             self.statusBar().showMessage("Mods unloaded successfully", SHOW_MSG_TIME)
         except Exception as e:
             QMessageBox.warning(self, "Unload Error", f"Failed to unload mods:\n{str(e)}")
