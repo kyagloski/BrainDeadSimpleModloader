@@ -14,7 +14,7 @@ except: from utils import *
 
 # preloaded plugins required in plugins.txt file
 GAME_PLUGINS      = { "Fallout3"               : "Anchorage.esm\nBrokenSteel.esm\nFallout3.esm\nPointLookout.esm\nThePitt.esm\nZeta.esm\n",
-                      "FalloutNV"              : "FalloutNV.esm\nCaravanPack.esm\nClassicPack.esm\nDeadMoney.esm\nGunRunnersArsenal.esm\nHonestHearts.esm\nLonesomeRoad.esm\nMercenaryPack.esm\nOldWorldBlues.esm\nTribalPack.esm\n",
+                      "FalloutNV"              : "FalloutNV.esm\nDeadMoney.esm\nHonestHearts.esm\nOldWorldBlues.esm\nLonesomeRoad.esm\nGunRunnersArsenal.esm\nTribalPack.esm\nClassicPack.esm\nMercenaryPack.esm\nCaravanPack.esm\n",
                       "Fallout4"               : "",
                       "Fallout4VR"             : "",
                       "Oblivion"               : "DLCHorseArmor.esp\nDLCMehrunesRazor.esp\nKnights.esp\nDLCShiveringIsles.esp\nDLCVileLair.esp\nDLCFrostcrag.esp\nDLCBattlehornCastle.esp\nDLCSpellTomes.esp\nDLCThievesDen.esp\n",

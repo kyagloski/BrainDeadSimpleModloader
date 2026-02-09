@@ -35,6 +35,7 @@ COMPAT_DIR        = TARGET_DIR/"compat"
 RELOAD_ON_INSTALL = False
 UPDATE_ON_CLOSE   = True
 LINK_ON_LAUNCH    = True
+EXECUTABLES       = dict()
 
 VERBOSITY         = False
 OPERATION_TIMEOUT = 500 # 0.5s
@@ -77,7 +78,9 @@ def create_cfg(gui=False):
     read_cfg()
 
 def read_cfg(sync=True, gui=False):
-    global SOURCE_DIR, TARGET_DIR, COMPAT_DIR, LOAD_ORDER, INI_DIR, RELOAD_ON_INSTALL, UPDATE_ON_CLOSE, LINK_ON_LAUNCH
+    global SOURCE_DIR, TARGET_DIR, COMPAT_DIR, LOAD_ORDER
+    global INI_DIR, RELOAD_ON_INSTALL, UPDATE_ON_CLOSE
+    global LINK_ON_LAUNCH, EXECUTABLES
     # TODO: make this smarter, add missing entries automatically
     if not os.path.exists(CONFIG_FILE): 
         try: create_cfg(gui); return
@@ -93,12 +96,29 @@ def read_cfg(sync=True, gui=False):
     RELOAD_ON_INSTALL=bool(cfg_dict["RELOAD_ON_INSTALL"])
     UPDATE_ON_CLOSE=bool(cfg_dict["UPDATE_ON_CLOSE"])
     LINK_ON_LAUNCH=bool(cfg_dict["LINK_ON_LAUNCH"])
-    # TODO: make sure executables are somewhat populated here
-
+    EXECUTABLES=game_specific.get_launchers(TARGET_DIR,COMPAT_DIR)
+    fix_cfg(cfg_dict)
+    
     ensure_dir(PRESET_DIR)
     ensure_dir(SOURCE_DIR)
     if sync: sync_loadorder() # just in case
     return cfg_dict
+
+
+def fix_cfg(cfg_dict):
+    # add potential missing execs
+    added=False
+    values = [v for sub_dict in cfg_dict["EXECUTABLES"].values() for v in sub_dict.values()]
+    for exe in EXECUTABLES:
+        if EXECUTABLES[exe]["PATH"] not in values: 
+            cfg_dict["EXECUTABLES"][exe]=dict()
+            cfg_dict["EXECUTABLES"][exe]["PATH"]=EXECUTABLES[exe]["PATH"]
+            cfg_dict["EXECUTABLES"][exe]["PARAMS"]=""
+            cfg_dict["EXECUTABLES"][exe]["SELECTED"]=False
+            added=True
+        
+    if added: write_cfg(cfg_dict)
+
 
 def write_cfg(d):
     with open(CONFIG_FILE, "w") as f: 

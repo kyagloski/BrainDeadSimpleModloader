@@ -205,6 +205,7 @@ class ExeManager(QMainWindow):
     def remove_item(self):
         """Remove the selected item from the list"""
         current_row = self.list_widget.currentRow()
+        name = self.list_widget.item(current_row).text()
         if current_row >= 0:
             # Confirm deletion
             reply = QMessageBox.question(self, 'Remove Item', 
@@ -223,6 +224,9 @@ class ExeManager(QMainWindow):
                     self.clear_fields()
                     self.set_fields_enabled(False)
                     self.current_item_index = -1
+
+                del self.cfg["EXECUTABLES"][name]
+                bdsm.write_cfg(self.cfg)
                     
     def move_item_up(self):
         """Move the selected item up in the list"""
