@@ -325,9 +325,14 @@ class ExeManager(QMainWindow):
                     return
             
             item = self.items[self.current_item_index]
-            if item.title!=new_title: 
+            if item.title!=new_title and item.title in self.cfg["EXECUTABLES"]:
                 del self.cfg["EXECUTABLES"][item.title] # rename occured
                 self.cfg["EXECUTABLES"][new_title]=dict()
+                self.cfg["EXECUTABLES"][new_title]["SELECTED"]=False
+            elif item.title not in self.cfg["EXECUTABLES"]:
+                self.cfg["EXECUTABLES"][new_title]=dict()
+                self.cfg["EXECUTABLES"][new_title]["PATH"]=""
+                self.cfg["EXECUTABLES"][new_title]["PARAMS"]=""
                 self.cfg["EXECUTABLES"][new_title]["SELECTED"]=False
             item.title = new_title
             item.path = self.path_edit.text()

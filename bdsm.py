@@ -166,8 +166,8 @@ def perform_copy():
     for dirname in load_order:
         if dirname.startswith('*') \
         or dirname.startswith('#') \
-        or dirname.startswith('>') \
-        or dirname.startswith('v') \
+        or dirname.startswith('>#') \
+        or dirname.startswith('v#') \
         or dirname.startswith('~'): # skip mods
             continue
         source_path = os.path.join(SOURCE_DIR, dirname)
