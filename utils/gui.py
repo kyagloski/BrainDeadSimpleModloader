@@ -738,8 +738,7 @@ class ModLoaderUserInterface(QMainWindow):
                         line = line.strip()
                         if line and not (line.startswith('#') or line.startswith(">#") or line.startswith("v#")):
                             self.plugins_list.addTopLevelItem(QTreeWidgetItem([line]))
-        except Exception:
-            pass
+        except Exception: pass
 
     def update_unload_button_state(self):
         try:

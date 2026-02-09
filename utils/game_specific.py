@@ -226,6 +226,7 @@ def restore_ini(compat_dir, back_dir, ui=False):
         if not input("are you sure you want to restore from backup "+num+"? [y/N] ").lower().startswith('y'): return
         back_dir=back_dir/(backs[int(num)-1])
     files=[back_dir/i for i in os.listdir(back_dir)]
+    ini_files=[set_full_perms_file(Path(ini_dir)/f) for f in os.listdir(ini_dir) if f.endswith(".ini")]
     try: [shutil.copy2(f, ini_dir) for f in files] 
     except Exception as e: 
         print("error: could not restore ini files, "+str(e)); 

@@ -53,6 +53,14 @@ def set_full_perms_dir(d):
     for item in d.rglob('*'):
         try: item.chmod(mode)
         except Exception as e: print(f"{str(e)} when setting permissions on {str(item)}")
+    return d
+
+def set_full_perms_file(f):
+    f = Path(f)
+    mode = stat.S_IRWXU | stat.S_IRWXG | stat.S_IRWXO
+    try: f.chmod(mode)
+    except Exception as e: print(f"{str(e)} when setting permissions on {str(f)}")
+    return f
 
 def print_traceback():
     for line in traceback.format_stack()[:-1]: print(line.strip())

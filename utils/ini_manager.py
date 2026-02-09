@@ -410,7 +410,7 @@ class INIManager(QMainWindow):
         # restore
         res,exc=restore_ini(self.compat_dir, self.selected_backup_file, ui=True)
 
-        if res: QMessageBox.information(self, "Success", f"{self.selected_backup_file} restored to:\n{self.current_dir}")
+        if res: QMessageBox.information(self, "Success", f"Successfully restored INIs to:\n{Path(self.selected_backup_file).name}")
         else: QMessageBox.information(self, "Failure", f"Failed to restore ini files\nEncountered exception: {exc}")
         # Refresh right tree
         self.right_model.setRootPath(str(self.current_dir))
