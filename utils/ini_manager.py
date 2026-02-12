@@ -13,6 +13,7 @@ from PyQt6.QtCore import Qt, QDir, QEvent
 from PyQt6.QtGui import QFont, QColor, QSyntaxHighlighter, QTextCharFormat, QFileSystemModel, QShortcut, QKeySequence, QTextCursor, QTextDocument  # Add QTextCursor, QTextDocument
 
 from game_specific import *
+from utils import *
 
 class IniSyntaxHighlighter(QSyntaxHighlighter):
     """Syntax highlighter for INI files"""
@@ -327,10 +328,14 @@ class INIManager(QMainWindow):
             return
         
         try:
+            set_full_perms_file(self.selected_current_file) 
             with open(self.selected_current_file, 'w', encoding='utf-8') as f:
                 f.write(self.right_editor.toPlainText())
             self.save_btn.setEnabled(False)
             self.right_editor_modified = False
+            self.right_model.setRootPath(str(self.current_dir))
+            self.right_tree.setRootIndex(self.right_model.index(str(self.current_dir)))
+            self.right_editor.setPlainText("")
             QMessageBox.information(self, "Success", "File saved successfully!")
         except Exception as e:
             QMessageBox.warning(self, "Error", f"Could not save file:\n{str(e)}")

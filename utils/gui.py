@@ -15,7 +15,7 @@ from PyQt6.QtWidgets import (
     QTreeWidget, QTreeWidgetItem, QTableWidget, QTableWidgetItem, 
     QPushButton, QSplitter, QLabel, QLineEdit, QMenu, QMessageBox, 
     QComboBox, QFileDialog, QInputDialog, QTextEdit, QToolButton, 
-    QSplashScreen
+    QSplashScreen, QToolTip
 )
 from PyQt6.QtCore import ( Qt, QItemSelectionModel, QObject, QThread, 
     QWaitCondition, pyqtSignal, QMutex, QMutexLocker, QTimer, QPoint, 
@@ -214,14 +214,15 @@ class ReorderOnlyTable(QTableWidget):
             'is_separator': False,
             'name': self.item(row, 2).text(),
             'checkbox': self.item(row, 1).checkState(),
-            'hidden': self.isRowHidden(row)
+            'hidden': self.isRowHidden(row),
+            'conflicts': self.item(row,3).text()
         }
 
     def create_row_from_data(self, row, data):
         if data['is_separator']:
             self._create_separator_items(row, data['name'])
         else:
-            self._create_mod_items(row, data['name'], data['checkbox'])
+            self._create_mod_items(row, data['name'], data['checkbox'], data['conflicts'])
         
         if data['hidden']:
             self.setRowHidden(row, True)
@@ -248,7 +249,7 @@ class ReorderOnlyTable(QTableWidget):
         name_item.setData(Qt.ItemDataRole.UserRole + 1, name)
         self.setItem(row, 2, name_item)
     
-    def _create_mod_items(self, row, name, checkbox_state=None):
+    def _create_mod_items(self, row, name, checkbox_state=None, conflicts=None):
         priority_item = QTableWidgetItem("")
         priority_item.setFlags(Qt.ItemFlag.ItemIsEnabled)
         priority_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -263,6 +264,10 @@ class ReorderOnlyTable(QTableWidget):
         name_item = QTableWidgetItem(name)
         name_item.setFlags(name_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
         self.setItem(row, 2, name_item)
+
+        conflict_item = QTableWidgetItem(conflicts)
+        conflict_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.setItem(row,3, conflict_item)
 
     def dropEvent(self, event):
         drop_pos = event.position().toPoint()
@@ -592,8 +597,8 @@ class ModLoaderUserInterface(QMainWindow):
         return preset_layout
 
     def _create_mod_table(self):
-        self.mod_table = ReorderOnlyTable(0, 3)
-        self.mod_table.setHorizontalHeaderLabels(["#", "", "Mod Name"])
+        self.mod_table = ReorderOnlyTable(0, 4)
+        self.mod_table.setHorizontalHeaderLabels(["#", "", "Mod Name", "Conflicts" ])
         self.mod_table.verticalHeader().setVisible(False)
         self.mod_table.itemSelectionChanged.connect(self.on_mod_selected)
         self.mod_table.itemChanged.connect(self.on_item_changed)
@@ -611,14 +616,19 @@ class ModLoaderUserInterface(QMainWindow):
         self.mod_table.setSortingEnabled(False)
         self.mod_table.horizontalHeader().setStretchLastSection(True)
         self.mod_table.keyPressEvent = self.table_key_press_event
-        
+
+        rd,wd=scan_mod_overrides(self.cfg["SOURCE_DIR"],load_list())
+        self.mod_table.overwriting=rd
+        self.mod_table.overwritten=wd
+
         header = self.mod_table.horizontalHeader()
         header.setMinimumSectionSize(15)
         header.setSectionResizeMode(0, header.ResizeMode.Fixed)
         header.setSectionResizeMode(1, header.ResizeMode.Fixed)
         self.mod_table.setColumnWidth(0, 40)
         self.mod_table.setColumnWidth(1, 25)
-        self.mod_table.setColumnWidth(2, 500)
+        self.mod_table.setColumnWidth(2, 520)
+        self.mod_table.setColumnWidth(3, 40)
         
         return self.mod_table
 
@@ -812,6 +822,30 @@ class ModLoaderUserInterface(QMainWindow):
             priority = sum(1 for r in range(row) if not self.is_separator_row(r)) + 1
             self.mod_table._create_mod_items(row, name, Qt.CheckState.Checked if enabled else Qt.CheckState.Unchecked)
             self.mod_table.item(row, 0).setText(str(priority))
+            self.set_mod_conflict_flags(name, row)
+            
+    def set_mod_conflict_flags(self, name, row):
+        conflict_item=self.mod_table.item(row,3)
+        over_text=""
+        tooltip_text_ow=""
+        tooltip_text_or=""
+        if name in self.mod_table.overwritten.keys(): 
+            if tooltip_text_ow=="": tooltip_text_ow+="<span style=\"color: #99ff99; font-weight: bold;\">Overriding:</span><br>  "
+            over_text+=" <span style=\"color: #99ff99; font-size: 14px;\">▲</span>"
+            tooltip_text_ow+="\n  ".join(self.mod_table.overwritten[name].keys())
+        if name in self.mod_table.overwriting.keys(): 
+            if tooltip_text_or=="": tooltip_text_or+="<span style=\"color: #ff9999; font-weight: bold;\">Overridden By:</span><br>  "
+            over_text+=" <span style=\"color: #ff9999; font-size: 14px;\">▼</span>"
+            tooltip_text_or+="\n  ".join(self.mod_table.overwriting[name].keys())
+        if tooltip_text_ow and tooltip_text_or: tooltip_text=tooltip_text_ow+'<br><br>'+tooltip_text_or
+        elif tooltip_text_ow: tooltip_text=tooltip_text_ow
+        elif tooltip_text_or: tooltip_text=tooltip_text_or
+        else: tooltip_text=""
+        label=QLabel(over_text)
+        label.setTextFormat(Qt.TextFormat.RichText)
+        label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        conflict_item.setToolTip(tooltip_text)
+        self.mod_table.setCellWidget(row,3,label)
 
     def add_separator(self, name="v#New Separator"):
         #if name[0]==">": collapse_state=True
@@ -1039,6 +1073,7 @@ class ModLoaderUserInterface(QMainWindow):
     def save_load_order(self):
         try:
             mods = self._collect_load_order()
+            self.update_all_conflict_flags(mods)
             read_cfg(sync=False) # check for update
             save_to_loadorder(mods, verbose=False)
             self.statusBar().showMessage("Load order saved successfully", SHOW_MSG_TIME)
@@ -1090,12 +1125,24 @@ class ModLoaderUserInterface(QMainWindow):
     
     def update_priority_numbers(self):
         priority = 1
+        mods=[]
         for row in range(self.mod_table.rowCount()):
             if self.is_separator_row(row): continue
             priority_item = self.mod_table.item(row, 0)
             if priority_item:
                 priority_item.setText(str(priority))
                 priority += 1
+            mods.append(priority_item.text())
+
+    def update_all_conflict_flags(self,mods=None):
+        if not mods: mods=load_list()
+        rd,wd=scan_mod_overrides(self.cfg["SOURCE_DIR"],mods)
+        self.mod_table.overwriting=rd
+        self.mod_table.overwritten=wd
+        for row in range(self.mod_table.rowCount()):
+            if self.is_separator_row(row): continue
+            item = self.mod_table.item(row, 2)
+            self.set_mod_conflict_flags(item.text(),row)
 
     def on_header_clicked(self, logical_index):
         if logical_index == 0:

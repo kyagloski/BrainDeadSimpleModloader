@@ -6,6 +6,7 @@ import sys
 import stat
 import traceback
 import subprocess
+from collections import defaultdict
 from pathlib import Path
 
 def force_symlink(target, link_name):
@@ -61,6 +62,69 @@ def set_full_perms_file(f):
     try: f.chmod(mode)
     except Exception as e: print(f"{str(e)} when setting permissions on {str(f)}")
     return f
+
+
+def scan_mod_overrides(top_dir, load_order, prev_files=None, prev_ow=None, prev_owt=None, changed_mods=None):
+    # ugly but optimized
+    idx = {m: i for i, m in enumerate(load_order)}
+    ign = {b"meta.ini", b"readme.txt"}
+    
+    if prev_files is None or changed_mods is None:
+        files = {}
+        for m in load_order:
+            p = top_dir + os.sep + m
+            try: 
+                if not os.path.isdir(p): continue
+            except: continue
+            pl = len(p) + 1
+            for r, _, fs in os.walk(p):
+                if not fs: continue
+                rr = r[pl:]
+                for f in fs:
+                    if f.encode().lower() in ign: continue
+                    k = rr + os.sep + f if rr else f
+                    files.setdefault(k, []).append(idx[m])
+    else:
+        files = prev_files
+    
+    if changed_mods:
+        changed_set = set(changed_mods) if not isinstance(changed_mods, set) else changed_mods
+        affected = {k: v for k, v in files.items() if len(v) > 1 and any(load_order[i] in changed_set for i in v)}
+    else:
+        affected = {k: v for k, v in files.items() if len(v) > 1}
+    
+    ow = prev_ow.copy() if prev_ow else {}
+    owt = prev_owt.copy() if prev_owt else {}
+    
+    if changed_mods:
+        for k in affected:
+            for i in files[k]:
+                m = load_order[i]
+                if m in ow:
+                    for vic in list(ow[m].keys()):
+                        if k not in ow[m][vic]: continue
+                        ow[m][vic].remove(k)
+                        if not ow[m][vic]: del ow[m][vic]
+                    if not ow[m]: del ow[m]
+                if m not in owt: continue
+                for att in list(owt[m].keys()):
+                    if k not in owt[m][att]: continue
+                    owt[m][att].remove(k)
+                    if not owt[m][att]: del owt[m][att]
+                if not owt[m]: del owt[m]
+    
+    for k, v in affected.items():
+        w = min(v)
+        wn = load_order[w]
+        ow.setdefault(wn, {})
+        for l in v:
+            if l == w: continue
+            ln = load_order[l]
+            ow[wn].setdefault(ln, []).append(k)
+            owt.setdefault(ln, {}).setdefault(wn, []).append(k)
+    
+    return ow, owt #, files
+
 
 def print_traceback():
     for line in traceback.format_stack()[:-1]: print(line.strip())
