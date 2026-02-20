@@ -713,7 +713,7 @@ class ModLoaderUserInterface(QMainWindow):
     def _create_mod_table(self):
         self.mod_table = ReorderOnlyTable(self, 0, 4)
         self.mod_table.setItemDelegateForColumn(3, RichTextDelegate(self))
-        self.mod_table.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        #self.mod_table.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.mod_table.setHorizontalHeaderLabels(["#", "", "Mod Name", "Conflicts" ])
         self.mod_table.verticalHeader().setVisible(False)
         self.mod_table.itemSelectionChanged.connect(self.on_mod_selected)
@@ -1516,6 +1516,7 @@ class ModLoaderUserInterface(QMainWindow):
         self._set_selected_mods_state(Qt.CheckState.Unchecked)
 
     def table_key_press_event(self, event):
+        print("here")
         try: row=self.mod_table.selectedItems()[0].row()
         except: row=None
         if event.key() == Qt.Key.Key_F2:
