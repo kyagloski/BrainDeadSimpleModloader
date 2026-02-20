@@ -15,13 +15,13 @@ from PyQt6.QtWidgets import (
     QTreeWidget, QTreeWidgetItem, QTableWidget, QTableWidgetItem, 
     QPushButton, QSplitter, QLabel, QLineEdit, QMenu, QMessageBox, 
     QComboBox, QFileDialog, QInputDialog, QTextEdit, QToolButton, 
-    QSplashScreen, QToolTip
+    QSplashScreen, QToolTip, QStyledItemDelegate
 )
 from PyQt6.QtCore import ( Qt, QItemSelectionModel, QObject, QThread, 
     QWaitCondition, pyqtSignal, QMutex, QMutexLocker, QTimer, QPoint, 
-    QSize, QFile, QTextStream, QMetaObject
+    QSize, QFile, QTextStream, QMetaObject, pyqtSlot
 )
-from PyQt6.QtGui import QIcon, QFont, QTextCursor, QCursor, QPixmap
+from PyQt6.QtGui import QIcon, QFont, QTextCursor, QCursor, QPixmap, QTextDocument
 
 try:
     sys.path.append(str(Path(__file__).parent.parent))
@@ -154,17 +154,17 @@ class StatusThread(QThread):
             if self.temp_complete:
                 if os.path.isdir(self.file): self.status.setText("Copying complete!")
                 else: self.status.setText("Extraction complete!")
-                sleep(0.2)
+                QThread.msleep(200)
                 continue
             if i>len(a)-1:i=0
             name=Path(self.file).name
             if os.path.isdir(self.file): self.status.setText(f"Copying {name}  {a[i]}")
             else: self.status.setText(f"Extracting {name}  {a[i]}")
-            sleep(0.5)
+            QThread.msleep(500)
             i+=1
         if os.path.isdir(self.file): self.status.setText("Copying complete!")
         else: self.status.setText("Extraction complete!")
-        sleep(2)
+        QThread.msleep(200)
         self.status.setText("")
 
     def set_temp_complete(self):
@@ -173,11 +173,105 @@ class StatusThread(QThread):
     def done(self):
         self.stopped=True
 
+class ConflictThread(QThread):
+    
+    conflict_update=pyqtSignal(int,str,str)
+    
+    def __init__(self, parent):
+        super().__init__()
+        self.parent=parent
+        self.mod_table=parent.mod_table
+        self.load_order=[]
+   
+    def run(self):
+        while 1:
+            # this is retarded but i am at my wits end
+            if (not self.parent._is_sorted_alphabetically) and (not self.parent._loading):
+                try: updated_mods=self.parent._collect_load_order()
+                except: continue
+                if self.load_order!=updated_mods:
+                    self.load_order=updated_mods
+                    self.update_conflict_data(self.load_order)
+            elif self.parent._is_sorted_alphabetically: self.load_order=[]
+            QThread.msleep(80)
+        
+    def set_mod_conflict_flags(self, name, row):
+        over_text=""
+        tooltip_text_er=""
+        tooltip_text_en=""
+        tooltip_text_fu=""
+        if name in self.mod_table.overriders.keys(): 
+            if tooltip_text_er=="": tooltip_text_er+="<span style=\"color: #99ff99; font-weight: bold;\">Overriding:</span><br>  "
+            over_text+=" <span style=\"color: #99ff99; font-size: 14px;\">▲</span>"
+            tooltip_text_er+="\n  ".join(self.mod_table.overriders[name])
+        if name in self.mod_table.overriddens.keys(): 
+            if tooltip_text_en=="": tooltip_text_en+="<span style=\"color: #ff9999; font-weight: bold;\">Overridden By:</span><br>  "
+            over_text+=" <span style=\"color: #ff9999; font-size: 14px;\">▼</span>"
+            tooltip_text_en+="\n  ".join(self.mod_table.overriddens[name])
+        if name in self.mod_table.overriddens_full.keys(): 
+            if tooltip_text_fu=="": tooltip_text_fu+="<span style=\"color: #ff9999; font-weight: bold;\">Fully Overridden By:</span><br>  "
+            over_text+=" <span style=\"color: #ff9999; font-size: 14px;\">▽</span>"
+            tooltip_text_fu+="\n  ".join(self.mod_table.overriddens_full[name])
+    
+        if tooltip_text_fu and tooltip_text_fu.replace("Fully ",'')==tooltip_text_en: 
+            tooltip_text_en=""
+            over_text=over_text.replace("<span style=\"color: #ff9999; font-size: 14px;\">▼</span>",'')
+
+        over_text=f'<div style="text-align: center;">{over_text}</div>'
+
+        if tooltip_text_er and tooltip_text_en and tooltip_text_fu: 
+            tooltip_text=tooltip_text_fu+'<br><br>'+tooltip_text_en+'<br><br>'+tooltip_text_er
+        elif tooltip_text_er and tooltip_text_en: tooltip_text=tooltip_text_er+'<br><br>'+tooltip_text_en
+        elif tooltip_text_fu and tooltip_text_en: tooltip_text=tooltip_text_fu+'<br><br>'+tooltip_text_en
+        elif tooltip_text_fu and tooltip_text_er: tooltip_text=tooltip_text_fu+'<br><br>'+tooltip_text_er
+        elif tooltip_text_er: tooltip_text=tooltip_text_er
+        elif tooltip_text_en: tooltip_text=tooltip_text_en
+        elif tooltip_text_fu: tooltip_text=tooltip_text_fu
+        else: tooltip_text=""
+    
+        self.conflict_update.emit(row,over_text,tooltip_text)
+        
+    def update_conflict_data(self, mods=[]):
+        cfg=read_cfg(sync=False)
+        #if not mods: mods = self.parent._collect_load_order()
+        er,en,fu,mf=scan_mod_overrides(cfg["SOURCE_DIR"],mods)
+        self.mod_table.overriders=er
+        self.mod_table.overriddens=en
+        self.mod_table.overriddens_full=fu
+        self.mod_table.mod_files=mf
+
+        for i in range(len(mods)):
+            if mods[i][1]=='#': continue # skip seps
+            self.set_mod_conflict_flags(mods[i],i)
+
+class RichTextDelegate(QStyledItemDelegate):
+    def paint(self, painter, option, index):
+        style = option.widget.style()
+        style.drawControl(style.ControlElement.CE_ItemViewItem, option, painter, option.widget)
+        text = index.data(Qt.ItemDataRole.DisplayRole)
+        if text:
+            doc = QTextDocument()
+            doc.setHtml(text)
+            painter.save()
+            painter.translate(option.rect.topLeft())
+            doc.setTextWidth(option.rect.width())
+            doc.drawContents(painter)
+            painter.restore()
+        else:
+            super().paint(painter, option, index)
+
+    def sizeHint(self, option, index):
+        text = index.data(Qt.ItemDataRole.DisplayRole)
+        if text:
+            doc = QTextDocument()
+            doc.setHtml(text)
+            return QSize(int(doc.idealWidth()), int(doc.size().height()))
+        return super().sizeHint(option, index)
+
 class ReorderOnlyTable(QTableWidget):
-    def __init__(self, *args, **kwargs):
+    def __init__(self, parent, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self._drag_row = -1
-        self._drop_row = -1
+        self.parent=parent
 
     def is_separator_row(self, row):
         name_item = self.item(row, 2)
@@ -205,17 +299,22 @@ class ReorderOnlyTable(QTableWidget):
         is_sep = self.is_separator_row(row)
         if is_sep:
             return {
+                'priority_num': "",
                 'is_separator': True,
                 'name': self.item(row, 2).data(Qt.ItemDataRole.UserRole + 1),
                 'collapse_state': self.item(row, 0).text(),
-                'hidden': self.isRowHidden(row)
+                'hidden': self.isRowHidden(row),
+                'conflicts': "",
+                'conflict_tooltip':""
             }
         return {
+            'priority_num': self.item(row,0).text(),
             'is_separator': False,
             'name': self.item(row, 2).text(),
             'checkbox': self.item(row, 1).checkState(),
             'hidden': self.isRowHidden(row),
-            'conflicts': self.item(row,3).text()
+            'conflicts': self.item(row,3).text(),
+            'conflict_tooltip': self.item(row,3).toolTip()
         }
 
     def create_row_from_data(self, row, data):
@@ -227,7 +326,8 @@ class ReorderOnlyTable(QTableWidget):
         if data['hidden']:
             self.setRowHidden(row, True)
     
-    def _create_separator_items(self, row, name):
+    def _create_separator_items(self, row, name, conflicts="", tooltip=""):
+        self.parent._loading=True
         if name[0]==">": collapse_state="▶"
         else: collapse_state="▼"
         priority_item = QTableWidgetItem(collapse_state)
@@ -248,15 +348,22 @@ class ReorderOnlyTable(QTableWidget):
         name_item.setData(Qt.ItemDataRole.UserRole, "separator")
         name_item.setData(Qt.ItemDataRole.UserRole + 1, name)
         self.setItem(row, 2, name_item)
-    
-    def _create_mod_items(self, row, name, checkbox_state=None, conflicts=None):
+
+        conflict_item = QTableWidgetItem("")
+        conflict_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+        conflict_item.setFlags(Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsSelectable & ~Qt.ItemFlag.ItemIsDragEnabled)
+        self.setItem(row,3, conflict_item)
+        self.parent._loading=False
+
+    def _create_mod_items(self, row, name, checkbox_state=None, conflicts="", tooltip=""):
+        self.parent._loading=True
         priority_item = QTableWidgetItem("")
-        priority_item.setFlags(Qt.ItemFlag.ItemIsEnabled)
+        priority_item.setFlags(priority_item.flags() | Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsSelectable & ~Qt.ItemFlag.ItemIsDragEnabled)
         priority_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
         self.setItem(row, 0, priority_item)
         
         checkbox_item = QTableWidgetItem()
-        checkbox_item.setFlags(Qt.ItemFlag.ItemIsUserCheckable | Qt.ItemFlag.ItemIsEnabled)
+        checkbox_item.setFlags(checkbox_item.flags() | Qt.ItemFlag.ItemIsUserCheckable | Qt.ItemFlag.ItemIsEnabled)
         if checkbox_state is not None:
             checkbox_item.setCheckState(checkbox_state)
         self.setItem(row, 1, checkbox_item)
@@ -264,10 +371,18 @@ class ReorderOnlyTable(QTableWidget):
         name_item = QTableWidgetItem(name)
         name_item.setFlags(name_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
         self.setItem(row, 2, name_item)
-
+        
         conflict_item = QTableWidgetItem(conflicts)
+        #conflict_item = QTableWidgetItem("")
         conflict_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.setItem(row,3, conflict_item)
+        #label=DragLabel(conflicts, self)
+        #label.setTextFormat(Qt.TextFormat.RichText)
+        #label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        #self.setCellWidget(row,3,label)
+        conflict_item.setToolTip(tooltip)
+        self.setItem(row, 3, conflict_item)
+        conflict_item.setFlags(conflict_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
+        self.parent._loading=False
 
     def dropEvent(self, event):
         drop_pos = event.position().toPoint()
@@ -297,15 +412,15 @@ class ReorderOnlyTable(QTableWidget):
             if selected_rows == list(range(min_sel, max_sel + 1)):
                 if min_sel <= target_row <= max_sel + 1:
                     return
-        
+       
         rows_data = [self.collect_row_data(row) for row in selected_rows]
-        
+
         for row in reversed(selected_rows):
             self.removeRow(row)
         
         rows_removed_before_target = sum(1 for r in selected_rows if r < target_row)
         adjusted_target = target_row - rows_removed_before_target
-        
+ 
         new_selection_rows = []
         for i, data in enumerate(rows_data):
             insert_row = adjusted_target + i
@@ -324,7 +439,6 @@ class ReorderOnlyTable(QTableWidget):
         
         if self.selectedItems():
             self.itemChanged.emit(self.selectedItems()[0])
-
 
 class EditableComboBox(QComboBox):
     def __init__(self, upper=None):
@@ -597,7 +711,9 @@ class ModLoaderUserInterface(QMainWindow):
         return preset_layout
 
     def _create_mod_table(self):
-        self.mod_table = ReorderOnlyTable(0, 4)
+        self.mod_table = ReorderOnlyTable(self, 0, 4)
+        self.mod_table.setItemDelegateForColumn(3, RichTextDelegate(self))
+        self.mod_table.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.mod_table.setHorizontalHeaderLabels(["#", "", "Mod Name", "Conflicts" ])
         self.mod_table.verticalHeader().setVisible(False)
         self.mod_table.itemSelectionChanged.connect(self.on_mod_selected)
@@ -617,9 +733,13 @@ class ModLoaderUserInterface(QMainWindow):
         self.mod_table.horizontalHeader().setStretchLastSection(True)
         self.mod_table.keyPressEvent = self.table_key_press_event
 
-        rd,wd=scan_mod_overrides(self.cfg["SOURCE_DIR"],load_list())
-        self.mod_table.overwriting=rd
-        self.mod_table.overwritten=wd
+        self.mod_table.overriders=dict()
+        self.mod_table.overriddens=dict()
+        self.mod_table.overriddens_full=dict()
+        self.mod_table.mod_files=dict()
+        self.conflict_thread=ConflictThread(self)
+        self.conflict_thread.conflict_update.connect(self.update_conflict_flag)
+        self.conflict_thread.start()
 
         header = self.mod_table.horizontalHeader()
         header.setMinimumSectionSize(15)
@@ -627,8 +747,8 @@ class ModLoaderUserInterface(QMainWindow):
         header.setSectionResizeMode(1, header.ResizeMode.Fixed)
         self.mod_table.setColumnWidth(0, 40)
         self.mod_table.setColumnWidth(1, 25)
-        self.mod_table.setColumnWidth(2, 520)
-        self.mod_table.setColumnWidth(3, 40)
+        self.mod_table.setColumnWidth(2, 530)
+        self.mod_table.setColumnWidth(3, 30)
         
         return self.mod_table
 
@@ -822,31 +942,8 @@ class ModLoaderUserInterface(QMainWindow):
             priority = sum(1 for r in range(row) if not self.is_separator_row(r)) + 1
             self.mod_table._create_mod_items(row, name, Qt.CheckState.Checked if enabled else Qt.CheckState.Unchecked)
             self.mod_table.item(row, 0).setText(str(priority))
-            self.set_mod_conflict_flags(name, row)
+            #self.set_mod_conflict_flags(name, row)
             
-    def set_mod_conflict_flags(self, name, row):
-        conflict_item=self.mod_table.item(row,3)
-        over_text=""
-        tooltip_text_ow=""
-        tooltip_text_or=""
-        if name in self.mod_table.overwritten.keys(): 
-            if tooltip_text_ow=="": tooltip_text_ow+="<span style=\"color: #99ff99; font-weight: bold;\">Overriding:</span><br>  "
-            over_text+=" <span style=\"color: #99ff99; font-size: 14px;\">▲</span>"
-            tooltip_text_ow+="\n  ".join(self.mod_table.overwritten[name].keys())
-        if name in self.mod_table.overwriting.keys(): 
-            if tooltip_text_or=="": tooltip_text_or+="<span style=\"color: #ff9999; font-weight: bold;\">Overridden By:</span><br>  "
-            over_text+=" <span style=\"color: #ff9999; font-size: 14px;\">▼</span>"
-            tooltip_text_or+="\n  ".join(self.mod_table.overwriting[name].keys())
-        if tooltip_text_ow and tooltip_text_or: tooltip_text=tooltip_text_ow+'<br><br>'+tooltip_text_or
-        elif tooltip_text_ow: tooltip_text=tooltip_text_ow
-        elif tooltip_text_or: tooltip_text=tooltip_text_or
-        else: tooltip_text=""
-        label=QLabel(over_text)
-        label.setTextFormat(Qt.TextFormat.RichText)
-        label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        conflict_item.setToolTip(tooltip_text)
-        self.mod_table.setCellWidget(row,3,label)
-
     def add_separator(self, name="v#New Separator"):
         #if name[0]==">": collapse_state=True
         #else: collapse_state=False
@@ -868,7 +965,6 @@ class ModLoaderUserInterface(QMainWindow):
             sep_row=r
             break
         return sep_row
-
 
     def toggle_separator_collapse(self, row):
         if not self.is_separator_row(row): return
@@ -1004,7 +1100,6 @@ class ModLoaderUserInterface(QMainWindow):
 
     def move_row(self, from_row, to_row):
         is_sep = self.is_separator_row(from_row)
-        
         if is_sep:
             separator_name = self.get_separator_name(from_row)
             collapse_state = self.mod_table.item(from_row, 0).text()
@@ -1014,9 +1109,10 @@ class ModLoaderUserInterface(QMainWindow):
         else:
             checkbox_state = self.mod_table.item(from_row, 1).checkState()
             mod_name = self.mod_table.item(from_row, 2).text()
+            conflicts = self.mod_table.item(from_row, 3).text()
             self.mod_table.removeRow(from_row)
             self.mod_table.insertRow(to_row)
-            self.mod_table._create_mod_items(to_row, mod_name, checkbox_state)
+            self.mod_table._create_mod_items(to_row, mod_name, checkbox_state, conflicts)
         
         self.update_priority_numbers()
 
@@ -1055,6 +1151,18 @@ class ModLoaderUserInterface(QMainWindow):
                     mods.append(mod_name if is_enabled else '~' + mod_name)
         return mods
 
+    @pyqtSlot(int,str,str)
+    def update_conflict_flag(self,row,over_text,tooltip_text):
+        #try:
+        conflict_item=self.mod_table.item(row,3)
+        conflict_item.setText(over_text)
+        #label=QLabel(over_text)
+        #label.setTextFormat(Qt.TextFormat.RichText)
+        #label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        conflict_item.setToolTip(tooltip_text)
+        #self.mod_table.setCellWidget(row,3,label)
+        #except: self.conflict_thread.load_order=[] # reset to try again
+
     def auto_save_load_order(self,instant=False):
         global RELOAD_ON_INSTALL
         if self._loading: return
@@ -1063,7 +1171,6 @@ class ModLoaderUserInterface(QMainWindow):
             if instant: self.save_load_order()
             else: self.executor.add_command(self.save_load_order, tuple())
             if self.cfg["RELOAD_ON_INSTALL"]:
-                #self.save_load_order()
                 self.load_mods()
                 self.statusBar().showMessage("Load order auto-saved", SHOW_MSG_TIME)
         except Exception as e:
@@ -1072,8 +1179,7 @@ class ModLoaderUserInterface(QMainWindow):
 
     def save_load_order(self):
         try:
-            mods = self._collect_load_order()
-            self.update_all_conflict_flags(mods)
+            mods=self._collect_load_order()
             read_cfg(sync=False) # check for update
             save_to_loadorder(mods, verbose=False)
             self.statusBar().showMessage("Load order saved successfully", SHOW_MSG_TIME)
@@ -1134,16 +1240,6 @@ class ModLoaderUserInterface(QMainWindow):
                 priority += 1
             mods.append(priority_item.text())
 
-    def update_all_conflict_flags(self,mods=None):
-        if not mods: mods=load_list()
-        rd,wd=scan_mod_overrides(self.cfg["SOURCE_DIR"],mods)
-        self.mod_table.overwriting=rd
-        self.mod_table.overwritten=wd
-        for row in range(self.mod_table.rowCount()):
-            if self.is_separator_row(row): continue
-            item = self.mod_table.item(row, 2)
-            self.set_mod_conflict_flags(item.text(),row)
-
     def on_header_clicked(self, logical_index):
         if logical_index == 0:
             if self._is_sorted_alphabetically:
@@ -1160,28 +1256,20 @@ class ModLoaderUserInterface(QMainWindow):
         self.move_down_button.setEnabled(False)
         
         mods_data = []
-        for row in range(self.mod_table.rowCount()):
-            is_sep = self.is_separator_row(row)
-            priority_num = self.mod_table.item(row, 0).text()
-            checkbox_state = self.mod_table.item(row, 1).checkState()
-            mod_name = self.mod_table.item(row, 2).text()
-            if is_sep:
-                separator_name = self.get_separator_name(row)
-                mods_data.append((priority_num, mod_name, checkbox_state, True, separator_name))
-            else:
-                mods_data.append((priority_num, mod_name, checkbox_state, False, None))
-        
-        mods_data.sort(key=lambda x: x[1].lower(), reverse=not self._sort_ascending)
-        
+        for row in range(self.mod_table.rowCount()): 
+            mods_data.append(list(self.mod_table.collect_row_data(row).values()))
+                
+        mods_data.sort(key=lambda x: x[2].lower(), reverse=not self._sort_ascending)
+    
         self.mod_table.setRowCount(0)
-        for priority_num, mod_name, checkbox_state, is_sep, separator_name in mods_data:
+        for priority_num, is_sep, name, checkbox_state, hidden, conflicts, tooltip in mods_data:
             row = self.mod_table.rowCount()
             self.mod_table.insertRow(row)
             
             if is_sep:
-                self.mod_table._create_separator_items(row, separator_name)
+                self.mod_table._create_separator_items(row, name)
             else:
-                self.mod_table._create_mod_items(row, mod_name, checkbox_state)
+                self.mod_table._create_mod_items(row, name, checkbox_state, conflicts, tooltip)
                 self.mod_table.item(row, 0).setText(priority_num)
         
         arrow = "↑" if self._sort_ascending else "↓"
@@ -1209,6 +1297,7 @@ class ModLoaderUserInterface(QMainWindow):
         
         self.mod_table.setHorizontalHeaderLabels(["#", "", "Mod Name"])
         self.statusBar().showMessage("Restored priority order (reordering enabled)", SHOW_MSG_TIME)
+        self.reset_all_separator_state()
 
     def show_context_menu(self, position):
         menu = QMenu()
@@ -1448,12 +1537,13 @@ class ModLoaderUserInterface(QMainWindow):
         has_mod = any(not self.is_separator_row(row) for row in selected_rows)
 
         names=[self.mod_table.collect_row_data(row)["name"] for row in selected_rows]
+        if len(names)>10: names=names[:10]+[f"... (+{len(names)-10} more)"]
         if has_separator and has_mod:
-            msg = f"Remove selected mods and separators from load order?\n{'\n'.join(names)}"
+            msg = f"Remove selected mods and separators from load order?\n\n{'\n'.join(names)}"
         elif has_separator:
-            msg = f"Remove selected separator(s) from load order?\n{'\n'.join(names)}"
+            msg = f"Remove selected separator(s) from load order?\n\n{'\n'.join(names)}"
         else:
-            msg = f"Remove selected mod(s) from load order?\n{'\n'.join(names)}"
+            msg = f"Remove selected mod(s) from load order?\n\n{'\n'.join(names)}"
         
         reply = QMessageBox.question(self, "Confirm Removal", msg,
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
@@ -1471,10 +1561,10 @@ class ModLoaderUserInterface(QMainWindow):
             
             self.update_priority_numbers()
             self.update_status()
-            #sync_loadorder()
             self.auto_save_load_order()
-            read_cfg() # check for update
-            if RELOAD_ON_INSTALL: self.load_mods()
+
+            self.cfg=read_cfg(sync=False) # check for update
+            if self.cfg["RELOAD_ON_INSTALL"]: self.load_mods()
 
     def toggle_selected_mods(self):
         selected_rows = set(item.row() for item in self.mod_table.selectedItems())
@@ -1490,9 +1580,8 @@ class ModLoaderUserInterface(QMainWindow):
             self.mod_table.item(row, 1).setCheckState(new_state)
         
         self.update_status()
-        read_cfg(sync=False) # check for update
-        if RELOAD_ON_INSTALL:
-            self.load_mods()
+        self.cfg=read_cfg(sync=False) # check for update
+        if self.cfg["RELOAD_ON_INSTALL"]: self.load_mods()
 
     def rename_selected_mod(self):
         selected_items = self.mod_table.selectedItems()

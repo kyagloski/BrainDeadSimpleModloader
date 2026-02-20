@@ -6,7 +6,7 @@ import sys
 import stat
 import traceback
 import subprocess
-from collections import defaultdict
+from collections import defaultdict, OrderedDict
 from pathlib import Path
 
 def force_symlink(target, link_name):
@@ -63,68 +63,74 @@ def set_full_perms_file(f):
     except Exception as e: print(f"{str(e)} when setting permissions on {str(f)}")
     return f
 
+def scan_mod_overrides(src_dir, loadorder, prev_overriders=None, prev_overriddens=None, prev_overriddens_full=None, prev_mod_files=None, change_idxs=None):
+    overriders=dict()
+    overriddens=dict()
+    overriddens_full=dict()
+    ignore_files = {b"meta.ini", b"readme.txt"}
 
-def scan_mod_overrides(top_dir, load_order, prev_files=None, prev_ow=None, prev_owt=None, changed_mods=None):
-    # ugly but optimized
-    idx = {m: i for i, m in enumerate(load_order)}
-    ign = {b"meta.ini", b"readme.txt"}
-    
-    if prev_files is None or changed_mods is None:
-        files = {}
-        for m in load_order:
-            p = top_dir + os.sep + m
-            try: 
-                if not os.path.isdir(p): continue
-            except: continue
-            pl = len(p) + 1
-            for r, _, fs in os.walk(p):
-                if not fs: continue
-                rr = r[pl:]
-                for f in fs:
-                    if f.encode().lower() in ign: continue
-                    k = rr + os.sep + f if rr else f
-                    files.setdefault(k, []).append(idx[m])
-    else:
-        files = prev_files
-    
-    if changed_mods:
-        changed_set = set(changed_mods) if not isinstance(changed_mods, set) else changed_mods
-        affected = {k: v for k, v in files.items() if len(v) > 1 and any(load_order[i] in changed_set for i in v)}
-    else:
-        affected = {k: v for k, v in files.items() if len(v) > 1}
-    
-    ow = prev_ow.copy() if prev_ow else {}
-    owt = prev_owt.copy() if prev_owt else {}
-    
-    if changed_mods:
-        for k in affected:
-            for i in files[k]:
-                m = load_order[i]
-                if m in ow:
-                    for vic in list(ow[m].keys()):
-                        if k not in ow[m][vic]: continue
-                        ow[m][vic].remove(k)
-                        if not ow[m][vic]: del ow[m][vic]
-                    if not ow[m]: del ow[m]
-                if m not in owt: continue
-                for att in list(owt[m].keys()):
-                    if k not in owt[m][att]: continue
-                    owt[m][att].remove(k)
-                    if not owt[m][att]: del owt[m][att]
-                if not owt[m]: del owt[m]
-    
-    for k, v in affected.items():
-        w = min(v)
-        wn = load_order[w]
-        ow.setdefault(wn, {})
-        for l in v:
-            if l == w: continue
-            ln = load_order[l]
-            ow[wn].setdefault(ln, []).append(k)
-            owt.setdefault(ln, {}).setdefault(wn, []).append(k)
-    
-    return ow, owt #, files
+    # slim down search
+    if change_idxs: loadorder=loadorder[min(change_idxs):max(change_idxs)+1]
 
+    mod_files = OrderedDict()
+    file_set  = set()
+    # build file table
+    for mod in loadorder[::-1]:
+        path = src_dir + os.sep + mod
+        if not os.path.isdir(path): continue
+        mod_files[mod]=set()
+        path_name_len = len(path) + 1
+        for root, _, files in os.walk(path): # fast
+            if not files: continue
+            path_name = root[len(path)+1:]
+            for file in files:
+                if file.encode().lower() in ignore_files: continue # TODO: maybe could avoid this
+                mod_data = path_name + os.sep + file if path_name else file
+                mod_files[mod].add(mod_data)
+    # iterating bottom up, check overrides
+    for mod1,files1 in mod_files.items():
+        # get keys after key were currently looking at
+        tmp_mod_files=after = OrderedDict(list(mod_files.items())[list(mod_files.keys()).index(mod1) + 1:])
+        for mod2,files2 in tmp_mod_files.items():
+            # overriders and overriddens
+            if len(files1 & files2)>0: # file set intersection
+                overriders.setdefault(mod1,[]).append(mod2) # overrider: overriddens
+                overriddens.setdefault(mod2,[]).append(mod1) # overriden: overridders
+            # full overrides
+            if files1==files2: # file set equivalent
+                overriddens_full.setdefault(mod2,[]).append(mod1) # overridden: overriders
+    # update previous dicts with new entries
+    if prev_overriders: 
+        [prev_overriders.pop(k, None) for k in loadorder] # del for update
+        prev_overriders.update(overriders)
+        overriders=prev_overriders
+    if prev_overriddens: 
+        [prev_overriddens.pop(k, None) for k in loadorder]
+        prev_overriddens.update(overriddens) 
+        overriddens=prev_overriddens
+    if prev_overriddens_full: 
+        [prev_overriddens_full.pop(k, None) for k in loadorder]
+        prev_overriddens.update(overriddens_full) 
+        overriddens_full=prev_overriddens_full
+    if prev_mod_files: 
+        [prev_mod_files.pop(k, None) for k in loadorder]
+        prev_mod_files.update(mod_files) 
+        mod_files=prev_mod_files
+          
+    return overriders, overriddens, overriddens_full, mod_files
+
+def count_files(directory):
+    count = 0
+    try:
+        with os.scandir(directory) as entries:
+            for entry in entries:
+                if entry.is_file(follow_symlinks=False):
+                    count += 1
+                elif entry.is_dir(follow_symlinks=False):
+                    count += count_files(entry.path)
+    except PermissionError:
+        pass  # Skip directories we can't access
+    return count
 
 def print_traceback():
     for line in traceback.format_stack()[:-1]: print(line.strip())
