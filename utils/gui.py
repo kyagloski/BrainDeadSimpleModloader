@@ -1160,7 +1160,7 @@ class ModLoaderUserInterface(QMainWindow):
             children.append(r)
         return children
 
-    def move_row(self, from_row, to_row):
+    def move_row(self, from_row, to_row, mod_name=""):
         is_sep = self.is_separator_row(from_row)
         if is_sep:
             separator_name = self.get_separator_name(from_row)
@@ -1170,7 +1170,7 @@ class ModLoaderUserInterface(QMainWindow):
             self.mod_table._create_separator_items(to_row, separator_name)
         else:
             checkbox_state = self.mod_table.item(from_row, 1).checkState()
-            mod_name = self.mod_table.item(from_row, 2).text()
+            if not mod_name: mod_name = self.mod_table.item(from_row, 2).text()
             conflicts = self.mod_table.item(from_row, 3).text()
             self.mod_table.removeRow(from_row)
             self.mod_table.insertRow(to_row)
@@ -1664,9 +1664,7 @@ class ModLoaderUserInterface(QMainWindow):
         if ok and new_name and new_name != old_name:
             try:
                 rename_mod(old_name, new_name)
-                self.mod_table.item(row, 2).setText(new_name)
-                self.explorer_label.setText(new_name)
-                self.populate_file_explorer(Path(self.cfg["SOURCE_DIR"]) / Path(new_name))
+                self.move_row(row,row,new_name)
                 self.auto_save_load_order()
                 self.statusBar().showMessage(f"Renamed '{old_name}' to '{new_name}'", SHOW_MSG_TIME)
             except Exception as e:

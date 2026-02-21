@@ -367,10 +367,12 @@ def rename_mod(old_name, new_name):
     if os.path.exists(Path(SOURCE_DIR) / old_name): 
         os.rename(Path(SOURCE_DIR) / old_name, Path(SOURCE_DIR) / new_name)
     else: print("error: cannot find mod dir "+str(Path(SOURCE_DIR) / old_name)); return
-    loadorder = Path(LOAD_ORDER)
-    llist = [line.strip().lstrip('*~#>v') for line in loadorder.read_text(encoding="utf-8").splitlines()]
-    llist[llist.index(old_name)] = new_name
-    loadorder.write_text("\n".join(llist), encoding="utf-8")
+    for loadorder in os.listdir(PRESET_DIR):
+        loadorder = PRESET_DIR/loadorder
+        #llist = [line.strip().lstrip('*~#>v') for line in loadorder.read_text(encoding="utf-8").splitlines()]
+        llist = [line.strip() for line in loadorder.read_text(encoding="utf-8").splitlines()]
+        llist[llist.index(old_name)] = new_name
+        loadorder.write_text("\n".join(llist), encoding="utf-8")
     print("successfully renamed mod "+old_name+" to "+new_name)
 
 
