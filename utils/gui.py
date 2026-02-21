@@ -15,7 +15,7 @@ from PyQt6.QtWidgets import (
     QTreeWidget, QTreeWidgetItem, QTableWidget, QTableWidgetItem, 
     QPushButton, QSplitter, QLabel, QLineEdit, QMenu, QMessageBox, 
     QComboBox, QFileDialog, QInputDialog, QTextEdit, QToolButton, 
-    QSplashScreen, QToolTip, QStyledItemDelegate
+    QSplashScreen, QToolTip, QStyledItemDelegate, QHeaderView
 )
 from PyQt6.QtCore import ( Qt, QItemSelectionModel, QObject, QThread, 
     QWaitCondition, pyqtSignal, QMutex, QMutexLocker, QTimer, QPoint, 
@@ -33,8 +33,10 @@ from ini_manager import *
 from exe_manager import *
 from installer import *
 
-SHOW_MSG_TIME  = 10000000
-DIALOGUE_WIDTH = 60
+SHOW_MSG_TIME    = 10000000
+DIALOGUE_WIDTH   = 60
+OVERRIDING_COLOR = "#053005"
+OVERRIDDEN_COLOR = "#300505"
 
 class StdoutRedirector(QObject):
     text_written = pyqtSignal(str)
@@ -737,10 +739,10 @@ class ModLoaderUserInterface(QMainWindow):
     def _create_mod_table(self):
         self.mod_table = ReorderOnlyTable(self, 0, 4)
         self.mod_table.setItemDelegateForColumn(3, RichTextDelegate(self))
-        #self.mod_table.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.mod_table.setHorizontalHeaderLabels(["#", "", "Mod Name", "Conflicts" ])
         self.mod_table.verticalHeader().setVisible(False)
         self.mod_table.itemSelectionChanged.connect(self.on_mod_selected)
+        self.mod_table.selectionModel().selectionChanged.connect(self.on_item_deselect)
         self.mod_table.itemChanged.connect(self.on_item_changed)
         self.mod_table.cellClicked.connect(self.on_cell_clicked)
         self.mod_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
@@ -754,7 +756,6 @@ class ModLoaderUserInterface(QMainWindow):
         self.mod_table.customContextMenuRequested.connect(self.show_context_menu)
         self.mod_table.horizontalHeader().sectionClicked.connect(self.on_header_clicked)
         self.mod_table.setSortingEnabled(False)
-        self.mod_table.horizontalHeader().setStretchLastSection(True)
         self.mod_table.keyPressEvent = self.table_key_press_event
 
         self.mod_table.overriders=dict()
@@ -768,11 +769,12 @@ class ModLoaderUserInterface(QMainWindow):
         header = self.mod_table.horizontalHeader()
         header.setMinimumSectionSize(15)
         header.setSectionResizeMode(0, header.ResizeMode.Fixed)
+        header.setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
         header.setSectionResizeMode(1, header.ResizeMode.Fixed)
         self.mod_table.setColumnWidth(0, 40)
         self.mod_table.setColumnWidth(1, 25)
         self.mod_table.setColumnWidth(2, 530)
-        self.mod_table.setColumnWidth(3, 30)
+        self.mod_table.setColumnWidth(3, 80)
         
         return self.mod_table
 
@@ -969,13 +971,13 @@ class ModLoaderUserInterface(QMainWindow):
             for i in er_rows: 
                 if self.mod_table.isRowHidden(i):
                     sep_row=self.mod_table.get_item_separator_row(i)
-                    self.mod_table.highlight_row(sep_row,"#1C5C1C")
-                else: self.mod_table.highlight_row(i,"#1C5C1C")
+                    self.mod_table.highlight_row(sep_row,OVERRIDING_COLOR)
+                else: self.mod_table.highlight_row(i,OVERRIDING_COLOR)
             for i in en_rows: 
                 if self.mod_table.isRowHidden(i):
                     sep_row=self.mod_table.get_item_separator_row(i)
-                    self.mod_table.highlight_row(sep_row,"#5C1C1C")
-                else: self.mod_table.highlight_row(i,"#5C1C1C")
+                    self.mod_table.highlight_row(sep_row,OVERRIDDEN_COLOR)
+                else: self.mod_table.highlight_row(i,OVERRIDDEN_COLOR)
         self.mod_table.blockSignals(False)
         
     def populate_file_explorer(self, path):
@@ -1246,6 +1248,10 @@ class ModLoaderUserInterface(QMainWindow):
         if item and item.column() == 1:
             self.update_status()
             self.auto_save_load_order()
+
+    def on_item_deselect(self, item):
+        selected_items = self.mod_table.selectedItems()
+        if not selected_items: self.highlight_conflicts([])
 
     def on_cell_clicked(self, row, column):
         if column == 0 and self.is_separator_row(row):
