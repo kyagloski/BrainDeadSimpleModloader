@@ -19,7 +19,7 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import ( Qt, QItemSelectionModel, QObject, QThread, 
     QWaitCondition, pyqtSignal, QMutex, QMutexLocker, QTimer, QPoint, 
-    QSize, QFile, QTextStream, QMetaObject, pyqtSlot
+    QSize, QFile, QTextStream, QMetaObject, pyqtSlot, QItemSelection
 )
 from PyQt6.QtGui import QIcon, QFont, QTextCursor, QCursor, QPixmap, QTextDocument
 
@@ -132,7 +132,8 @@ class ExtractorThread(QThread):
             #else: self.archive_extracted.emit(None,str(archive_path))
             if result: self.call_handle_mod_install.emit(str(temp_dir), str(archive_path))
             else: self.call_handle_mod_install.emit(None, str(archive_path))
-                
+               
+        self.parent._extracting=False 
         self.complete.emit()
 
 class StatusThread(QThread):
@@ -186,7 +187,9 @@ class ConflictThread(QThread):
     def run(self):
         while 1:
             # this is retarded but i am at my wits end
-            if (not self.parent._is_sorted_alphabetically) and (not self.parent._loading):
+            if (not self.parent._is_sorted_alphabetically) \
+            and (not self.parent._loading) \
+            and (not self.parent._extracting):
                 try: updated_mods=self.parent._collect_load_order()
                 except: continue
                 if self.load_order!=updated_mods:
@@ -385,16 +388,19 @@ class ReorderOnlyTable(QTableWidget):
         self.parent._loading=False
 
     def dropEvent(self, event):
+        print("drop event")
         drop_pos = event.position().toPoint()
         index = self.indexAt(drop_pos)
-        
+        print("here1") 
         selected = self.selectedItems()
         if not selected:
             event.ignore()
             return
         
+        print("here2") 
         selected_rows = sorted(set(item.row() for item in selected))
         
+        print("here3") 
         if not index.isValid():
             target_row = self.rowCount()
         else:
@@ -404,6 +410,7 @@ class ReorderOnlyTable(QTableWidget):
             mid_point = rect.top() + rect.height() / 2
             target_row = drop_row if y < mid_point else drop_row + 1
         
+        print("here4") 
         event.ignore()
         
         if len(selected_rows) > 0:
@@ -413,14 +420,17 @@ class ReorderOnlyTable(QTableWidget):
                 if min_sel <= target_row <= max_sel + 1:
                     return
        
+        print("here5") 
         rows_data = [self.collect_row_data(row) for row in selected_rows]
 
         for row in reversed(selected_rows):
             self.removeRow(row)
         
+        print("here6") 
         rows_removed_before_target = sum(1 for r in selected_rows if r < target_row)
         adjusted_target = target_row - rows_removed_before_target
  
+        print("here7") 
         new_selection_rows = []
         for i, data in enumerate(rows_data):
             insert_row = adjusted_target + i
@@ -428,17 +438,22 @@ class ReorderOnlyTable(QTableWidget):
             self.create_row_from_data(insert_row, data)
             new_selection_rows.append(insert_row)
         
+        print("here8") 
         self.clearSelection()
-        selection_model = self.selectionModel()
+        selection = QItemSelection()
         for row in new_selection_rows:
-            for col in range(self.columnCount()):
-                idx = self.model().index(row, col)
-                selection_model.select(idx, QItemSelectionModel.SelectionFlag.Select)
+            left = self.model().index(row, 0)
+            right = self.model().index(row, self.columnCount() - 1)
+            selection.select(left, right)
+        self.selectionModel().select(selection, QItemSelectionModel.SelectionFlag.Select)
         
+        print("here9") 
         self.update_priority_numbers()
         
+        print("here10") 
         if self.selectedItems():
             self.itemChanged.emit(self.selectedItems()[0])
+        print("drop event done")
 
 class EditableComboBox(QComboBox):
     def __init__(self, upper=None):
@@ -496,6 +511,7 @@ class ModLoaderUserInterface(QMainWindow):
         self._setup_stdout_redirect()
         self._load_initial_data()
         self._loading = False
+        self._extracting = False
 
         self.status_label=QLabel("")
         self.status_label.setStyleSheet("font-weight: bold;")
@@ -1153,15 +1169,11 @@ class ModLoaderUserInterface(QMainWindow):
 
     @pyqtSlot(int,str,str)
     def update_conflict_flag(self,row,over_text,tooltip_text):
-        #try:
-        conflict_item=self.mod_table.item(row,3)
-        conflict_item.setText(over_text)
-        #label=QLabel(over_text)
-        #label.setTextFormat(Qt.TextFormat.RichText)
-        #label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        conflict_item.setToolTip(tooltip_text)
-        #self.mod_table.setCellWidget(row,3,label)
-        #except: self.conflict_thread.load_order=[] # reset to try again
+        try:
+            conflict_item=self.mod_table.item(row,3)
+            conflict_item.setText(over_text)
+            conflict_item.setToolTip(tooltip_text)
+        except: pass
 
     def auto_save_load_order(self,instant=False):
         global RELOAD_ON_INSTALL
@@ -1516,7 +1528,6 @@ class ModLoaderUserInterface(QMainWindow):
         self._set_selected_mods_state(Qt.CheckState.Unchecked)
 
     def table_key_press_event(self, event):
-        print("here")
         try: row=self.mod_table.selectedItems()[0].row()
         except: row=None
         if event.key() == Qt.Key.Key_F2:
@@ -1550,6 +1561,7 @@ class ModLoaderUserInterface(QMainWindow):
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
         
         if reply == QMessageBox.StandardButton.Yes:
+            self._loading=True
             for row in selected_rows:
                 if self.is_separator_row(row):
                     children = self.get_separator_children_rows(row)
@@ -1559,7 +1571,7 @@ class ModLoaderUserInterface(QMainWindow):
                 if not self.is_separator_row(row): delete_mod(mod_name, gui=True)
                 else: print(f"deleted seperator {mod_name}!")
                 self.mod_table.removeRow(row)
-            
+            self.loading=False 
             self.update_priority_numbers()
             self.update_status()
             self.auto_save_load_order()
@@ -1727,7 +1739,7 @@ class ModLoaderUserInterface(QMainWindow):
         status_thread=StatusThread(self.status_label,Path(file_paths[0]))
         self.extract_threads.append(extract_thread)
         self.status_threads.append(status_thread)
-
+        self._extracting=True
         extract_thread.progress.connect(lambda file: status_thread.set_file(file))
         extract_thread.temp_complete.connect(status_thread.set_temp_complete)
         extract_thread.complete.connect(status_thread.done)
@@ -1749,7 +1761,7 @@ class ModLoaderUserInterface(QMainWindow):
         status_thread=StatusThread(self.status_label,Path(file_paths[0]))
         self.extract_threads.append(extract_thread)
         self.status_threads.append(status_thread)
-
+        self._extracting=True
         extract_thread.progress.connect(lambda file: status_thread.set_file(file))
         extract_thread.temp_complete.connect(status_thread.set_temp_complete)
         extract_thread.complete.connect(status_thread.done)
