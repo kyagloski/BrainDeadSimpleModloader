@@ -260,8 +260,11 @@ class INIManager(QMainWindow):
     def set_current_directory(self, directory):
         """Set the current directory for right column (INI files only)"""
         self.current_dir = Path(directory)
-        root_index = self.right_model.index(str(self.current_dir))
+        self.right_tree.setSortingEnabled(True)
+        self.right_tree.sortByColumn(0, Qt.SortOrder.AscendingOrder)
+        root_index = self.right_model.index(str(self.current_dir)+os.sep)
         self.right_tree.setRootIndex(root_index)
+        self.right_model.setRootPath(str(self.current_dir))
         
         # Hide all subdirectories
         for i in range(self.right_model.rowCount(root_index)):
@@ -335,7 +338,8 @@ class INIManager(QMainWindow):
             self.right_editor_modified = False
             self.right_model.setRootPath(str(self.current_dir))
             self.right_tree.setRootIndex(self.right_model.index(str(self.current_dir)))
-            self.right_editor.setPlainText("")
+            self.on_right_file_clicked(self.right_tree.currentIndex())
+            #self.right_editor.setPlainText("")
             QMessageBox.information(self, "Success", "File saved successfully!")
         except Exception as e:
             QMessageBox.warning(self, "Error", f"Could not save file:\n{str(e)}")

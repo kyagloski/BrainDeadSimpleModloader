@@ -33,7 +33,8 @@ from ini_manager import *
 from exe_manager import *
 from installer import *
 
-SHOW_MSG_TIME = 10000000
+SHOW_MSG_TIME  = 10000000
+DIALOGUE_WIDTH = 60
 
 class StdoutRedirector(QObject):
     text_written = pyqtSignal(str)
@@ -249,6 +250,8 @@ class ConflictThread(QThread):
 
 class RichTextDelegate(QStyledItemDelegate):
     def paint(self, painter, option, index):
+        bg = index.data(Qt.ItemDataRole.BackgroundRole)
+        if bg: option.backgroundBrush = bg
         style = option.widget.style()
         style.drawControl(style.ControlElement.CE_ItemViewItem, option, painter, option.widget)
         text = index.data(Qt.ItemDataRole.DisplayRole)
@@ -275,6 +278,8 @@ class ReorderOnlyTable(QTableWidget):
     def __init__(self, parent, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.parent=parent
+        self.name_row_dict=dict()
+        self.row_name_dict=dict()
 
     def is_separator_row(self, row):
         name_item = self.item(row, 2)
@@ -298,6 +303,12 @@ class ReorderOnlyTable(QTableWidget):
             children.append(r)
         return children
 
+    def get_item_separator_row(self, row):
+        if self.is_separator_row(row): return None
+        for i in range(row,-1,-1):
+            if self.is_separator_row(i): return i
+        return None
+       
     def collect_row_data(self, row):
         is_sep = self.is_separator_row(row)
         if is_sep:
@@ -357,6 +368,7 @@ class ReorderOnlyTable(QTableWidget):
         conflict_item.setFlags(Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsSelectable & ~Qt.ItemFlag.ItemIsDragEnabled)
         self.setItem(row,3, conflict_item)
         self.parent._loading=False
+        self.update_dicts(row,name)
 
     def _create_mod_items(self, row, name, checkbox_state=None, conflicts="", tooltip=""):
         self.parent._loading=True
@@ -376,31 +388,23 @@ class ReorderOnlyTable(QTableWidget):
         self.setItem(row, 2, name_item)
         
         conflict_item = QTableWidgetItem(conflicts)
-        #conflict_item = QTableWidgetItem("")
         conflict_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
-        #label=DragLabel(conflicts, self)
-        #label.setTextFormat(Qt.TextFormat.RichText)
-        #label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        #self.setCellWidget(row,3,label)
         conflict_item.setToolTip(tooltip)
         self.setItem(row, 3, conflict_item)
         conflict_item.setFlags(conflict_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
         self.parent._loading=False
-
+        self.update_dicts(row,name)
+                
     def dropEvent(self, event):
-        print("drop event")
         drop_pos = event.position().toPoint()
         index = self.indexAt(drop_pos)
-        print("here1") 
         selected = self.selectedItems()
         if not selected:
             event.ignore()
             return
         
-        print("here2") 
         selected_rows = sorted(set(item.row() for item in selected))
         
-        print("here3") 
         if not index.isValid():
             target_row = self.rowCount()
         else:
@@ -410,7 +414,6 @@ class ReorderOnlyTable(QTableWidget):
             mid_point = rect.top() + rect.height() / 2
             target_row = drop_row if y < mid_point else drop_row + 1
         
-        print("here4") 
         event.ignore()
         
         if len(selected_rows) > 0:
@@ -420,17 +423,14 @@ class ReorderOnlyTable(QTableWidget):
                 if min_sel <= target_row <= max_sel + 1:
                     return
        
-        print("here5") 
         rows_data = [self.collect_row_data(row) for row in selected_rows]
 
         for row in reversed(selected_rows):
             self.removeRow(row)
         
-        print("here6") 
         rows_removed_before_target = sum(1 for r in selected_rows if r < target_row)
         adjusted_target = target_row - rows_removed_before_target
  
-        print("here7") 
         new_selection_rows = []
         for i, data in enumerate(rows_data):
             insert_row = adjusted_target + i
@@ -438,7 +438,6 @@ class ReorderOnlyTable(QTableWidget):
             self.create_row_from_data(insert_row, data)
             new_selection_rows.append(insert_row)
         
-        print("here8") 
         self.clearSelection()
         selection = QItemSelection()
         for row in new_selection_rows:
@@ -447,13 +446,22 @@ class ReorderOnlyTable(QTableWidget):
             selection.select(left, right)
         self.selectionModel().select(selection, QItemSelectionModel.SelectionFlag.Select)
         
-        print("here9") 
         self.update_priority_numbers()
         
-        print("here10") 
         if self.selectedItems():
             self.itemChanged.emit(self.selectedItems()[0])
-        print("drop event done")
+
+    def update_dicts(self, row, name):
+        self.name_row_dict.pop(name,None)
+        self.row_name_dict.pop(row,None)
+        self.name_row_dict[name]=row
+        self.row_name_dict[row]=name
+
+    def highlight_row(self, row, color=None):
+        for col in range(self.columnCount()):
+            if self.item(row, col):
+                if color==None: self.item(row,col).setBackground(QColor())
+                else: self.item(row, col).setBackground(QColor(color))
 
 class EditableComboBox(QComboBox):
     def __init__(self, upper=None):
@@ -930,7 +938,46 @@ class ModLoaderUserInterface(QMainWindow):
         elif not self.is_separator_row(row):
             self.explorer_label.setText(mod_name)
             self.populate_file_explorer(Path(self.cfg["SOURCE_DIR"]) / Path(mod_name))
-    
+
+        self.highlight_conflicts(selected_rows)
+
+    def highlight_conflicts(self, rows):
+        self.mod_table.blockSignals(True)
+        for row in range(self.mod_table.rowCount()):
+            self.mod_table.highlight_row(row,None)
+        for row in rows:
+            if self.is_separator_row(row):
+                sep_rows=self.get_separator_children_rows(row)
+                er_rows=[]
+                en_rows=[]
+                for i in sep_rows:
+                    name=self.mod_table.item(i,2).text()
+                    try:    overriders=self.mod_table.overriders[name]
+                    except: overriders=[]
+                    try:    overriddens=self.mod_table.overriddens[name]
+                    except: overriddens=[]
+                    er_rows+=[self.mod_table.name_row_dict[name] for name in overriders]
+                    en_rows+=[self.mod_table.name_row_dict[name] for name in overriddens]
+            else:
+                name=self.mod_table.item(row,2).text()
+                try:    overriders=self.mod_table.overriders[name]
+                except: overriders=[]
+                try:    overriddens=self.mod_table.overriddens[name]
+                except: overriddens=[]
+                er_rows=[self.mod_table.name_row_dict[name] for name in overriders]
+                en_rows=[self.mod_table.name_row_dict[name] for name in overriddens]
+            for i in er_rows: 
+                if self.mod_table.isRowHidden(i):
+                    sep_row=self.mod_table.get_item_separator_row(i)
+                    self.mod_table.highlight_row(sep_row,"#1C5C1C")
+                else: self.mod_table.highlight_row(i,"#1C5C1C")
+            for i in en_rows: 
+                if self.mod_table.isRowHidden(i):
+                    sep_row=self.mod_table.get_item_separator_row(i)
+                    self.mod_table.highlight_row(sep_row,"#5C1C1C")
+                else: self.mod_table.highlight_row(i,"#5C1C1C")
+        self.mod_table.blockSignals(False)
+        
     def populate_file_explorer(self, path):
         self.file_explorer.clear()
         if not path.exists() or not path.is_dir(): return
@@ -961,10 +1008,7 @@ class ModLoaderUserInterface(QMainWindow):
             #self.set_mod_conflict_flags(name, row)
             
     def add_separator(self, name="v#New Separator"):
-        #if name[0]==">": collapse_state=True
-        #else: collapse_state=False
-        enabled=False
-        self.add_mod(name, enabled, is_separator=True)
+        self.add_mod(name, False, is_separator=True)
 
     def is_separator_row(self, row):
         name_item = self.mod_table.item(row, 2)
@@ -1036,7 +1080,7 @@ class ModLoaderUserInterface(QMainWindow):
     def enable_all(self):
         reply = QMessageBox.question(
             self, "Confirm Enable All",
-            "Enable all mods?\n",
+            "Enable all mods?"+' '*DIALOGUE_WIDTH,
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
         if reply == QMessageBox.StandardButton.Yes:
             self._set_all_mods_state(Qt.CheckState.Checked)
@@ -1044,7 +1088,7 @@ class ModLoaderUserInterface(QMainWindow):
     def disable_all(self):
         reply = QMessageBox.question(
             self, "Confirm Disable All",
-            "Disable all mods?\n",
+            "Disable all mods?"+' '*DIALOGUE_WIDTH,
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
         if reply == QMessageBox.StandardButton.Yes:
             self._set_all_mods_state(Qt.CheckState.Unchecked)
@@ -1391,11 +1435,11 @@ class ModLoaderUserInterface(QMainWindow):
     def add_preset(self, text=None):
         if text:
             name, ok = QInputDialog.getText(
-                self, "New Preset", text+"Preset name",
+                self, "New Preset", text+"Preset name:"+' '*DIALOGUE_WIDTH,
                 QLineEdit.EchoMode.Normal, "New Preset")
         else:
             name, ok = QInputDialog.getText(
-                self, "New Preset", "Preset name:",
+                self, "New Preset", "Preset name:"+' '*DIALOGUE_WIDTH,
                 QLineEdit.EchoMode.Normal, "New Preset")
         if ok and name:
             name=name.removesuffix(".txt")+".txt"
@@ -1408,7 +1452,7 @@ class ModLoaderUserInterface(QMainWindow):
 
     def rename_preset(self):
         name, ok = QInputDialog.getText(
-            self, "Rename Preset", "Preset name",
+            self, "Rename Preset", "New name:"+' '*DIALOGUE_WIDTH,
             QLineEdit.EchoMode.Normal, self.preset_combo.currentText())
         if name:
             if name in os.listdir(PRESET_DIR):
@@ -1423,7 +1467,7 @@ class ModLoaderUserInterface(QMainWindow):
 
     def dup_preset(self):
         name, ok = QInputDialog.getText(
-            self, "Duplicate Preset", "Preset name",
+            self, "Duplicate Preset", "Preset name"+' '*DIALOGUE_WIDTH,
             QLineEdit.EchoMode.Normal, self.preset_combo.currentText())
         if name:
             if name in os.listdir(PRESET_DIR):
@@ -1453,7 +1497,7 @@ class ModLoaderUserInterface(QMainWindow):
         
     def add_separator_at(self, row):
         name, ok = QInputDialog.getText(
-            self, "Add Separator", "Separator name:",
+            self, "Add Separator", "Separator name:"+' '*DIALOGUE_WIDTH,
             QLineEdit.EchoMode.Normal, "New Separator")
         if ok and name:
             self.mod_table.insertRow(row)
@@ -1464,7 +1508,7 @@ class ModLoaderUserInterface(QMainWindow):
     def rename_separator(self, row):
         old_name = self.get_separator_name(row)
         new_name, ok = QInputDialog.getText(
-            self, "Rename Separator", "New name:",
+            self, "Rename Separator", "New name:"+' '*DIALOGUE_WIDTH,
             QLineEdit.EchoMode.Normal, old_name)
         if ok and new_name:
             name_item = self.mod_table.item(row, 2)
@@ -1538,6 +1582,10 @@ class ModLoaderUserInterface(QMainWindow):
         elif event.key() == Qt.Key.Key_Delete: self.delete_selected_items()
         elif event.key() == Qt.Key.Key_Left:   self._collapse_selected_separators(row)
         elif event.key() == Qt.Key.Key_Right:  self._expand_selected_separators(row)
+        elif (event.key() == Qt.Key.Key_A and \
+        event.modifiers() == (Qt.KeyboardModifier.ControlModifier | Qt.KeyboardModifier.ShiftModifier)):
+            self.mod_table.clearSelection()
+            self.highlight_conflicts([])
         else: QTableWidget.keyPressEvent(self.mod_table, event)
 
     def delete_selected_items(self):
@@ -1604,7 +1652,7 @@ class ModLoaderUserInterface(QMainWindow):
         old_name = self.mod_table.item(row, 2).text()
         
         new_name, ok = QInputDialog.getText(
-            self, "Rename Mod", "Enter new name:",
+            self, "Rename Mod", "New name:"+' '*DIALOGUE_WIDTH,
             QLineEdit.EchoMode.Normal, old_name)
         
         if ok and new_name and new_name != old_name:
