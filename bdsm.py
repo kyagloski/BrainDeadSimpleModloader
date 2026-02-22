@@ -351,7 +351,7 @@ def delete_mod(mod_name, gui=False, write=True):
     read_cfg(sync=False)
     matches = [mod for mod in load_list() if mod_name.lower() in mod.lower()]
     if matches==[]: print("error: could not find mod "+mod_name); return
-    mod = matches[0].lstrip('*~#>v')
+    mod = matches[0].lstrip('*~#>v>')
     if not gui: 
         prompt="are you sure you want to remove mod "+mod+" [y/N] "
         if 'y' not in input(prompt): return

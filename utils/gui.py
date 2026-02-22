@@ -754,6 +754,7 @@ class ModLoaderUserInterface(QMainWindow):
 
     def _create_mod_table(self):
         self.mod_table = ReorderOnlyTable(self, 0, 4)
+        #self.mod_table.setItemDelegateForColumn(2, RichTextDelegate(self))
         self.mod_table.setItemDelegateForColumn(3, RichTextDelegate(self))
         self.mod_table.setHorizontalHeaderLabels(["#", "", "Mod Name", "Conflicts" ])
         self.mod_table.verticalHeader().setVisible(False)
@@ -1528,7 +1529,7 @@ class ModLoaderUserInterface(QMainWindow):
         old_name = self.get_separator_name(row)
         new_name, ok = QInputDialog.getText(
             self, "Rename Separator", "New name:"+' '*DIALOGUE_WIDTH,
-            QLineEdit.EchoMode.Normal, old_name)
+            QLineEdit.EchoMode.Normal, old_name.lstrip('*~#v>'))
         if ok and new_name:
             name_item = self.mod_table.item(row, 2)
             name_item.setText(new_name)
