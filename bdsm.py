@@ -324,7 +324,7 @@ def sync_loadorder():
     if additions!=[] or exclusions!=[]: save_to_loadorder(loadorder+additions, verbose=False)
 
 
-def install_mod(archive_path=None, temp_dir=None, gui=False, parent=None):  
+def install_mod(archive_path=None, temp_dir=None, gui=False, parent=None, write=True):  
     read_cfg(sync=False)
     if not gui:
         temp_dir = Path(tempfile.mkdtemp())
@@ -332,14 +332,22 @@ def install_mod(archive_path=None, temp_dir=None, gui=False, parent=None):
         if not result: print(f"failed to install mod {Path(archive_path).stem}"); return None
     name = installer_run(archive_path=archive_path, output_dir=SOURCE_DIR, temp_dir=temp_dir, gui=gui, parent=parent)
     if not name: print(f"failed to install mod {Path(archive_path).stem}"); return None
-    with open(LOAD_ORDER, "a", encoding="utf-8") as f:
-        f.write(name+'\n')
+    if write:
+        with open(LOAD_ORDER, "a", encoding="utf-8") as f:
+            f.write(name+'\n')
     if RELOAD_ON_INSTALL: perform_copy() #restore(); perform_copy()
     print("wrote mod: "+name+" to load order!")
     return name
 
 
-def delete_mod(mod_name, gui=False):
+def install_mod_write(mods):
+    # to avoid multiple usage of resource
+    with open(LOAD_ORDER, "a", encoding="utf-8") as f:
+        for name in mods:
+            f.write(name+'\n')
+
+
+def delete_mod(mod_name, gui=False, write=True):
     read_cfg(sync=False)
     matches = [mod for mod in load_list() if mod_name.lower() in mod.lower()]
     if matches==[]: print("error: could not find mod "+mod_name); return
@@ -348,16 +356,25 @@ def delete_mod(mod_name, gui=False):
         prompt="are you sure you want to remove mod "+mod+" [y/N] "
         if 'y' not in input(prompt): return
     # remove from load order 
-    with open(LOAD_ORDER, "r") as f: lines = f.readlines()
-    with open(LOAD_ORDER, "w") as f:
-        for line in lines:
-            if line.strip() != mod: f.write(line)
+    if write:
+        with open(LOAD_ORDER, "r") as f: lines = f.readlines()
+        with open(LOAD_ORDER, "w") as f:
+            for line in lines:
+                if line.strip() != mod: f.write(line)
     # delete dir
     set_full_perms_dir(SOURCE_DIR/mod)
     try: shutil.rmtree(SOURCE_DIR/mod)
     except Exception as e: print(f"error: encountered exception {str(e)} during deleting of mod {mod}")
     if RELOAD_ON_INSTALL: perform_copy() #restore(); perform_copy()
     print("deleted mod "+mod+"!")
+
+
+def delete_mod_write(mods):
+    # to avoid multiple usage of resource
+    with open(LOAD_ORDER, "r") as f: lines = f.readlines()
+    with open(LOAD_ORDER, "w") as f:
+        for line in lines:
+            if line.strip() not in mods: f.write(line) # TODO: handle separators here
 
 
 def rename_mod(old_name, new_name):
@@ -369,7 +386,6 @@ def rename_mod(old_name, new_name):
     else: print("error: cannot find mod dir "+str(Path(SOURCE_DIR) / old_name)); return
     for loadorder in os.listdir(PRESET_DIR):
         loadorder = PRESET_DIR/loadorder
-        #llist = [line.strip().lstrip('*~#>v') for line in loadorder.read_text(encoding="utf-8").splitlines()]
         llist = [line.strip() for line in loadorder.read_text(encoding="utf-8").splitlines()]
         llist[llist.index(old_name)] = new_name
         loadorder.write_text("\n".join(llist), encoding="utf-8")

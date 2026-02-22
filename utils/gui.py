@@ -100,7 +100,6 @@ class CommandExecutorThread(QThread):
         self.wait()
 
 class ExtractorThread(QThread):
-    #archive_extracted = pyqtSignal(str,str)  # mod name
     call_handle_mod_install = pyqtSignal(str, str)
     progress = pyqtSignal(str)
     complete = pyqtSignal()
@@ -131,8 +130,6 @@ class ExtractorThread(QThread):
                 result=True
             else: result=extract_archive(archive_path, temp_dir)
             self.temp_complete.emit()
-            #if result: self.archive_extracted.emit(str(temp_dir),str(archive_path))
-            #else: self.archive_extracted.emit(None,str(archive_path))
             if result: self.call_handle_mod_install.emit(str(temp_dir), str(archive_path))
             else: self.call_handle_mod_install.emit(None, str(archive_path))
                
@@ -197,7 +194,8 @@ class ConflictThread(QThread):
                 except: continue
                 if self.load_order!=updated_mods:
                     self.load_order=updated_mods
-                    self.update_conflict_data(self.load_order)
+                    try: self.update_conflict_data(self.load_order)
+                    except: self.load_order=[]
             elif self.parent._is_sorted_alphabetically: self.load_order=[]
             QThread.msleep(80)
         
@@ -239,7 +237,6 @@ class ConflictThread(QThread):
         
     def update_conflict_data(self, mods=[]):
         cfg=read_cfg(sync=False)
-        #if not mods: mods = self.parent._collect_load_order()
         er,en,fu,mf=scan_mod_overrides(cfg["SOURCE_DIR"],mods)
         self.mod_table.overriders=er
         self.mod_table.overriddens=en
@@ -280,13 +277,24 @@ class ReorderOnlyTable(QTableWidget):
     def __init__(self, parent, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.parent=parent
-        self.name_row_dict=dict()
-        self.row_name_dict=dict()
+        #self.name_row_dict=dict()
+        #self.row_name_dict=dict()
 
     def is_separator_row(self, row):
         name_item = self.item(row, 2)
         return name_item and name_item.data(Qt.ItemDataRole.UserRole) == "separator"
-    
+
+    def is_separator_collapsed(self, row):
+        if not self.is_separator_row(row): return None
+        if self.item(row, 0).text()=="▶": return True
+        else: return False
+
+    def get_row_from_name(self,name):
+        for row in range(self.rowCount()):
+            item = self.item(row, 2)
+            if item and item.text() == name: return row
+        return None
+
     def update_priority_numbers(self):
         priority = 1
         for row in range(self.rowCount()):
@@ -333,18 +341,18 @@ class ReorderOnlyTable(QTableWidget):
             'conflict_tooltip': self.item(row,3).toolTip()
         }
 
-    def create_row_from_data(self, row, data):
+    def create_row_from_data(self, row, data, hidden=False):
         if data['is_separator']:
-            self._create_separator_items(row, data['name'])
+            self._create_separator_items(row, data['name'], collapse_state=data["collapse_state"])
         else:
-            self._create_mod_items(row, data['name'], data['checkbox'], data['conflicts'])
+            self._create_mod_items(row, data['name'], data['checkbox'], data['conflicts'], hidden=hidden)
         
         if data['hidden']:
             self.setRowHidden(row, True)
     
-    def _create_separator_items(self, row, name, conflicts="", tooltip=""):
+    def _create_separator_items(self, row, name, collapse_state=False, conflicts="", tooltip=""):
         self.parent._loading=True
-        if name[0]==">": collapse_state="▶"
+        if collapse_state or name[0]==">": collapse_state="▶"
         else: collapse_state="▼"
         priority_item = QTableWidgetItem(collapse_state)
         priority_item.setFlags(Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsSelectable | Qt.ItemFlag.ItemIsDragEnabled)
@@ -370,9 +378,8 @@ class ReorderOnlyTable(QTableWidget):
         conflict_item.setFlags(Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsSelectable & ~Qt.ItemFlag.ItemIsDragEnabled)
         self.setItem(row,3, conflict_item)
         self.parent._loading=False
-        self.update_dicts(row,name)
 
-    def _create_mod_items(self, row, name, checkbox_state=None, conflicts="", tooltip=""):
+    def _create_mod_items(self, row, name, checkbox_state=None, conflicts="", tooltip="", hidden=False):
         self.parent._loading=True
         priority_item = QTableWidgetItem("")
         priority_item.setFlags(priority_item.flags() | Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsSelectable & ~Qt.ItemFlag.ItemIsDragEnabled)
@@ -394,21 +401,27 @@ class ReorderOnlyTable(QTableWidget):
         conflict_item.setToolTip(tooltip)
         self.setItem(row, 3, conflict_item)
         conflict_item.setFlags(conflict_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
+        if hidden: self.setRowHidden(row,True)
         self.parent._loading=False
-        self.update_dicts(row,name)
                 
     def dropEvent(self, event):
+        # this is the worst
         drop_pos = event.position().toPoint()
         index = self.indexAt(drop_pos)
         selected = self.selectedItems()
         if not selected:
             event.ignore()
             return
-        
+      
+        # selected separator, get all child items 
         selected_rows = sorted(set(item.row() for item in selected))
+        more_selected_rows=[]
+        for row in selected_rows:
+            if self.is_separator_row(row):
+                more_selected_rows+=self.get_separator_children(row)
+        selected_rows+=more_selected_rows
         
-        if not index.isValid():
-            target_row = self.rowCount()
+        if not index.isValid(): target_row = self.rowCount()
         else:
             drop_row = index.row()
             rect = self.visualRect(index)
@@ -432,12 +445,20 @@ class ReorderOnlyTable(QTableWidget):
         
         rows_removed_before_target = sum(1 for r in selected_rows if r < target_row)
         adjusted_target = target_row - rows_removed_before_target
- 
+
+        # determine if we dragged into collapsed separator
+        hidden=False
+        if self.is_separator_row(adjusted_target-1) \
+        and self.is_separator_collapsed(adjusted_target-1):
+            children=self.get_separator_children(adjusted_target-1)
+            if children: adjusted_target=max(children)+1
+            hidden=True
+
         new_selection_rows = []
         for i, data in enumerate(rows_data):
             insert_row = adjusted_target + i
             self.insertRow(insert_row)
-            self.create_row_from_data(insert_row, data)
+            self.create_row_from_data(insert_row, data, hidden=hidden)
             new_selection_rows.append(insert_row)
         
         self.clearSelection()
@@ -450,14 +471,9 @@ class ReorderOnlyTable(QTableWidget):
         
         self.update_priority_numbers()
         
+        QTimer.singleShot(100,lambda: self.parent.highlight_conflicts(new_selection_rows))
         if self.selectedItems():
             self.itemChanged.emit(self.selectedItems()[0])
-
-    def update_dicts(self, row, name):
-        self.name_row_dict.pop(name,None)
-        self.row_name_dict.pop(row,None)
-        self.name_row_dict[name]=row
-        self.row_name_dict[row]=name
 
     def highlight_row(self, row, color=None):
         for col in range(self.columnCount()):
@@ -941,9 +957,11 @@ class ModLoaderUserInterface(QMainWindow):
             self.explorer_label.setText(mod_name)
             self.populate_file_explorer(Path(self.cfg["SOURCE_DIR"]) / Path(mod_name))
 
-        self.highlight_conflicts(selected_rows)
+        try: self.highlight_conflicts(selected_rows)
+        except: self.highlight_conflicts([])
 
     def highlight_conflicts(self, rows):
+        if self._loading: QTimer.singleShot(1000,lambda: self.highlight_conflicts(rows)); return
         self.mod_table.blockSignals(True)
         for row in range(self.mod_table.rowCount()):
             self.mod_table.highlight_row(row,None)
@@ -958,16 +976,16 @@ class ModLoaderUserInterface(QMainWindow):
                     except: overriders=[]
                     try:    overriddens=self.mod_table.overriddens[name]
                     except: overriddens=[]
-                    er_rows+=[self.mod_table.name_row_dict[name] for name in overriders]
-                    en_rows+=[self.mod_table.name_row_dict[name] for name in overriddens]
+                    er_rows+=[self.mod_table.get_row_from_name(name) for name in overriders]
+                    en_rows+=[self.mod_table.get_row_from_name(name) for name in overriddens]
             else:
                 name=self.mod_table.item(row,2).text()
                 try:    overriders=self.mod_table.overriders[name]
                 except: overriders=[]
                 try:    overriddens=self.mod_table.overriddens[name]
                 except: overriddens=[]
-                er_rows=[self.mod_table.name_row_dict[name] for name in overriders]
-                en_rows=[self.mod_table.name_row_dict[name] for name in overriddens]
+                er_rows=[self.mod_table.get_row_from_name(name) for name in overriders]
+                en_rows=[self.mod_table.get_row_from_name(name) for name in overriddens]
             for i in er_rows: 
                 if self.mod_table.isRowHidden(i):
                     sep_row=self.mod_table.get_item_separator_row(i)
@@ -1007,7 +1025,6 @@ class ModLoaderUserInterface(QMainWindow):
             priority = sum(1 for r in range(row) if not self.is_separator_row(r)) + 1
             self.mod_table._create_mod_items(row, name, Qt.CheckState.Checked if enabled else Qt.CheckState.Unchecked)
             self.mod_table.item(row, 0).setText(str(priority))
-            #self.set_mod_conflict_flags(name, row)
             
     def add_separator(self, name="v#New Separator"):
         self.add_mod(name, False, is_separator=True)
@@ -1382,12 +1399,14 @@ class ModLoaderUserInterface(QMainWindow):
             if action == rename_sep_action:      self.rename_separator(clicked_row)
             elif action == remove_sep_action:    self.remove_separator(clicked_row)
             elif action == add_sep_above_action: self.add_separator_at(clicked_row)
-            elif action == add_sep_below_action: self.add_separator_at(clicked_row + 1)
+            elif action == add_sep_below_action: 
+                last_child = max(self.mod_table.get_separator_children(clicked_row))
+                self.add_separator_at(last_child+1)
             elif action == collapse_all_action:  self.collapse_all_seps()
             elif action == expand_all_action:    self.expand_all_seps()
         else:
             if not self.mod_table.selectedItems():
-                add_sep_action = menu.addAction("Add Separator Here")
+                add_sep_action = menu.addAction("Add Separator")
                 action = menu.exec(self.mod_table.viewport().mapToGlobal(position))
                 if action == add_sep_action:
                     self.add_separator_at(clicked_row if clicked_row >= 0 else self.mod_table.rowCount())
@@ -1417,14 +1436,8 @@ class ModLoaderUserInterface(QMainWindow):
             elif action == to_bot_action: self.move_mod_bot()
             elif action == enable_action: self.enable_selected_mods()
             elif action == disable_action: self.disable_selected_mods()
-            elif action == add_sep_above_action:
-                selected = self.mod_table.selectedItems()
-                if selected:
-                    self.add_separator_at(selected[0].row())
-            elif action == add_sep_below_action:
-                selected = self.mod_table.selectedItems()
-                if selected:
-                    self.add_separator_at(selected[0].row() + 1)
+            elif action == add_sep_above_action: self.add_separator_at(clicked_row)
+            elif action == add_sep_below_action: self.add_separator_at(clicked_row+1)
             elif action == remove_action: self.remove_selected_mod()
             elif action == open_folder_action: self.open_mod_folder()
 
@@ -1599,6 +1612,7 @@ class ModLoaderUserInterface(QMainWindow):
         if not selected_rows:
             return
         
+        self.highlight_conflicts([])
         has_separator = any(self.is_separator_row(row) for row in selected_rows)
         has_mod = any(not self.is_separator_row(row) for row in selected_rows)
 
@@ -1616,15 +1630,18 @@ class ModLoaderUserInterface(QMainWindow):
         
         if reply == QMessageBox.StandardButton.Yes:
             self._loading=True
+            mods=[]
             for row in selected_rows:
                 if self.is_separator_row(row):
                     children = self.get_separator_children_rows(row)
                     for child_row in children:
                         self.mod_table.setRowHidden(child_row, False)
                 mod_name = self.mod_table.collect_row_data(row)["name"]
-                if not self.is_separator_row(row): delete_mod(mod_name, gui=True)
+                mods.append(mods)
+                if not self.is_separator_row(row): delete_mod(mod_name, gui=True, write=False)
                 else: print(f"deleted seperator {mod_name}!")
                 self.mod_table.removeRow(row)
+            if mods: delete_mod_write(mods)
             self.loading=False 
             self.update_priority_numbers()
             self.update_status()
@@ -1662,13 +1679,13 @@ class ModLoaderUserInterface(QMainWindow):
             QLineEdit.EchoMode.Normal, old_name)
         
         if ok and new_name and new_name != old_name:
-            try:
-                rename_mod(old_name, new_name)
-                self.move_row(row,row,new_name)
-                self.auto_save_load_order()
-                self.statusBar().showMessage(f"Renamed '{old_name}' to '{new_name}'", SHOW_MSG_TIME)
-            except Exception as e:
-                QMessageBox.warning(self, "Rename Error", f"Failed to rename mod:\n{str(e)}")
+            #try:
+            rename_mod(old_name, new_name)
+            self.move_row(row,row,new_name)
+            self.auto_save_load_order()
+            self.statusBar().showMessage(f"Renamed '{old_name}' to '{new_name}'", SHOW_MSG_TIME)
+            #except Exception as e:
+            #    QMessageBox.warning(self, "Rename Error", f"Failed to rename mod:\n{str(e)}")
 
     def remove_selected_mod(self):
         self.delete_selected_items()
