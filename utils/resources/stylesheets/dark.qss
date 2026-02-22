@@ -275,7 +275,6 @@ QSpinBox::up-button,
 QDoubleSpinBox::up-button {
     background-color: #1a1a1a;
     border: 1px solid #2a2a2a;
-    border-left: none;
     width: 16px;
     subcontrol-origin: border;
     subcontrol-position: top right;
@@ -285,33 +284,27 @@ QSpinBox::down-button,
 QDoubleSpinBox::down-button {
     background-color: #1a1a1a;
     border: 1px solid #2a2a2a;
-    border-left: none;
     width: 16px;
     subcontrol-origin: border;
     subcontrol-position: bottom right;
 }
 
-QSpinBox::up-arrow,
-QDoubleSpinBox::up-arrow {
-    image: none;
+QSpinBox::up-arrow {
+    border-left: 4px solid transparent;
+    border-right: 4px solid transparent;
+    border-bottom: 6px solid #4a4a4a;  /* Up arrow */
+    width: 0;
+    height: 0;
+}
+            
+QSpinBox::down-arrow {
+    border-left: 4px solid transparent;
+    border-right: 4px solid transparent;
+    border-top: 6px solid #4a4a4a;  /* Down arrow */
+    width: 0;
+    height: 0;
 }
 
-QSpinBox::up-arrow:after,
-QDoubleSpinBox::up-arrow:after {
-    content: "▲";
-    font-size: 8pt;
-}
-
-QSpinBox::down-arrow,
-QDoubleSpinBox::down-arrow {
-    image: none;
-}
-
-QSpinBox::down-arrow:after,
-QDoubleSpinBox::down-arrow:after {
-    content: "▼";
-    font-size: 8pt;
-}
 
 /* ========================================
    SLIDERS

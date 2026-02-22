@@ -307,6 +307,13 @@ class ReorderOnlyTable(QTableWidget):
                 seps.append(name_item.text())
         return seps
 
+    def get_priorities(self):
+        priorities=[]
+        for row in range(self.rowCount()):
+            if self.is_separator_row(row): continue
+            priorities.append(int(self.item(row,0).text()))
+        return priorities
+
     def update_priority_numbers(self):
         priority = 1
         for row in range(self.rowCount()):
@@ -1183,19 +1190,20 @@ class ModLoaderUserInterface(QMainWindow):
     def move_mod_priority(self):
         selected_rows = sorted(set(item.row() for item in self.mod_table.selectedItems()))
         if not selected_rows: return
+        if any(self.mod_table.is_separator_row(i) for i in selected_rows): print("error: cannot change separator priority"); return
         top_row=int(self.mod_table.item(min(selected_rows),0).text())
-        last_row=int(self.mod_table.item(self.mod_table.rowCount()-1,0).text())
+        #last_row=int(self.mod_table.item(self.mod_table.rowCount()-1,0).text())
+        last_row=max(self.mod_table.get_priorities())
         val, ok = QInputDialog.getInt(
             self, "Set Priority", "Priority #:"+' '*DIALOGUE_WIDTH,
             value=int(top_row), min=0, max=last_row, step=1)
         if (not ok) or (not val): return
         val=self.mod_table.get_row_from_priority(val) 
-        i=0
         new_selected_rows=[]
-        for row in selected_rows:
-            self.move_row(row,val+i)
-            new_selected_rows.append(val+i)
-            i+=1
+        for row in reversed(selected_rows):
+            self.move_row(row,val)
+            new_selected_rows.append(val)
+            val-=1
         self._reselect_rows(new_selected_rows)
         self.update_priority_numbers()
         self.auto_save_load_order()
@@ -1203,15 +1211,16 @@ class ModLoaderUserInterface(QMainWindow):
     def move_mod_separator(self,separator):
         selected_rows = sorted(set(item.row() for item in self.mod_table.selectedItems()))
         if not selected_rows: return
+        if any(self.mod_table.is_separator_row(i) for i in selected_rows): print("error: cannot move separator to separator"); return
         top_row=int(self.mod_table.item(min(selected_rows),0).text())
         sep_row=self.mod_table.get_row_from_name(separator)
-        to_row=min(max(self.mod_table.get_separator_children(sep_row))+1,self.mod_table.rowCount()-1)
+        try: to_row=min(max(self.mod_table.get_separator_children(sep_row)),self.mod_table.rowCount()-1)
+        except: to_row=min(sep_row,self.mod_table.rowCount()-1)
         new_selected_rows=[]
-        i=0
-        for row in selected_rows:
-            self.move_row(row,to_row+i)
-            new_selected_rows.append(to_row+i)
-            i+=1
+        for row in reversed(selected_rows):
+            self.move_row(row,to_row)
+            new_selected_rows.append(to_row)
+            to_row-=1
         self._reselect_rows(new_selected_rows)
         self.update_priority_numbers()
         self.auto_save_load_order()
@@ -1287,7 +1296,7 @@ class ModLoaderUserInterface(QMainWindow):
 
     def auto_save_load_order(self,instant=False):
         global RELOAD_ON_INSTALL
-        if self._loading: return
+        if self._loading: QTimer.singleShot(100,lambda: self.auto_save_load_order(instant=False)); return
         try:
             self.cfg=read_cfg(sync=False) # check for update
             if instant: self.save_load_order()
@@ -1444,7 +1453,7 @@ class ModLoaderUserInterface(QMainWindow):
             action = menu.exec(self.mod_table.viewport().mapToGlobal(position))
             
             if action == rename_sep_action:      self.rename_separator(clicked_row)
-            elif action == remove_sep_action:    self.remove_separator(clicked_row)
+            elif action == remove_sep_action:    self.delete_selected_items()
             elif action == add_sep_above_action: self.add_separator_at(clicked_row)
             elif action == add_sep_below_action: 
                 last_child = max(self.mod_table.get_separator_children(clicked_row))
@@ -1496,7 +1505,7 @@ class ModLoaderUserInterface(QMainWindow):
             elif action == disable_action: self.disable_selected_mods()
             elif action == add_sep_above_action: self.add_separator_at(clicked_row)
             elif action == add_sep_below_action: self.add_separator_at(clicked_row+1)
-            elif action == remove_action: self.remove_selected_mod()
+            elif action == remove_action: self.delete_selected_items()
             elif action == open_folder_action: self.open_mod_folder()
             elif action in sep_actions:
                 name=action.text()
@@ -1596,22 +1605,22 @@ class ModLoaderUserInterface(QMainWindow):
             name_item.setData(Qt.ItemDataRole.UserRole + 1, new_name)
             self.auto_save_load_order()
 
-    def remove_separator(self, row):
-        reply = QMessageBox.question(
-            self, "Confirm Removal",
-            "Remove this separator?\n(Mods beneath it will remain)",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
-        if reply == QMessageBox.StandardButton.Yes:
-            next_separator = self.mod_table.rowCount()
-            for r in range(row + 1, self.mod_table.rowCount()):
-                if not self.is_separator_row(r): continue
-                next_separator = r
-                break
-            for r in range(row + 1, next_separator):
-                self.mod_table.setRowHidden(r, False)
-            self.mod_table.removeRow(row)
-            self.update_priority_numbers()
-            self.auto_save_load_order()
+    #def remove_separator(self, row):
+    #    reply = QMessageBox.question(
+    #        self, "Confirm Removal",
+    #        "Remove this separator?\n(Mods beneath it will remain)",
+    #        QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+    #    if reply == QMessageBox.StandardButton.Yes:
+    #        next_separator = self.mod_table.rowCount()
+    #        for r in range(row + 1, self.mod_table.rowCount()):
+    #            if not self.is_separator_row(r): continue
+    #            next_separator = r
+    #            break
+    #        for r in range(row + 1, next_separator):
+    #            self.mod_table.setRowHidden(r, False)
+    #        self.mod_table.removeRow(row)
+    #        self.update_priority_numbers()
+    #        self.auto_save_load_order()
 
     def collapse_all_seps(self):
         for r in range(self.mod_table.rowCount()):
@@ -1677,7 +1686,7 @@ class ModLoaderUserInterface(QMainWindow):
         has_separator = any(self.is_separator_row(row) for row in selected_rows)
         has_mod = any(not self.is_separator_row(row) for row in selected_rows)
 
-        names=[self.mod_table.collect_row_data(row)["name"] for row in selected_rows]
+        names=[self.mod_table.collect_row_data(row)["name"].lstrip("~#v>") for row in selected_rows]
         if len(names)>10: names=names[:10]+[f"... (+{len(names)-10} more)"]
         if has_separator and has_mod:
             msg = f"Remove selected mods and separators from load order?\n\n{'\n'.join(names)}"
@@ -1703,7 +1712,7 @@ class ModLoaderUserInterface(QMainWindow):
                 else: print(f"deleted seperator {mod_name}!")
                 self.mod_table.removeRow(row)
             if mods: delete_mod_write(mods)
-            self.loading=False 
+            self._loading=False 
             self.update_priority_numbers()
             self.update_status()
             self.auto_save_load_order()
@@ -1747,9 +1756,6 @@ class ModLoaderUserInterface(QMainWindow):
             self.statusBar().showMessage(f"Renamed '{old_name}' to '{new_name}'", SHOW_MSG_TIME)
             #except Exception as e:
             #    QMessageBox.warning(self, "Rename Error", f"Failed to rename mod:\n{str(e)}")
-
-    def remove_selected_mod(self):
-        self.delete_selected_items()
 
     def open_mod_folder(self):
         selected_items = self.mod_table.selectedItems()
