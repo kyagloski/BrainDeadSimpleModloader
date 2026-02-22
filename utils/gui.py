@@ -277,8 +277,6 @@ class ReorderOnlyTable(QTableWidget):
     def __init__(self, parent, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.parent=parent
-        #self.name_row_dict=dict()
-        #self.row_name_dict=dict()
 
     def is_separator_row(self, row):
         name_item = self.item(row, 2)
@@ -294,6 +292,20 @@ class ReorderOnlyTable(QTableWidget):
             item = self.item(row, 2)
             if item and item.text() == name: return row
         return None
+
+    def get_row_from_priority(self,priority):
+        for row in range(self.rowCount()):
+            item = self.item(row, 0)
+            if item and item.text() == str(priority): return row
+        return None
+
+    def get_all_separators(self):
+        seps=[]
+        for row in range(self.rowCount()):
+            name_item=self.item(row,2)
+            if name_item and name_item.data(Qt.ItemDataRole.UserRole) == "separator":
+                seps.append(name_item.text())
+        return seps
 
     def update_priority_numbers(self):
         priority = 1
@@ -1090,7 +1102,6 @@ class ModLoaderUserInterface(QMainWindow):
             QMessageBox.warning(self, "Unload Error", f"Failed to unload mods:\n{str(e)}")
 
     def _set_all_mods_state(self, state):
-        """Set checkbox state for all non-separator mods"""
         for row in range(self.mod_table.rowCount()):
             if not self.is_separator_row(row):
                 self.mod_table.item(row, 1).setCheckState(state)
@@ -1114,7 +1125,6 @@ class ModLoaderUserInterface(QMainWindow):
             self._set_all_mods_state(Qt.CheckState.Unchecked)
 
     def _reselect_rows(self, rows):
-        """Reselect rows after a move operation"""
         self.mod_table.clearSelection()
         selection_model = self.mod_table.selectionModel()
         for row in rows:
@@ -1167,6 +1177,42 @@ class ModLoaderUserInterface(QMainWindow):
             sr.append(nr)
             nr-=1
         self._reselect_rows(sr)
+        self.update_priority_numbers()
+        self.auto_save_load_order()
+
+    def move_mod_priority(self):
+        selected_rows = sorted(set(item.row() for item in self.mod_table.selectedItems()))
+        if not selected_rows: return
+        top_row=int(self.mod_table.item(min(selected_rows),0).text())
+        last_row=int(self.mod_table.item(self.mod_table.rowCount()-1,0).text())
+        val, ok = QInputDialog.getInt(
+            self, "Set Priority", "Priority #:"+' '*DIALOGUE_WIDTH,
+            value=int(top_row), min=0, max=last_row, step=1)
+        if (not ok) or (not val): return
+        val=self.mod_table.get_row_from_priority(val) 
+        i=0
+        new_selected_rows=[]
+        for row in selected_rows:
+            self.move_row(row,val+i)
+            new_selected_rows.append(val+i)
+            i+=1
+        self._reselect_rows(new_selected_rows)
+        self.update_priority_numbers()
+        self.auto_save_load_order()
+
+    def move_mod_separator(self,separator):
+        selected_rows = sorted(set(item.row() for item in self.mod_table.selectedItems()))
+        if not selected_rows: return
+        top_row=int(self.mod_table.item(min(selected_rows),0).text())
+        sep_row=self.mod_table.get_row_from_name(separator)
+        to_row=min(max(self.mod_table.get_separator_children(sep_row))+1,self.mod_table.rowCount()-1)
+        new_selected_rows=[]
+        i=0
+        for row in selected_rows:
+            self.move_row(row,to_row+i)
+            new_selected_rows.append(to_row+i)
+            i+=1
+        self._reselect_rows(new_selected_rows)
         self.update_priority_numbers()
         self.auto_save_load_order()
 
@@ -1412,20 +1458,30 @@ class ModLoaderUserInterface(QMainWindow):
                 if action == add_sep_action:
                     self.add_separator_at(clicked_row if clicked_row >= 0 else self.mod_table.rowCount())
                 return
-            
-            move_up_action = menu.addAction("Move Up")
-            move_down_action = menu.addAction("Move Down")
-            to_top_action = menu.addAction("Move Top")
-            to_bot_action = menu.addAction("Move Bottom")
+            move_to_menu = menu.addMenu("Move to...")
+            to_pri_action = move_to_menu.addAction("Priority...")
+            sep_menu=move_to_menu.addMenu("Separator")
+            move_to_menu.addSeparator()
+            to_top_action = move_to_menu.addAction("Move Top")
+            to_bot_action = move_to_menu.addAction("Move Bottom")
+            move_to_menu.addSeparator()
+            move_up_action = move_to_menu.addAction("Move Up")
+            move_down_action = move_to_menu.addAction("Move Down")
+            seps=self.mod_table.get_all_separators()
+            sep_actions=[]
+            for sep in seps:
+                sep_actions.append(sep_menu.addAction(sep))
+                    
             menu.addSeparator()
             enable_action = menu.addAction("Enable")
             disable_action = menu.addAction("Disable")
             menu.addSeparator()
+            rename_action = menu.addAction("Rename")
+            remove_action = menu.addAction("Delete")
+            menu.addSeparator()
             add_sep_above_action = menu.addAction("Add Separator Above")
             add_sep_below_action = menu.addAction("Add Separator Below")
             menu.addSeparator()
-            rename_action = menu.addAction("Rename")
-            remove_action = menu.addAction("Delete")
             open_folder_action = menu.addAction("Open Folder")
             
             action = menu.exec(self.mod_table.viewport().mapToGlobal(position))
@@ -1435,12 +1491,16 @@ class ModLoaderUserInterface(QMainWindow):
             elif action == move_down_action: self.move_mod_down()
             elif action == to_top_action: self.move_mod_top()
             elif action == to_bot_action: self.move_mod_bot()
+            elif action == to_pri_action: self.move_mod_priority()
             elif action == enable_action: self.enable_selected_mods()
             elif action == disable_action: self.disable_selected_mods()
             elif action == add_sep_above_action: self.add_separator_at(clicked_row)
             elif action == add_sep_below_action: self.add_separator_at(clicked_row+1)
             elif action == remove_action: self.remove_selected_mod()
             elif action == open_folder_action: self.open_mod_folder()
+            elif action in sep_actions:
+                name=action.text()
+                self.move_mod_separator(name)
 
 
     def select_preset(self, text):
