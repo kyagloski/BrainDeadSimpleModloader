@@ -175,7 +175,6 @@ class StatusThread(QThread):
         self.stopped=True
 
 class ConflictThread(QThread):
-    
     conflict_update=pyqtSignal(int,str,str)
     
     def __init__(self, parent):
@@ -244,7 +243,7 @@ class ConflictThread(QThread):
         self.mod_table.mod_files=mf
 
         for i in range(len(mods)):
-            if mods[i][1]=='#': continue # skip seps
+            if mods[i].startswith(">#") or mods[i].startswith("v#"): continue # skip seps
             self.set_mod_conflict_flags(mods[i],i)
 
 class RichTextDelegate(QStyledItemDelegate):
@@ -436,7 +435,7 @@ class ReorderOnlyTable(QTableWidget):
         selected_rows = sorted(set(item.row() for item in selected))
         more_selected_rows=[]
         for row in selected_rows:
-            if self.is_separator_row(row):
+            if self.is_separator_row(row) and self.is_separator_collapsed(row):
                 more_selected_rows+=self.get_separator_children(row)
         selected_rows+=more_selected_rows
         
@@ -550,13 +549,13 @@ class ModLoaderUserInterface(QMainWindow):
         self._is_sorted_alphabetically = False
         self._sort_ascending = True
         self.showing_fomod = False
+        self._loading = False
+        self._extracting = False
         
         self.setAcceptDrops(True)
         self._init_ui()
         self._setup_stdout_redirect()
         self._load_initial_data()
-        self._loading = False
-        self._extracting = False
 
         self.status_label=QLabel("")
         self.status_label.setStyleSheet("font-weight: bold;")
@@ -999,8 +998,9 @@ class ModLoaderUserInterface(QMainWindow):
                     er_rows+=[self.mod_table.get_row_from_name(name) for name in overriders]
                     en_rows+=[self.mod_table.get_row_from_name(name) for name in overriddens]
             else:
-                try: name=self.mod_table.item(row,2).text()
-                except: continue
+                #try: name=self.mod_table.item(row,2).text()
+                name=self.mod_table.item(row,2).text()
+                #except: continue
                 try:    overriders=self.mod_table.overriders[name]
                 except: overriders=[]
                 try:    overriddens=self.mod_table.overriddens[name]
@@ -1193,18 +1193,24 @@ class ModLoaderUserInterface(QMainWindow):
         if not selected_rows: return
         if any(self.mod_table.is_separator_row(i) for i in selected_rows): print("error: cannot change separator priority"); return
         top_row=int(self.mod_table.item(min(selected_rows),0).text())
-        #last_row=int(self.mod_table.item(self.mod_table.rowCount()-1,0).text())
         last_row=max(self.mod_table.get_priorities())
         val, ok = QInputDialog.getInt(
             self, "Set Priority", "Priority #:"+' '*DIALOGUE_WIDTH,
-            value=int(top_row), min=0, max=last_row, step=1)
+            value=int(top_row), min=1, max=last_row, step=1)
         if (not ok) or (not val): return
         val=self.mod_table.get_row_from_priority(val) 
+
         new_selected_rows=[]
-        for row in reversed(selected_rows):
-            self.move_row(row,val)
-            new_selected_rows.append(val)
-            val-=1
+        if val<min(selected_rows):
+            for row in selected_rows:
+                self.move_row(row,val)
+                new_selected_rows.append(val)
+                val+=1
+        else:
+            for row in reversed(selected_rows):
+                self.move_row(row,val)
+                new_selected_rows.append(val)
+                val-=1
         self._reselect_rows(new_selected_rows)
         self.update_priority_numbers()
         self.auto_save_load_order()
@@ -1213,17 +1219,24 @@ class ModLoaderUserInterface(QMainWindow):
         selected_rows = sorted(set(item.row() for item in self.mod_table.selectedItems()))
         if not selected_rows: return
         if any(self.mod_table.is_separator_row(i) for i in selected_rows): print("error: cannot move separator to separator"); return
-        top_row=int(self.mod_table.item(min(selected_rows),0).text())
         sep_row=self.mod_table.get_row_from_name(separator)
-        children=self.mod_table.get_separator_children(sep_row)
-        if children: to_row=min(max(self.mod_table.get_separator_children(sep_row)),self.mod_table.rowCount()-1)
-        elif sep_row==0: to_row=1
-        else: to_row=min(sep_row,self.mod_table.rowCount()-1)
+        # this is fucking stupid 
         new_selected_rows=[]
-        for row in reversed(selected_rows):
-            self.move_row(row,to_row)
-            new_selected_rows.append(to_row)
-            to_row-=1
+        children=self.mod_table.get_separator_children(sep_row)
+        if sep_row<min(selected_rows):
+            if children: to_row=min(max(self.mod_table.get_separator_children(sep_row))+1,self.mod_table.rowCount()-1)
+            else: to_row=min(sep_row+1,self.mod_table.rowCount()-1)
+            for row in selected_rows:
+                self.move_row(row,to_row)
+                new_selected_rows.append(to_row)
+                to_row+=1
+        else:
+            if children: to_row=min(max(self.mod_table.get_separator_children(sep_row)),self.mod_table.rowCount()-1)
+            else: to_row=min(sep_row,self.mod_table.rowCount()-1)
+            for row in reversed(selected_rows):
+                self.move_row(row,to_row)
+                new_selected_rows.append(to_row)
+                to_row-=1
         self._reselect_rows(new_selected_rows)
         self.update_priority_numbers()
         self.auto_save_load_order()

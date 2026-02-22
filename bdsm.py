@@ -313,9 +313,10 @@ def sync_loadorder():
     for mod in os.listdir(SOURCE_DIR):
         if mod not in clean_loadorder: additions.append('~'+mod)
     for mod in loadorder:
-        if any(mod.startswith(sub) for sub in ['~','*','#','>','v']): continue
+        if any(mod.startswith(sub) for sub in ['#','>','v']): continue
         #if any(mod.startswith(sub) for sub in ['#']): continue
         if mod not in os.listdir(SOURCE_DIR): exclusions.append(mod)
+    loadorder = list(dict.fromkeys(loadorder)) # remove duplicates
     loadorder = [x for x in loadorder if x not in exclusions] # remove exclusions
     loadorder = [item for i, item in enumerate(loadorder) if item.startswith('>#') 
                                                           or item.startswith('v#')
@@ -387,7 +388,8 @@ def rename_mod(old_name, new_name):
     for loadorder in os.listdir(PRESET_DIR):
         loadorder = PRESET_DIR/loadorder
         llist = [line.strip() for line in loadorder.read_text(encoding="utf-8").splitlines()]
-        llist[llist.index(old_name)] = new_name
+        try: llist[llist.index(old_name)] = new_name
+        except: continue # this loadorder was not synced
         loadorder.write_text("\n".join(llist), encoding="utf-8")
     print("successfully renamed mod "+old_name+" to "+new_name)
 
