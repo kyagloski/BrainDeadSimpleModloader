@@ -999,7 +999,8 @@ class ModLoaderUserInterface(QMainWindow):
                     er_rows+=[self.mod_table.get_row_from_name(name) for name in overriders]
                     en_rows+=[self.mod_table.get_row_from_name(name) for name in overriddens]
             else:
-                name=self.mod_table.item(row,2).text()
+                try: name=self.mod_table.item(row,2).text()
+                except: continue
                 try:    overriders=self.mod_table.overriders[name]
                 except: overriders=[]
                 try:    overriddens=self.mod_table.overriddens[name]
@@ -1214,8 +1215,10 @@ class ModLoaderUserInterface(QMainWindow):
         if any(self.mod_table.is_separator_row(i) for i in selected_rows): print("error: cannot move separator to separator"); return
         top_row=int(self.mod_table.item(min(selected_rows),0).text())
         sep_row=self.mod_table.get_row_from_name(separator)
-        try: to_row=min(max(self.mod_table.get_separator_children(sep_row)),self.mod_table.rowCount()-1)
-        except: to_row=min(sep_row,self.mod_table.rowCount()-1)
+        children=self.mod_table.get_separator_children(sep_row)
+        if children: to_row=min(max(self.mod_table.get_separator_children(sep_row)),self.mod_table.rowCount()-1)
+        elif sep_row==0: to_row=1
+        else: to_row=min(sep_row,self.mod_table.rowCount()-1)
         new_selected_rows=[]
         for row in reversed(selected_rows):
             self.move_row(row,to_row)
