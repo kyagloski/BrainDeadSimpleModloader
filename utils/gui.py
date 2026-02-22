@@ -1996,6 +1996,7 @@ class ModLoaderUserInterface(QMainWindow):
                         "Launch Error",
                         f"Steam is required to launch the game\nPlease open steam to launch executable")
             return
+        self.cfg=read_cfg(sync=False)
         if self.cfg["LINK_ON_LAUNCH"]: 
             self.auto_save_load_order(instant=True)
             perform_copy()

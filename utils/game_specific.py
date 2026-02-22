@@ -137,14 +137,16 @@ def write_plugins(compat_dir, backup_dir, plugins):
     game=determine_game(compat_dir)
     pfile=Path(PLUGINS_FILE[game])
     defps=GAME_PLUGINS[game]
+    #set_full_perms_file(compat_dir/pfile)
     with open(compat_dir/pfile, "w", encoding="utf-8") as f:
-        f.write("# This file is used by "+game+" to keep track of your downloaded content.\n")
+        agame=[k for k, v in GAME_COMPAT.items() if v == game][0]
+        f.write("# This file is used by "+agame+" to keep track of your downloaded content.\n")
         f.write("# Please do not modify this file.\n")
         f.write(defps)
         for name in plugins:
             if game in ["Fallout4","Skyrim Special Edition"]: name='*'+name # TODO: determine what other peices of shit do this
             f.write(name + "\n")
-    #os.chmod(compat_dir / pfile, stat.S_IREAD)
+    #set_readonly_file(compat_dir/pfile)
     force_symlink(compat_dir/pfile, backup_dir/pfile)
 
 

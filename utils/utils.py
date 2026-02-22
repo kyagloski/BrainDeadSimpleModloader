@@ -63,6 +63,13 @@ def set_full_perms_file(f):
     except Exception as e: print(f"{str(e)} when setting permissions on {str(f)}")
     return f
 
+def set_readonly_file(f):
+    f = Path(f)
+    mode = stat.S_IRUSR | stat.S_IRGRP | stat.S_IROTH
+    try: f.chmod(mode)
+    except Exception as e: print(f"{str(e)} when setting permissions on {str(f)}")
+    return f
+
 def scan_mod_overrides(src_dir, loadorder, prev_overriders=None, prev_overriddens=None, prev_overriddens_full=None, prev_mod_files=None, change_idxs=None):
     overriders=dict()
     overriddens=dict()
