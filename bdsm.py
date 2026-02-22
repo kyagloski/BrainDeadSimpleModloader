@@ -310,18 +310,13 @@ def sync_loadorder():
     clean_loadorder=[s.lstrip('~*') for s in loadorder]
     additions  = []
     exclusions = []
-    for mod in os.listdir(SOURCE_DIR):
+    for mod in os.listdir(SOURCE_DIR): # find add new mods
         if mod not in clean_loadorder: additions.append('~'+mod)
-    for mod in loadorder:
-        if any(mod.startswith(sub) for sub in ['#','>','v']): continue
-        #if any(mod.startswith(sub) for sub in ['#']): continue
+    for mod in clean_loadorder: # find remove mods
+        if any(mod.startswith(sub) for sub in ['>#','v#']): continue # skip seps
         if mod not in os.listdir(SOURCE_DIR): exclusions.append(mod)
     loadorder = list(dict.fromkeys(loadorder)) # remove duplicates
     loadorder = [x for x in loadorder if x not in exclusions] # remove exclusions
-    loadorder = [item for i, item in enumerate(loadorder) if item.startswith('>#') 
-                                                          or item.startswith('v#')
-                                                          or item.startswith('#')
-                                                          or item not in loadorder[:i]]
     if additions!=[] or exclusions!=[]: save_to_loadorder(loadorder+additions, verbose=False)
 
 

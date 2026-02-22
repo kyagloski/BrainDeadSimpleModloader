@@ -58,8 +58,9 @@ class StdoutRedirector(QObject):
 class CommandExecutorThread(QThread):
     commands_finished = pyqtSignal()
     
-    def __init__(self):
+    def __init__(self, parent):
         super().__init__()
+        self.parent=parent
         self.commands = {}  # dict to store latest version of each unique command
         self.mutex = QMutex()
         self.timer = None
@@ -87,7 +88,9 @@ class CommandExecutorThread(QThread):
         self.commands_finished.emit()
             
     def process_command(self, command_id, command_data):
+        #self.parent._loading=True
         command_id(*command_data) 
+        #self.parent._loading=False
         return f"Executed: {command_id} with data: {command_data}"
         
     def run(self):
@@ -563,7 +566,7 @@ class ModLoaderUserInterface(QMainWindow):
         self.statusBar().addPermanentWidget(self.status_label)
 
         # Create the command executor thread
-        self.executor = CommandExecutorThread()
+        self.executor = CommandExecutorThread(self)
         self.executor.commands_finished.connect(self.load_plugins_list)
         self.executor.start()
         # threads
@@ -998,9 +1001,8 @@ class ModLoaderUserInterface(QMainWindow):
                     er_rows+=[self.mod_table.get_row_from_name(name) for name in overriders]
                     en_rows+=[self.mod_table.get_row_from_name(name) for name in overriddens]
             else:
-                #try: name=self.mod_table.item(row,2).text()
-                name=self.mod_table.item(row,2).text()
-                #except: continue
+                try: name=self.mod_table.item(row,2).text()
+                except: continue
                 try:    overriders=self.mod_table.overriders[name]
                 except: overriders=[]
                 try:    overriddens=self.mod_table.overriddens[name]
@@ -1312,7 +1314,9 @@ class ModLoaderUserInterface(QMainWindow):
 
     def auto_save_load_order(self,instant=False):
         global RELOAD_ON_INSTALL
-        if self._loading: QTimer.singleShot(100,lambda: self.auto_save_load_order(instant=False)); return
+        if self._loading: return
+            #print("currently loading! will retry load order autsave in 100ms...")
+            #QTimer.singleShot(1000,lambda: self.auto_save_load_order(instant=instant)); return
         try:
             self.cfg=read_cfg(sync=False) # check for update
             if instant: self.save_load_order()
@@ -1527,8 +1531,8 @@ class ModLoaderUserInterface(QMainWindow):
                 name=action.text()
                 self.move_mod_separator(name)
 
-
     def select_preset(self, text):
+        self.auto_save_load_order(instant=True)
         print("switching to preset "+text)
         load_order=str(PRESET_DIR / Path(text))
         self.cfg["LOAD_ORDER"]=load_order
@@ -1691,6 +1695,12 @@ class ModLoaderUserInterface(QMainWindow):
         event.modifiers() == (Qt.KeyboardModifier.ControlModifier | Qt.KeyboardModifier.ShiftModifier)):
             self.mod_table.clearSelection()
             self.highlight_conflicts([])
+        elif (event.key() == Qt.Key.Key_N and \
+        event.modifiers() == (Qt.KeyboardModifier.ControlModifier | Qt.KeyboardModifier.ShiftModifier)):
+            selected_rows = sorted(set(item.row() for item in self.mod_table.selectedItems()), reverse=True)
+            if selected_rows: row=min(selected_rows)
+            else: row=self.mod_table.rowCount()
+            self.add_separator_at(row)
         else: QTableWidget.keyPressEvent(self.mod_table, event)
 
     def delete_selected_items(self):
