@@ -4,6 +4,7 @@
 import os
 import sys
 import stat
+import requests
 import traceback
 import subprocess
 from collections import defaultdict, OrderedDict
@@ -37,6 +38,7 @@ def fix_path_case(path):
 
 def ensure_dir(path):
     os.makedirs(path, exist_ok=True)
+    return path
 
 def fix_dirname_used(output_dir):
     name=output_dir.name
@@ -151,6 +153,22 @@ def is_steam_running():
         cmd=['tasklist', '/FI', 'IMAGENAME eq steam.exe']
         result = subprocess.run(cmd, capture_output=True,text=True)
         return 'steam.exe' in result.stdout.lower()
+
+def get_steam_resources(name,app_id,save_dir,icon=False,bg=False):
+    if (not icon) and (not bg): return
+    if icon: 
+        save_dir=Path(save_dir)/f"{name.lower().replace(' ','_')}_icon.jpg"
+        url = f"https://cdn.cloudflare.steamstatic.com/steam/apps/{app_id}/header.jpg"
+    if bg:
+        save_dir=Path(save_dir)/f"{name.lower().replace(' ','_')}_bg.jpg"
+        url = f"https://cdn.cloudflare.steamstatic.com/steam/apps/{app_id}/capsule_616x353.jpg"
+    if os.path.exists(save_dir): return save_dir
+    try: response = requests.get(url)
+    except Exception as e: return None
+    if response.status_code != 200: print(f"request for {url} failed..."); return None
+    with open(save_dir, 'wb') as f:
+        f.write(response.content)
+    return save_dir
 
 def launch_game(cfg,game_exe):
     if os.name=="posix":

@@ -15,13 +15,17 @@ from PyQt6.QtWidgets import (
     QTreeWidget, QTreeWidgetItem, QTableWidget, QTableWidgetItem, 
     QPushButton, QSplitter, QLabel, QLineEdit, QMenu, QMessageBox, 
     QComboBox, QFileDialog, QInputDialog, QTextEdit, QToolButton, 
-    QSplashScreen, QToolTip, QStyledItemDelegate, QHeaderView
+    QSplashScreen, QToolTip, QStyledItemDelegate, QHeaderView,
+    QGraphicsOpacityEffect
 )
 from PyQt6.QtCore import ( Qt, QItemSelectionModel, QObject, QThread, 
     QWaitCondition, pyqtSignal, QMutex, QMutexLocker, QTimer, QPoint, 
-    QSize, QFile, QTextStream, QMetaObject, pyqtSlot, QItemSelection
+    QSize, QFile, QTextStream, QMetaObject, pyqtSlot, QItemSelection,
+    QPointF, Qt
 )
-from PyQt6.QtGui import QIcon, QFont, QTextCursor, QCursor, QPixmap, QTextDocument
+from PyQt6.QtGui import ( QIcon, QFont, QTextCursor, QCursor, QPixmap, 
+    QTextDocument, QPainter, QRadialGradient, QColor
+)
 
 try:
     sys.path.append(str(Path(__file__).parent.parent))
@@ -275,11 +279,50 @@ class RichTextDelegate(QStyledItemDelegate):
             return QSize(int(doc.idealWidth()), int(doc.size().height()))
         return super().sizeHint(option, index)
 
-class ReorderOnlyTable(QTableWidget):
-    def __init__(self, parent, *args, **kwargs):
+class ModTable(QTableWidget):
+    def __init__(self, parent, bg_path,*args, **kwargs):
         super().__init__(*args, **kwargs)
         self.parent=parent
+        
+        if bg_path:
+            self._bg_label = QLabel(self.viewport())
+            self._bg_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            self._pixmap = QPixmap(str(bg_path))
+            self._bg_label.setPixmap(self._pixmap)
+            effect = QGraphicsOpacityEffect(self._bg_label)
+            effect.setOpacity(0.18)
+            self._bg_label.setGraphicsEffect(effect)
+            self._bg_label.lower()
+            self._update_bg()
+        else: self._bg_label=None
 
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self._update_bg()
+
+    def _update_bg(self):
+        rect = self.viewport().rect()
+        self._bg_label.setGeometry(rect)
+        if self._pixmap.isNull(): return
+        scaled = self._pixmap.scaled(
+            rect.size(),
+            Qt.AspectRatioMode.KeepAspectRatioByExpanding,
+            Qt.TransformationMode.SmoothTransformation
+        )
+        vignette = QPixmap(scaled.size())
+        vignette.fill(Qt.GlobalColor.transparent)
+        painter = QPainter(vignette)
+        painter.drawPixmap(0, 0, scaled)
+        center = QPointF(vignette.width() / 2, vignette.height() / 2)
+        radius = max(vignette.width(), vignette.height()) / 1.3
+        grad = QRadialGradient(center, radius)
+        grad.setColorAt(0.0, QColor(0, 0, 0, 0))      # transparent center
+        grad.setColorAt(0.5, QColor(0, 0, 0, 200))     # mid fade
+        grad.setColorAt(1.0, QColor(0, 0, 0, 255))    # dark edges
+        painter.fillRect(vignette.rect(), grad)
+        painter.end()
+        self._bg_label.setPixmap(vignette)
+        
     def is_separator_row(self, row):
         name_item = self.item(row, 2)
         return name_item and name_item.data(Qt.ItemDataRole.UserRole) == "separator"
@@ -736,7 +779,7 @@ class ModLoaderUserInterface(QMainWindow):
         preset_layout.addWidget(self.del_preset_button)
 
         separator = QLabel("|")
-        separator.setStyleSheet("color: gray; font-size: 20px; padding: 0px; margin: 0px 5px;")
+        #separator.setStyleSheet("color: gray; font-size: 20px; padding: 0px; margin: 0px 5px;")
         separator.setFixedWidth(30)
         preset_layout.addWidget(separator)
 
@@ -751,7 +794,9 @@ class ModLoaderUserInterface(QMainWindow):
         self.current_exe=None
         for exe in exes:
             if exes[exe]["SELECTED"]: self.current_exe=deepcopy(exe)
-            self.bin_combo.addItem(exe)
+            icon=QIcon(get_game_icon(exes[exe]["PATH"],self.cfg))
+            self.bin_combo.addItem(icon,exe)
+        self.bin_combo.setIconSize(QSize(63,34))
         if not self.current_exe: self.current_exe=deepcopy(list(exes.keys())[0])
         self.bin_combo.setCurrentText(self.current_exe)
         self.bin_combo.currentTextChanged.connect(self.select_exe)
@@ -774,7 +819,8 @@ class ModLoaderUserInterface(QMainWindow):
         return preset_layout
 
     def _create_mod_table(self):
-        self.mod_table = ReorderOnlyTable(self, 0, 4)
+        bg_path=get_game_bg(self.cfg)
+        self.mod_table = ModTable(self, bg_path, 0, 4)
         #self.mod_table.setItemDelegateForColumn(2, RichTextDelegate(self))
         self.mod_table.setItemDelegateForColumn(3, RichTextDelegate(self))
         self.mod_table.setHorizontalHeaderLabels(["#", "", "Mod Name", "Conflicts" ])
@@ -813,6 +859,17 @@ class ModLoaderUserInterface(QMainWindow):
         self.mod_table.setColumnWidth(1, 25)
         self.mod_table.setColumnWidth(2, 530)
         self.mod_table.setColumnWidth(3, 80)
+
+        #bg_path=get_game_bg(self.cfg)
+        ## create background label as child of the viewport
+        #bg = QLabel(self.mod_table.viewport())
+        #bg.setPixmap(QPixmap(bg_path))
+        #bg.setScaledContents(False)
+        #bg.setGeometry(self.mod_table.viewport().rect())
+        #effect = QGraphicsOpacityEffect(bg)
+        #effect.setOpacity(0.1)
+        #bg.setGraphicsEffect(effect)
+        #bg.lower()
         
         return self.mod_table
 

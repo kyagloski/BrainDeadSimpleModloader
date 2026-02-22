@@ -12,6 +12,8 @@ from collections import OrderedDict
 try:    from utils.utils import *
 except: from utils import * 
 
+#LOCAL_DIR         = Path(os.path.dirname(os.path.realpath(__file__)))
+
 # preloaded plugins required in plugins.txt file
 GAME_PLUGINS      = { "Fallout3"               : "Anchorage.esm\nBrokenSteel.esm\nFallout3.esm\nPointLookout.esm\nThePitt.esm\nZeta.esm\n",
                       "FalloutNV"              : "FalloutNV.esm\nDeadMoney.esm\nHonestHearts.esm\nOldWorldBlues.esm\nLonesomeRoad.esm\nGunRunnersArsenal.esm\nTribalPack.esm\nClassicPack.esm\nMercenaryPack.esm\nCaravanPack.esm\n",
@@ -253,3 +255,32 @@ def get_launchers(target_dir,compat_dir):
             launchers[title]["PATH"]=str(exe)
             launchers[title]["PARAMS"]=""
     return launchers
+
+
+def get_game_icon(exe, cfg):
+    game=determine_game(cfg["COMPAT_DIR"])
+    game_dir=Path(cfg["TARGET_DIR"]).parent
+    steamid=determine_game_id(cfg["TARGET_DIR"])
+    local_dir=Path(os.path.dirname(os.path.realpath(__file__)))
+    save_dir=ensure_dir(local_dir/"resources"/"requested")
+    launcher_exe=VANILLA_LAUNCHERS[game]
+    game_exe=VANILLA_GAMES[game]
+    se_exe=SCRIPT_EXTENDERS[game]
+    exes=[launcher_exe,game_exe,se_exe]
+    if Path(exe).name in exes:
+        icon_path=get_steam_resources(game,steamid,save_dir,icon=True)
+    else:
+        icon_path=None
+    return str(icon_path)
+
+
+def get_game_bg(cfg):
+    game=determine_game(cfg["COMPAT_DIR"])
+    game_dir=Path(cfg["TARGET_DIR"]).parent
+    steamid=determine_game_id(cfg["TARGET_DIR"])
+    local_dir=Path(os.path.dirname(os.path.realpath(__file__)))
+    save_dir=ensure_dir(local_dir/"resources"/"requested")
+    bg_path=get_steam_resources(game,steamid,save_dir,bg=True)
+    return str(bg_path)
+        
+    

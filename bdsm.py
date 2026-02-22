@@ -65,6 +65,7 @@ def create_cfg(gui=False):
         f.write("RELOAD_ON_INSTALL: false\n")
         f.write("UPDATE_ON_CLOSE: true\n")
         f.write("LINK_ON_LAUNCH: true\n")
+        f.write("DO_REQUESTS: true\n")
         launchers=game_specific.get_launchers(target,compat)
         f.write("EXECUTABLES:\n")
         for title in launchers:
@@ -116,7 +117,15 @@ def fix_cfg(cfg_dict):
             cfg_dict["EXECUTABLES"][exe]["PARAMS"]=""
             cfg_dict["EXECUTABLES"][exe]["SELECTED"]=False
             added=True
-        
+    if "SOURCE_DIR"        not in cfg_dict.keys(): create_cfg(gui); return
+    if "TARGET_DIR"        not in cfg_dict.keys(): create_cfg(gui); return
+    if "COMPAT_DIR"        not in cfg_dict.keys(): create_cfg(gui); return
+    if "LOAD_ORDER"        not in cfg_dict.keys(): cfg_dict["LOAD_ORDER"]=LOAD_ORDER;     added=True
+    if "INI_DIR"           not in cfg_dict.keys(): cfg_dict["INI_DIR"]=INI_DIR;           added=True
+    if "RELOAD_ON_INSTALL" not in cfg_dict.keys(): cfg_dict["READLOAD_ON_INSTALL"]=False; added=True
+    if "UPDATE_ON_CLOSE"   not in cfg_dict.keys(): cfg_dict["UPDATE_ON_CLOSE"]=True;      added=True
+    if "LINK_ON_LAUNCH"    not in cfg_dict.keys(): cfg_dict["LINK_ON_LAUNCH"]=True;       added=True
+    if "DO_REQUESTS"       not in cfg_dict.keys(): cfg_dict["DO_REQUESTS"]=True;          added=True
     if added: write_cfg(cfg_dict)
 
 
