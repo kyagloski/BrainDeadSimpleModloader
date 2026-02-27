@@ -271,16 +271,16 @@ def get_game_icon(exe, cfg):
         icon_path=get_steam_resources(game,steamid,save_dir,icon=True)
     else:
         icon_path=None
-    return str(icon_path)
+    return icon_path
 
 
-def get_game_bg(cfg):
+def get_game_bgs(cfg):
     game=determine_game(cfg["COMPAT_DIR"])
     game_dir=Path(cfg["TARGET_DIR"]).parent
     steamid=determine_game_id(cfg["TARGET_DIR"])
     local_dir=Path(os.path.dirname(os.path.realpath(__file__)))
     save_dir=ensure_dir(local_dir/"resources"/"requested")
-    bg_path=get_steam_resources(game,steamid,save_dir,bg=True)
-    return str(bg_path)
+    bg_paths=get_steam_resources(game,steamid,save_dir,bg=True)
+    return bg_paths
         
     

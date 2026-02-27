@@ -156,19 +156,30 @@ def is_steam_running():
 
 def get_steam_resources(name,app_id,save_dir,icon=False,bg=False):
     if (not icon) and (not bg): return
+    urls=[]
+    save_dirs=[]
     if icon: 
-        save_dir=Path(save_dir)/f"{name.lower().replace(' ','_')}_icon.jpg"
-        url = f"https://cdn.cloudflare.steamstatic.com/steam/apps/{app_id}/header.jpg"
+        save_dirs.append(Path(save_dir)/f"{name.lower().replace(' ','_')}_icon.jpg")
+        urls.append(f"https://cdn.cloudflare.steamstatic.com/steam/apps/{app_id}/header.jpg")
     if bg:
-        save_dir=Path(save_dir)/f"{name.lower().replace(' ','_')}_bg.jpg"
-        url = f"https://cdn.cloudflare.steamstatic.com/steam/apps/{app_id}/capsule_616x353.jpg"
-    if os.path.exists(save_dir): return save_dir
-    try: response = requests.get(url)
-    except Exception as e: return None
-    if response.status_code != 200: print(f"request for {url} failed..."); return None
-    with open(save_dir, 'wb') as f:
-        f.write(response.content)
-    return save_dir
+        save_dirs.append(Path(save_dir)/f"{name.lower().replace(' ','_')}_bg1.jpg")
+        save_dirs.append(Path(save_dir)/f"{name.lower().replace(' ','_')}_bg2.jpg")
+        save_dirs.append(Path(save_dir)/f"{name.lower().replace(' ','_')}_bg3.jpg")
+        urls.append(f"https://cdn.cloudflare.steamstatic.com/steam/apps/{app_id}/capsule_616x353.jpg")
+        urls.append(f"https://cdn.cloudflare.steamstatic.com/steam/apps/{app_id}/library_hero.jpg")
+        urls.append(f"https://cdn.cloudflare.steamstatic.com/steam/apps/{app_id}/page_bg_raw.jpg")
+    for i in range(len(save_dirs)):
+        if os.path.exists(save_dirs[i]): continue
+        try: response = requests.get(urls[i])
+        except Exception as e: save_dirs[i]=None
+        if response.status_code != 200: 
+            print(f"request for {urls[i]} failed..."); 
+            save_dirs[i]=None; 
+            continue
+        with open(save_dirs[i], 'wb') as f:
+            f.write(response.content)
+    if icon: return str(save_dirs[0])
+    else: return save_dirs
 
 def launch_game(cfg,game_exe):
     if os.name=="posix":

@@ -184,23 +184,35 @@ QTreeWidget::branch:selected {
    ======================================== */
 QTableWidget,
 QTableView {
-    background-color: #0f0f0f;
+    /*background-color: #0f0f0f;*/
+    background: transparent;
+    gridline-color: rgba(0, 0, 0, 0);
     color: #d0d0d0;
     outline: none;
     border: 1px solid #2a2a2a;
-    gridline-color: #2a2a2a;
-    alternate-background-color: #151515;
-    selection-background-color: #505050;
+    /*gridline-color: #2a2a2a;*/
+    /*alternate-background-color: #151515;*/
+    selection-background-color: rgba(50,50,50,120); 
 }
 
 QTableWidget::item:focus {
+    background-color: rgba(0, 0, 0, 120);
+    background: transparent;
     outline: none;
     border: none;
 }
 
+QTableWidget::item:hover {
+    background-color: rgba(50, 50, 50, 120); /* prevent hover change */
+}
+
 QHeaderView::section {
-    background-color: #151515;
+    background-color: rgba(30, 30, 30, 200);
+    gridline-color: rgba(0, 0, 0, 0);
+    background: transparent;
+    /*background-color: #151515;*/
     color: #d0d0d0;
+    outline: none;
     border: none;
     border-right: 1px solid #2a2a2a;
     border-bottom: 1px solid #2a2a2a;
