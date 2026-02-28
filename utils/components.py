@@ -592,6 +592,7 @@ class ModTable(QTableWidget):
         
         name_item = QTableWidgetItem(name)
         name_item.setFlags(name_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
+        name_item.setTextAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
         self.setItem(row, 2, name_item)
         
         conflict_item = QTableWidgetItem(conflicts)

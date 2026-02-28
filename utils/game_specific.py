@@ -1,6 +1,7 @@
 #!/usr/bin/python3
 
 import os
+import re
 import sys
 import stat
 import shutil
@@ -102,20 +103,52 @@ def determine_game(compat_dir):
     game=""
     compats=sorted(GAME_COMPAT.values())[::-1] # reverse so we get largest name first
     game=[game for game in compats if game in str(compat_dir)]
-    if game==[]:
+    if game!=['']: game=game[0]
+    else: game=determine_game_acf(compat_dir)
+    if game==-1:
         print("error: cannot detect game name from compat dir: "+compat_dir)
         game=["Default"]
-    return game[0]
-   
+    return game
+  
+
+def determine_game_acf(compat_dir):
+    if "steamapps" not in str(compat_dir): return -1
+    app_id=Path(compat_dir).name
+    game_dir=str(compat_dir).split("common"+os.sep)[-1].split(os.sep)[0]
+    steamapps_dir=Path(str(compat_dir).split("steamapps")[0])/"steamapps"
+    game=-1
+    try:
+        with open(steamapps_dir/f"appmanifest_{app_id}.acf", 'r', encoding='utf-8') as f:
+            lines = f.readlines()
+            game_line = next((line.strip() for line in lines if line.strip().startswith('"name"')), None)
+            game=game_line.split('\t',1)[-1].replace('"','').strip()
+    except Exception as e: print(e)
+    return game 
+            
  
 def determine_game_id(target_dir):
     gid=0
     ids=sorted(GAME_IDS.keys())[::-1] # reverse so we get largest name first
+    game_dir=str(target_dir).split("common"+os.sep)[-1].split(os.sep)[0]
     gid=[gid for gid in ids if gid in str(target_dir)]
-    if gid==[]:
-        print("error: cannot detect game id")
-        gid=[-1]
-    return str(GAME_IDS[gid[0]])
+    if gid!=[]: gid=str(GAME_IDS[gid[0]])
+    else: gid=determine_game_id_acf(target_dir) 
+    if gid==-1: print("error: cannot detect game id")
+    return gid
+
+
+def determine_game_id_acf(target_dir):
+    if "steamapps" not in str(target_dir): return -1
+    game_dir=str(target_dir).split("common"+os.sep)[-1].split(os.sep)[0]
+    steamapps_dir=Path(str(target_dir).split("steamapps")[0])/"steamapps"
+    app_id=-1
+    for acf in os.listdir(steamapps_dir):
+        if not acf.endswith(".acf"): continue
+        with open(steamapps_dir/acf, 'r', encoding='utf-8') as f:
+            content = f.read()
+            if f'"installdir"\t\t"{game_dir}"' in content:
+                app_id = acf.replace("appmanifest_", "").replace(".acf", "")
+    return app_id
     
 
 def get_ini_path(compat_dir):
@@ -124,8 +157,12 @@ def get_ini_path(compat_dir):
     
 
 def infer_compat_path(target_dir, verbose=False):
-    if os.name == "posix":
-        game_id = determine_game_id(target_dir)
+    game_id = determine_game_id(target_dir)
+    if game_id not in GAME_IDS.values():
+        if "steamapps" not in str(target_dir): return -1
+        steamapps_dir=Path(str(target_dir).split("steamapps")[0])/"steamapps"
+        compat_dir=steamapps_dir/"compatdata"/game_id
+    elif os.name == "posix":
         game=GAME_COMPAT[Path(target_dir).parent.name]
         u_compat=target_dir.parent.parent.parent/"compatdata"/game_id/"pfx"/"drive_c"/"users"/"steamuser"/"AppData"/"Local"
         compat_dir = u_compat/game
@@ -242,10 +279,13 @@ def restore_ini(compat_dir, back_dir, ui=False):
 def get_launchers(target_dir,compat_dir):
     game=determine_game(compat_dir)
     game_dir=Path(target_dir).parent
-    launcher_exe=game_dir/VANILLA_LAUNCHERS[game]
-    game_exe=game_dir/VANILLA_GAMES[game]
-    se_exe=game_dir/SCRIPT_EXTENDERS[game]
-    exes=[launcher_exe,game_exe,se_exe]
+    if game in VANILLA_LAUNCHERS.keys():
+        launcher_exe=game_dir/VANILLA_LAUNCHERS[game]
+        game_exe=game_dir/VANILLA_GAMES[game]
+        se_exe=game_dir/SCRIPT_EXTENDERS[game]
+        exes=[launcher_exe,game_exe,se_exe]
+    else:
+        exes=[target_dir/i for i in os.listdir(target_dir) if i.endswith(".exe")]
     launchers=dict()
     if game=="Default": return {"Default":{"PATH":"\"\"","PARAMS":""}}
     for exe in exes:
@@ -263,10 +303,13 @@ def get_game_icon(exe, cfg):
     steamid=determine_game_id(cfg["TARGET_DIR"])
     local_dir=Path(os.path.dirname(os.path.realpath(__file__)))
     save_dir=ensure_dir(local_dir/"resources"/"requested")
-    launcher_exe=VANILLA_LAUNCHERS[game]
-    game_exe=VANILLA_GAMES[game]
-    se_exe=SCRIPT_EXTENDERS[game]
-    exes=[launcher_exe,game_exe,se_exe]
+    if game in VANILLA_LAUNCHERS.keys():
+        launcher_exe=VANILLA_LAUNCHERS[game]
+        game_exe=VANILLA_GAMES[game]
+        se_exe=SCRIPT_EXTENDERS[game]
+        exes=[launcher_exe,game_exe,se_exe]
+    else: 
+        exes=[i for i in os.listdir(cfg["TARGET_DIR"]) if i.endswith(".exe")]
     if Path(exe).name in exes:
         icon_path=get_steam_resources(game,steamid,save_dir,icon=True)
     else:
@@ -281,6 +324,7 @@ def get_game_bgs(cfg):
     local_dir=Path(os.path.dirname(os.path.realpath(__file__)))
     save_dir=ensure_dir(local_dir/"resources"/"requested")
     bg_paths=get_steam_resources(game,steamid,save_dir,bg=True)
+    bg_paths=[i for i in bg_paths if i!=None]
     return bg_paths
         
     

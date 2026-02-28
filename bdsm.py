@@ -52,9 +52,12 @@ def create_cfg(gui=False):
         if not os.path.exists(target): print("error: invalid target dir: "+target); sys.exit()
         if not target.endswith("Data"): target=os.path.join(target,"Data")
     try: compat = str(game_specific.infer_compat_path(Path(target)))
-    except: print("error: path is invalid"); sys.exit()
+    except Exception as e: 
+        print(e)
+        print("error: path is invalid"); sys.exit()
     if not compat: compat=target
-    if not os.path.exists(compat): print("error: could not infer comapt dir: "+compat); sys.exit()
+    #if not os.path.exists(compat): print("error: could not infer comapt dir: "+compat); sys.exit()
+    print("error: could not infer compat dir: "+compat);
     # write data
     with open(CONFIG_FILE, "w", encoding="utf-8") as f:
         f.write("SOURCE_DIR: "+str(SOURCE_DIR)+"\n")
@@ -82,8 +85,8 @@ def read_cfg(sync=True, gui=False):
     global SOURCE_DIR, TARGET_DIR, COMPAT_DIR, LOAD_ORDER
     global INI_DIR, RELOAD_ON_INSTALL, UPDATE_ON_CLOSE
     global LINK_ON_LAUNCH, EXECUTABLES
-    # TODO: make this smarter, add missing entries automatically
     if not os.path.exists(CONFIG_FILE): 
+        create_cfg(gui); return
         try: create_cfg(gui); return
         except Exception as e: 
             os.remove(CONFIG_FILE)
@@ -98,7 +101,7 @@ def read_cfg(sync=True, gui=False):
     UPDATE_ON_CLOSE=bool(cfg_dict["UPDATE_ON_CLOSE"])
     LINK_ON_LAUNCH=bool(cfg_dict["LINK_ON_LAUNCH"])
     EXECUTABLES=game_specific.get_launchers(TARGET_DIR,COMPAT_DIR)
-    fix_cfg(cfg_dict)
+    cfg_dict=fix_cfg(cfg_dict)
     
     ensure_dir(PRESET_DIR)
     ensure_dir(SOURCE_DIR)
@@ -107,9 +110,10 @@ def read_cfg(sync=True, gui=False):
 
 
 def fix_cfg(cfg_dict):
-    # add potential missing execs
     added=False
-    values = [v for sub_dict in cfg_dict["EXECUTABLES"].values() for v in sub_dict.values()]
+    if "EXECUTABLES" not in cfg_dict.keys(): cfg_dict["EXECUTABLES"]=[]; added=True
+    try: values = [v for sub_dict in cfg_dict["EXECUTABLES"].values() for v in sub_dict.values()]
+    except: values=[]
     for exe in EXECUTABLES:
         if EXECUTABLES[exe]["PATH"] not in values: 
             cfg_dict["EXECUTABLES"][exe]=dict()
@@ -127,6 +131,7 @@ def fix_cfg(cfg_dict):
     if "LINK_ON_LAUNCH"    not in cfg_dict.keys(): cfg_dict["LINK_ON_LAUNCH"]=True;       added=True
     if "DO_REQUESTS"       not in cfg_dict.keys(): cfg_dict["DO_REQUESTS"]=True;          added=True
     if added: write_cfg(cfg_dict)
+    return cfg_dict
 
 
 def write_cfg(d):
@@ -251,7 +256,8 @@ def perform_copy():
         for name in backedup_manifest:
             f.write(name + "\n")
     # write plugins
-    game_specific.write_plugins(COMPAT_DIR, BACKUP_DIR, plugins)
+    try: game_specific.write_plugins(COMPAT_DIR, BACKUP_DIR, plugins)
+    except Exception as e: print(f"warning: could not find plugins dir ({e})")
      
     print('-'*40)
     print("load complete!")
@@ -289,7 +295,8 @@ def restore():
             try: shutil.move(backup_path, target_path)
             except Exception as e: 
                 print(f"encountered exception {str(e)} when restoring {filename}")
-    game_specific.write_plugins(COMPAT_DIR, BACKUP_DIR, []) # write default plugins
+    try: game_specific.write_plugins(COMPAT_DIR, BACKUP_DIR, []) # write default plugins
+    except Exception as e: print(f"warning: could not find plugins dir ({e})")
     # remove manifests
     os.unlink(COPY_MANIFEST)
     os.unlink(BACKUP_MANIFEST)

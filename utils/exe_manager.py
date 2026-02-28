@@ -53,8 +53,9 @@ class ExeManager(QMainWindow):
         # List widget
         self.list_widget = QListWidget()
         exes=self.cfg["EXECUTABLES"]
-        for exe in exes:
-            self.add_item(title=exe, path=exes[exe]["PATH"], params=exes[exe]["PARAMS"])
+        if exes:
+            for exe in exes:
+                self.add_item(title=exe, path=exes[exe]["PATH"], params=exes[exe]["PARAMS"])
         self.list_widget.currentRowChanged.connect(self.on_item_selected)
         left_layout.addWidget(self.list_widget)
         
@@ -145,7 +146,7 @@ class ExeManager(QMainWindow):
         self.set_fields_enabled(False)
 
         # start selection
-        self.on_item_selected(0)
+        if len(self.items)>0: self.on_item_selected(0)
         self.list_widget.setCurrentRow(0)
         
     def set_fields_enabled(self, enabled):
@@ -270,8 +271,7 @@ class ExeManager(QMainWindow):
             
     def on_item_selected(self, index):
         """Handle item selection in the list"""
-        if index < 0:
-            return
+        if index < 0: return
             
         # Check for pending changes
         if self.has_pending_changes and index != self.current_item_index:
@@ -329,6 +329,7 @@ class ExeManager(QMainWindow):
                     return
             
             item = self.items[self.current_item_index]
+            if not self.cfg["EXECUTABLES"]: self.cfg["EXECUTABLES"]=dict()
             if item.title!=new_title and item.title in self.cfg["EXECUTABLES"]:
                 del self.cfg["EXECUTABLES"][item.title] # rename occured
                 self.cfg["EXECUTABLES"][new_title]=dict()

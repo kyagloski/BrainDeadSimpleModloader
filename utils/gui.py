@@ -41,9 +41,6 @@ from installer import *
 SHOW_MSG_TIME    = 10000000
 DIALOGUE_WIDTH   = 60
 
-#OVERRIDING_COLOR = "#00ff00"
-#OVERRIDDEN_COLOR = "#ff0000"
-
 class ModLoaderUserInterface(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -69,7 +66,6 @@ class ModLoaderUserInterface(QMainWindow):
         self._init_ui()
         self._setup_stdout_redirect()
         self._load_initial_data()
-
         self.status_label=QLabel("")
         self.status_label.setStyleSheet("font-weight: bold;")
         self.status_label.setFont(QFont("Courier"))
@@ -215,12 +211,14 @@ class ModLoaderUserInterface(QMainWindow):
         self.tools_button.setToolTip("Tools")
         menu = QMenu()
         ini_man = menu.addAction("INI Manager")
+        open_target = menu.addAction("Open Target Folder")
         def show_menu(): menu.exec(self.tools_button.mapToGlobal(QPoint(0, self.tools_button.height())))
         self.tools_button.clicked.connect(show_menu)
         self.tools_button.setMenu(menu)
         preset_layout.addWidget(self.tools_button)
 
         ini_man.triggered.connect(self.open_ini_manager)
+        open_target.triggered.connect(lambda: self._open_path(self.cfg["TARGET_DIR"]))
         
         preset_layout.addWidget(QLabel("Preset:"))
         self.preset_combo = EditableComboBox(upper=self)
@@ -254,14 +252,15 @@ class ModLoaderUserInterface(QMainWindow):
                                      self.bin_combo.sizePolicy().verticalPolicy().Preferred)
         exes=self.cfg["EXECUTABLES"]
         self.current_exe=None
-        for exe in exes:
-            if exes[exe]["SELECTED"]: self.current_exe=deepcopy(exe)
-            if self.cfg["DO_REQUESTS"]: icon_path=QIcon(get_game_icon(exes[exe]["PATH"],self.cfg))
-            else: icon_path=None
-            icon=QIcon(icon_path)
-            self.bin_combo.addItem(icon,exe)
+        if exes:
+            for exe in exes:
+                if exes[exe]["SELECTED"]: self.current_exe=deepcopy(exe)
+                if self.cfg["DO_REQUESTS"]: icon_path=QIcon(get_game_icon(exes[exe]["PATH"],self.cfg))
+                else: icon_path=None
+                icon=QIcon(icon_path)
+                self.bin_combo.addItem(icon,exe)
+            if not self.current_exe: self.current_exe=deepcopy(list(exes.keys())[0])
         self.bin_combo.setIconSize(QSize(63,34))
-        if not self.current_exe: self.current_exe=deepcopy(list(exes.keys())[0])
         self.bin_combo.setCurrentText(self.current_exe)
         self.bin_combo.currentTextChanged.connect(self.select_exe)
         preset_layout.addWidget(self.bin_combo,2)
@@ -304,6 +303,8 @@ class ModLoaderUserInterface(QMainWindow):
         self.mod_table.customContextMenuRequested.connect(self.show_context_menu)
         self.mod_table.horizontalHeader().sectionClicked.connect(self.on_header_clicked)
         self.mod_table.setSortingEnabled(False)
+        self.mod_table.setWordWrap(False)
+        self.mod_table.setTextElideMode(Qt.TextElideMode.ElideRight)
         self.mod_table.keyPressEvent = self.table_key_press_event
 
         self.mod_table.overriders=dict()
@@ -1467,7 +1468,8 @@ class ModLoaderUserInterface(QMainWindow):
         if determine_game(self.cfg["COMPAT_DIR"])!="Default":
             compat_dir=Path(self.cfg["COMPAT_DIR"])
             back_dir=Path(self.cfg["INI_DIR"])
-            ini_dir=get_ini_path(Path(self.cfg["COMPAT_DIR"])) 
+            try: ini_dir=get_ini_path(Path(self.cfg["COMPAT_DIR"])) 
+            except: print("error: could not determine ini directory"); return
         else:
             compat_dir=Path(self.cfg["COMPAT_DIR"])
             back_dir=Path(self.cfg["INI_DIR"])
@@ -1487,12 +1489,18 @@ class ModLoaderUserInterface(QMainWindow):
     def on_exe_manager_close(self):
         self.cfg=read_cfg(sync=False)
         exes=self.cfg["EXECUTABLES"]
+        cur_selected=self.bin_combo.currentText()
         self.bin_combo.clear()
         new_select=None
         for exe in exes:
-            if exes[exe]["SELECTED"]: new_select=exe
-            self.bin_combo.addItem(exe)
-        if not new_select: self.current_exe=deepcopy(list(exes.keys())[0])
+            if exes[exe]["SELECTED"]: new_select=deepcopy(exe)
+            if self.cfg["DO_REQUESTS"]: icon_path=QIcon(get_game_icon(exes[exe]["PATH"],self.cfg))
+            else: icon_path=None
+            icon=QIcon(icon_path)
+            self.bin_combo.addItem(icon,exe)
+        if new_select: self.current_exe=new_select
+        elif cur_selected in exes: self.current_exe=cur_selected
+        else: self.current_exe=deepcopy(list(exes.keys())[0])
         self.bin_combo.setCurrentText(self.current_exe)
 
     def closeEvent(self, event):
@@ -1547,13 +1555,15 @@ def select_directory():
                 "/home",
                 QFileDialog.Option.ShowDirsOnly | QFileDialog.Option.DontResolveSymlinks)
             if directory:
-                directory=os.path.realpath(directory)
-                if not directory.endswith("Data"): directory=os.path.join(directory,"Data")
-                try: compat = str(infer_compat_path(Path(directory))) # test path validity
-                except Exception as e: 
-                    directory=Path(directory).parent
-                    QMessageBox.warning(None, "Warning", f"Path is invalid: {directory}\nChoose a game with a Data directory in it")
-                    continue
+                directory=Path(os.path.realpath(directory))
+                if not directory.name=="Data" \
+                and directory.name in GAME_IDS.keys(): 
+                    directory=os.path.join(directory,"Data")
+                #try: compat = str(infer_compat_path(Path(directory))) # test path validity
+                #except Exception as e: 
+                #    directory=Path(directory).parent
+                #    QMessageBox.warning(None, "Warning", f"Path is invalid: {directory}\nChoose a game with a Data directory in it")
+                #    continue
                 confirm = QMessageBox.question(
                     None,
                     "Confirm Directory",
