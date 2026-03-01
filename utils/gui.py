@@ -1573,6 +1573,7 @@ if __name__ == "__main__":
     window = ModLoaderUserInterface()
     stylesheet = load_stylesheet(Path(LOCAL_DIR)/"utils"/"resources"/"stylesheets"/"dark.qss")
     splash = QSplashScreen(QPixmap(str(LOCAL_DIR/"utils"/"resources"/"splash.png")))
+    app.setStyle("Fusion")
     app.setStyleSheet(stylesheet)
     if os.name!="posix": window.show()
     splash.show()

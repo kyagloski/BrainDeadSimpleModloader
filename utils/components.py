@@ -13,7 +13,7 @@ from PyQt6.QtWidgets import (
     QPushButton, QSplitter, QLabel, QLineEdit, QMenu, QMessageBox, 
     QComboBox, QFileDialog, QInputDialog, QTextEdit, QToolButton, 
     QSplashScreen, QToolTip, QStyledItemDelegate, QHeaderView,
-    QGraphicsOpacityEffect
+    QGraphicsOpacityEffect, QStyle
 )
 from PyQt6.QtCore import ( Qt, QItemSelectionModel, QObject, QThread, 
     QWaitCondition, pyqtSignal, QMutex, QMutexLocker, QTimer, QPoint, 
@@ -288,7 +288,13 @@ class RichTextDelegate(QStyledItemDelegate):
         style.drawControl(style.ControlElement.CE_ItemViewItem, option, painter, option.widget)
         text = index.data(Qt.ItemDataRole.DisplayRole)
         if text:
-            if not Qt.mightBeRichText(text): text=f"<span style='font-weight: 600;'>{text}</span>"
+            if option.state & QStyle.StateFlag.State_Selected:
+                color = option.palette.highlightedText().color().name()
+            else:
+                color = option.palette.text().color().name()
+            if not Qt.mightBeRichText(text):
+                text = f"<span style='font-weight: 600;'>{text}</span>"
+            text = f"<span style='color: {color};'>{text}</span>"
             doc = QTextDocument()
             doc.setHtml(text)
             painter.save()
@@ -597,7 +603,7 @@ class ModTable(QTableWidget):
             if self.item(row, col):
                 if   overriding: color=QColor(OVERRIDING_COLOR)
                 elif overridden: color=QColor(OVERRIDDEN_COLOR)
-                else: color=QColor(0,0,0)
+                else: color=QColor(0,0,0) # TODO: will need to be theme adaptive
                 color.setAlpha(self.alpha)
                 self.item(row, col).setBackground(color)
  
