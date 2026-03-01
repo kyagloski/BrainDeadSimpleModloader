@@ -107,7 +107,7 @@ QComboBox {
     border: 1px solid #2a2a2a;
     padding: 3px 8px;
     min-height: 20px;
-    border-radius: 0px !important;
+    border-radius: 1px !important;
     border: none;
 }
 
@@ -117,7 +117,9 @@ QComboBox:focus {
     border: none;
 }
 
-/* Don't style the drop-down or arrow at all - use Qt's default */
+QComboBox:hover {
+    background-color: #2a2a2a
+}
 
 QComboBox QAbstractItemView {
     background-color: #0f0f0f;
@@ -125,25 +127,25 @@ QComboBox QAbstractItemView {
     border: 0px solid #2a2a2a;  /* Changed from #909090 to dark gray */
     selection-background-color: #505050;
     outline: none;
-    border-radius: 0px !important;
+    border-radius: 1px !important;
 }
 
 QComboBox QAbstractItemView::item {
     padding: 6px 8px;
     min-height: 20px;
     max-height: 20px;
-    border-radius: 0px !important;
+    border-radius: 1px !important;
     border: none;
 }
 
 QComboBox QAbstractItemView::item:selected {
     background-color: #505050;
-    border-radius: 0px !important;
+    border-radius: 1px !important;
     border: none;
 }
 
 QComboBox QAbstractItemView::item:hover {
-    border-radius: 0px !important;
+    border-radius: 1px !important;
     border: none;
 }
 
@@ -189,7 +191,7 @@ QTableView {
     gridline-color: rgba(0, 0, 0, 0);
     color: #d0d0d0;
     outline: none;
-    border: 1px solid #2a2a2a;
+    border: 0px solid #2a2a2a;
     /*gridline-color: #2a2a2a;*/
     /*alternate-background-color: #151515;*/
     selection-background-color: rgba(50,50,50,120); 
@@ -214,7 +216,7 @@ QHeaderView::section {
     color: #d0d0d0;
     outline: none;
     border: none;
-    border-right: 1px solid #2a2a2a;
+    border-right: 0px solid #2a2a2a;
     border-bottom: 1px solid #2a2a2a;
     padding: 4px 6px;
     font-weight: bold;

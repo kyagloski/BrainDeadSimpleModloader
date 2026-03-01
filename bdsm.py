@@ -56,8 +56,7 @@ def create_cfg(gui=False):
         print(e)
         print("error: path is invalid"); sys.exit()
     if not compat: compat=target
-    #if not os.path.exists(compat): print("error: could not infer comapt dir: "+compat); sys.exit()
-    print("error: could not infer compat dir: "+compat);
+    if not os.path.exists(compat): print("error: could not infer comapt dir: "+compat)
     # write data
     with open(CONFIG_FILE, "w", encoding="utf-8") as f:
         f.write("SOURCE_DIR: "+str(SOURCE_DIR)+"\n")
@@ -303,8 +302,6 @@ def restore():
     print("deleted manifests...")
     # clean all symlinks (if install broke) (maybe risky idk)
     remove_symlink_rec(TARGET_DIR)
-    #if os.path.exists(BACKUP_DIR / Path("plugins.txt")): os.unlink(BACKUP_DIR / Path("plugins.txt"))
-    #if os.path.exists(BACKUP_DIR / Path("Plugins.txt")): os.unlink(BACKUP_DIR / Path("Plugins.txt"))
     
     print('-'*40)
     print("unload complete!")

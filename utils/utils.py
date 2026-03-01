@@ -4,7 +4,7 @@
 import os
 import sys
 import stat
-import requests
+import urllib.request
 import traceback
 import subprocess
 from collections import defaultdict, OrderedDict
@@ -170,14 +170,14 @@ def get_steam_resources(name,app_id,save_dir,icon=False,bg=False):
         urls.append(f"https://cdn.cloudflare.steamstatic.com/steam/apps/{app_id}/page_bg_raw.jpg")
     for i in range(len(save_dirs)):
         if os.path.exists(save_dirs[i]): continue
-        try: response = requests.get(urls[i])
-        except Exception as e: save_dirs[i]=None
-        if response.status_code != 200: 
+        try: 
+            response = urllib.request.urlopen(urls[i])
+            with open(save_dirs[i], 'wb') as f:
+                f.write(response.read())
+        except Exception as e: 
             print(f"request for {urls[i]} failed..."); 
             save_dirs[i]=None; 
             continue
-        with open(save_dirs[i], 'wb') as f:
-            f.write(response.content)
     if icon: return str(save_dirs[0])
     else: return save_dirs
 

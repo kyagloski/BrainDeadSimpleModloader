@@ -284,8 +284,8 @@ class ModLoaderUserInterface(QMainWindow):
     def _create_mod_table(self):
         self.mod_table = ModTable(self, 0, 4)
         #self.mod_table.setItemDelegateForColumn(2, RichTextDelegate(self))
-        self.mod_table.setItemDelegateForColumn(3, RichTextDelegate(self))
         self.mod_table.setItemDelegateForColumn(2, RichTextDelegate(self))
+        self.mod_table.setItemDelegateForColumn(3, RichTextDelegate(self))
         self.mod_table.setHorizontalHeaderLabels(["#", "", "Mod Name", "Conflicts" ])
         self.mod_table.verticalHeader().setVisible(False)
         self.mod_table.itemSelectionChanged.connect(self.on_mod_selected)
@@ -305,6 +305,7 @@ class ModLoaderUserInterface(QMainWindow):
         self.mod_table.setSortingEnabled(False)
         self.mod_table.setWordWrap(False)
         self.mod_table.setTextElideMode(Qt.TextElideMode.ElideRight)
+        self.mod_table.setShowGrid(False) 
         self.mod_table.keyPressEvent = self.table_key_press_event
 
         self.mod_table.overriders=dict()
@@ -978,8 +979,8 @@ class ModLoaderUserInterface(QMainWindow):
             add_sep_above_action = menu.addAction("Add Separator Above")
             add_sep_below_action = menu.addAction("Add Separator Below")
             menu.addSeparator()
-            collapse_all_action  = menu.addAction("Collapse All")
             expand_all_action    = menu.addAction("Expand All")
+            collapse_all_action  = menu.addAction("Collapse All")
             
             action = menu.exec(self.mod_table.viewport().mapToGlobal(position))
             
@@ -1587,8 +1588,8 @@ if __name__ == "__main__":
     app = QApplication(sys.argv)
     window = ModLoaderUserInterface()
     stylesheet = load_stylesheet(Path(LOCAL_DIR)/"utils"/"resources"/"stylesheets"/"dark.qss")
-    app.setStyleSheet(stylesheet)
     splash = QSplashScreen(QPixmap(str(LOCAL_DIR/"utils"/"resources"/"splash.png")))
+    app.setStyleSheet(stylesheet)
     if os.name!="posix": window.show()
     splash.show()
     QTimer.singleShot(1700, splash.close)

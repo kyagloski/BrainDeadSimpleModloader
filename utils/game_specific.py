@@ -134,7 +134,7 @@ def determine_game_id(target_dir):
     if gid!=[]: gid=str(GAME_IDS[gid[0]])
     else: gid=determine_game_id_acf(target_dir) 
     if gid==-1: print("error: cannot detect game id")
-    return gid
+    return int(gid)
 
 
 def determine_game_id_acf(target_dir):
@@ -148,7 +148,7 @@ def determine_game_id_acf(target_dir):
             content = f.read()
             if f'"installdir"\t\t"{game_dir}"' in content:
                 app_id = acf.replace("appmanifest_", "").replace(".acf", "")
-    return app_id
+    return int(app_id)
     
 
 def get_ini_path(compat_dir):
@@ -158,13 +158,13 @@ def get_ini_path(compat_dir):
 
 def infer_compat_path(target_dir, verbose=False):
     game_id = determine_game_id(target_dir)
-    if game_id not in GAME_IDS.values():
+    if int(game_id) not in GAME_IDS.values():
         if "steamapps" not in str(target_dir): return -1
         steamapps_dir=Path(str(target_dir).split("steamapps")[0])/"steamapps"
-        compat_dir=steamapps_dir/"compatdata"/game_id
+        compat_dir=steamapps_dir/"compatdata"/str(game_id)
     elif os.name == "posix":
         game=GAME_COMPAT[Path(target_dir).parent.name]
-        u_compat=target_dir.parent.parent.parent/"compatdata"/game_id/"pfx"/"drive_c"/"users"/"steamuser"/"AppData"/"Local"
+        u_compat=target_dir.parent.parent.parent/"compatdata"/str(game_id)/"pfx"/"drive_c"/"users"/"steamuser"/"AppData"/"Local"
         compat_dir = u_compat/game
     elif os.name == "nt":
         game=GAME_COMPAT[Path(target_dir).parent.name]

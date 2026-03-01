@@ -573,7 +573,7 @@ class ModTable(QTableWidget):
 
         conflict_item = QTableWidgetItem("")
         conflict_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
-        conflict_item.setFlags(Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsSelectable & ~Qt.ItemFlag.ItemIsDragEnabled)
+        conflict_item.setFlags(conflict_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
         self.setItem(row,3, conflict_item)
         self.parent._loading=False
 
@@ -600,6 +600,7 @@ class ModTable(QTableWidget):
         conflict_item.setToolTip(tooltip)
         self.setItem(row, 3, conflict_item)
         conflict_item.setFlags(conflict_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
+
         if hidden: self.setRowHidden(row,True)
         self.parent._loading=False
                 
