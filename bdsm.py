@@ -20,7 +20,7 @@ except:
     import game_specific
     from gui import *
 
-VERSION           = "v0.2"
+VERSION           = "v0.5"
 LOCAL_DIR         = Path(os.path.dirname(os.path.realpath(__file__)))
 CONFIG_FILE       = LOCAL_DIR/"config.yaml"
 LOAD_ORDER        = LOCAL_DIR/"manifest"/"loadorders"/"loadorder.txt"

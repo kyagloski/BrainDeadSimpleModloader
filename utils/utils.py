@@ -10,6 +10,8 @@ import subprocess
 from collections import defaultdict, OrderedDict
 from pathlib import Path
 
+FAILED_URLS=[]
+
 def force_symlink(target, link_name):
     try:
         if os.path.islink(link_name) or os.path.exists(link_name):
@@ -155,6 +157,7 @@ def is_steam_running():
         return 'steam.exe' in result.stdout.lower()
 
 def get_steam_resources(name,app_id,save_dir,icon=False,bg=False):
+    global FAILED_URLS # dont keep requesting over and over
     if (not icon) and (not bg): return
     urls=[]
     save_dirs=[]
@@ -170,13 +173,15 @@ def get_steam_resources(name,app_id,save_dir,icon=False,bg=False):
         urls.append(f"https://cdn.cloudflare.steamstatic.com/steam/apps/{app_id}/page_bg_raw.jpg")
     for i in range(len(save_dirs)):
         if os.path.exists(save_dirs[i]): continue
+        if urls[i] in FAILED_URLS: save_dirs[i]=None; continue
         try: 
-            response = urllib.request.urlopen(urls[i])
+            response = urllib.request.urlopen(urls[i], timeout=4)
             with open(save_dirs[i], 'wb') as f:
                 f.write(response.read())
         except Exception as e: 
             print(f"request for {urls[i]} failed..."); 
             save_dirs[i]=None; 
+            FAILED_URLS.append(urls[i])
             continue
     if icon: return str(save_dirs[0])
     else: return save_dirs

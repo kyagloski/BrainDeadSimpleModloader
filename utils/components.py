@@ -316,11 +316,6 @@ class FadingBg:
         self.table = table
         self.table.horizontalHeader().setAutoFillBackground(False)
         self.table.horizontalHeader().setAutoFillBackground(False)
-        self.table.horizontalHeader().setStyleSheet("background: transparent; \
-                                                     background-color: rgba(10, 10, 10, 140); \
-                                                     gridline-color: rgba(0, 0, 0, 0); \
-                                                     outline: none; \
-                                                     border: none;")
         self.viewport = table.viewport()
         self.paths = [str(p) for p in paths]
         self.index = 0
@@ -351,8 +346,7 @@ class FadingBg:
         
     def _wrap_resize(self, orig):
         def new_resize(e):
-            if orig:
-                orig(e)
+            if orig: orig(e)
             self.update_geometry()
         return new_resize
 
@@ -367,8 +361,7 @@ class FadingBg:
         for lbl in (self.label1, self.label2):
             lbl.setGeometry(geo)
             path = lbl.property("path")
-            if path:
-                self.set_pixmap(lbl, path)
+            if path: self.set_pixmap(lbl, path)
             lbl.lower()
 
     def apply_vignette(self, pix):
@@ -392,13 +385,11 @@ class FadingBg:
         painter.end()
         return result   
 
- 
     def set_pixmap(self, label, path):
         pm = QPixmap(path)
         try: label.setProperty("path", path)
         except: return
-        if pm.isNull():
-            return
+        if pm.isNull(): return
         scaled = pm.scaled(
             label.size(),  # ← was self.viewport.size()
             Qt.AspectRatioMode.KeepAspectRatioByExpanding,
@@ -494,8 +485,7 @@ class ModTable(QTableWidget):
     def update_priority_numbers(self):
         priority = 1
         for row in range(self.rowCount()):
-            if self.is_separator_row(row):
-                continue
+            if self.is_separator_row(row): continue
             priority_item = self.item(row, 0)
             if priority_item:
                 priority_item.setText(str(priority))
@@ -504,8 +494,7 @@ class ModTable(QTableWidget):
     def get_separator_children(self, separator_row):
         children = []
         for r in range(separator_row + 1, self.rowCount()):
-            if self.is_separator_row(r):
-                break
+            if self.is_separator_row(r): break
             children.append(r)
         return children
 
@@ -518,24 +507,21 @@ class ModTable(QTableWidget):
     def collect_row_data(self, row):
         is_sep = self.is_separator_row(row)
         if is_sep:
-            return {
-                'priority_num': "",
-                'is_separator': True,
-                'name': self.item(row, 2).data(Qt.ItemDataRole.UserRole + 1),
-                'collapse_state': self.item(row, 0).text(),
-                'hidden': self.isRowHidden(row),
-                'conflicts': "",
-                'conflict_tooltip':""
-            }
-        return {
-            'priority_num': self.item(row,0).text(),
-            'is_separator': False,
-            'name': self.item(row, 2).text(),
-            'checkbox': self.item(row, 1).checkState(),
-            'hidden': self.isRowHidden(row),
-            'conflicts': self.item(row,3).text(),
-            'conflict_tooltip': self.item(row,3).toolTip()
-        }
+            return { 'priority_num': "",
+                     'is_separator': True,
+                     'name': self.item(row, 2).data(Qt.ItemDataRole.UserRole + 1),
+                     'collapse_state': self.item(row, 0).text(),
+                     'hidden': self.isRowHidden(row),
+                     'conflicts': "",
+                     'conflict_tooltip':"" }
+
+        return { 'priority_num': self.item(row,0).text(),
+                 'is_separator': False,
+                 'name': self.item(row, 2).text(),
+                 'checkbox': self.item(row, 1).checkState(),
+                 'hidden': self.isRowHidden(row),
+                 'conflicts': self.item(row,3).text(),
+                 'conflict_tooltip': self.item(row,3).toolTip() }
 
     def create_row_from_data(self, row, data, hidden=False):
         if data['is_separator']:
@@ -559,7 +545,9 @@ class ModTable(QTableWidget):
         checkbox_item.setFlags(Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsSelectable | Qt.ItemFlag.ItemIsDragEnabled)
         self.setItem(row, 1, checkbox_item)
         
-        clean_name=name[2:]
+        if name.startswith("v#") \
+        or name.startswith(">#"): clean_name=name[2:]
+        else: clean_name=name
         if not Qt.mightBeRichText(name): clean_name=f"<b><u>{clean_name}</u></b>"
         name_item = QTableWidgetItem(clean_name)
         name_item.setFlags(Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsSelectable | Qt.ItemFlag.ItemIsDragEnabled)
@@ -603,7 +591,16 @@ class ModTable(QTableWidget):
 
         if hidden: self.setRowHidden(row,True)
         self.parent._loading=False
-                
+
+    def highlight_row(self, row, overriding=False, overridden=False):
+        for col in range(self.columnCount()):
+            if self.item(row, col):
+                if   overriding: color=QColor(OVERRIDING_COLOR)
+                elif overridden: color=QColor(OVERRIDDEN_COLOR)
+                else: color=QColor(0,0,0)
+                color.setAlpha(self.alpha)
+                self.item(row, col).setBackground(color)
+ 
     def dropEvent(self, event):
         # this is the worst
         drop_pos = event.position().toPoint()
@@ -635,9 +632,7 @@ class ModTable(QTableWidget):
             min_sel = min(selected_rows)
             max_sel = max(selected_rows)
             if selected_rows == list(range(min_sel, max_sel + 1)):
-                if min_sel <= target_row <= max_sel + 1:
-                    return
-       
+                if min_sel <= target_row <= max_sel + 1: return
         rows_data = [self.collect_row_data(row) for row in selected_rows]
 
         for row in reversed(selected_rows):
@@ -674,14 +669,4 @@ class ModTable(QTableWidget):
         QTimer.singleShot(100,lambda: self.parent.highlight_conflicts(new_selection_rows))
         if self.selectedItems():
             self.itemChanged.emit(self.selectedItems()[0])
-
-    def highlight_row(self, row, overriding=False, overridden=False):
-        for col in range(self.columnCount()):
-            if self.item(row, col):
-                if   overriding: color=QColor(OVERRIDING_COLOR)
-                elif overridden: color=QColor(OVERRIDDEN_COLOR)
-                else: color=QColor(0,0,0)
-                color.setAlpha(self.alpha)
-                self.item(row, col).setBackground(color)
-
 

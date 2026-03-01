@@ -1,6 +1,7 @@
 #!/usr/bin/python
 
 import sys
+import re
 import subprocess
 import platform
 import yaml
@@ -1128,31 +1129,17 @@ class ModLoaderUserInterface(QMainWindow):
 
     def rename_separator(self, row):
         old_name = self.get_separator_name(row)
+        clean_name = old_name.replace("<b><u>",'').replace("</u></b>",'')
+        if not Qt.mightBeRichText(clean_name): old_name=clean_name
         new_name, ok = QInputDialog.getText(
             self, "Rename Separator", "New name:"+' '*DIALOGUE_WIDTH,
             QLineEdit.EchoMode.Normal, old_name.lstrip('*~#v>'))
         if ok and new_name:
+            if not Qt.mightBeRichText(new_name): new_name=f"<b><u>{new_name}</u></b>"
             name_item = self.mod_table.item(row, 2)
             name_item.setText(new_name)
             name_item.setData(Qt.ItemDataRole.UserRole + 1, new_name)
             self.auto_save_load_order()
-
-    #def remove_separator(self, row):
-    #    reply = QMessageBox.question(
-    #        self, "Confirm Removal",
-    #        "Remove this separator?\n(Mods beneath it will remain)",
-    #        QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
-    #    if reply == QMessageBox.StandardButton.Yes:
-    #        next_separator = self.mod_table.rowCount()
-    #        for r in range(row + 1, self.mod_table.rowCount()):
-    #            if not self.is_separator_row(r): continue
-    #            next_separator = r
-    #            break
-    #        for r in range(row + 1, next_separator):
-    #            self.mod_table.setRowHidden(r, False)
-    #        self.mod_table.removeRow(row)
-    #        self.update_priority_numbers()
-    #        self.auto_save_load_order()
 
     def collapse_all_seps(self):
         for r in range(self.mod_table.rowCount()):
@@ -1354,42 +1341,39 @@ class ModLoaderUserInterface(QMainWindow):
 
     def keyPressEvent(self, event):
         if event.modifiers() == Qt.KeyboardModifier.ControlModifier:
+            set_scale=False
             if event.key() in (Qt.Key.Key_Plus, Qt.Key.Key_Equal):
                 self._scale_factor = min(2.0, self._scale_factor + 0.1)
-                self.apply_scale()
-                self._init_ui(verbose=self.log_output.toPlainText())
-                self._load_initial_data(reload=True)
+                set_scale=True 
             elif event.key() == Qt.Key.Key_Minus:
                 self._scale_factor = max(0.5, self._scale_factor - 0.1)
-                self.apply_scale()
-                self._init_ui(verbose=self.log_output.toPlainText())
-                self._load_initial_data(reload=True)
+                set_scale=True 
             elif event.key() == Qt.Key.Key_0:
                 self._scale_factor = 1.0
-                self.apply_scale()
-                self._init_ui(verbose=self.log_output.toPlainText())
-                self._load_initial_data(reload=True)
-            else:
-                super().keyPressEvent(event)
-        else:
-            super().keyPressEvent(event)
+                set_scale=True 
+            if set_scale: self.apply_scale()
+            else: super().keyPressEvent(event)
+        else: super().keyPressEvent(event)
     
     def apply_scale(self):
-        # TODO: fix this (broken w/ other stylesheets)
         app = QApplication.instance()
         base_size = 9
         new_size = int(base_size * self._scale_factor)
-        
         font = app.font()
         font.setPointSize(new_size)
         app.setFont(font)
-        
-        scaled_label_size = int(new_size * 1.1)
-        self.explorer_label.setStyleSheet(f"padding: 5px; font-weight: bold; font-size: {scaled_label_size}pt;")
-        self.plugins_label.setStyleSheet(f"padding: 5px; font-weight: bold; font-size: {scaled_label_size}pt;")
-        self.log_label.setStyleSheet(f"padding: 5px; font-weight: bold; font-size: {scaled_label_size}pt;")
-        self.log_output.setStyleSheet(f"padding: 5px; font-size: {scaled_label_size}pt;")
-        self.statusBar().showMessage(f"UI Scale: {int(self._scale_factor * 100)}%", SHOW_MSG_TIME)
+        existing_style = app.styleSheet()
+        new_style = re.sub(
+            r'(QWidget\s*\{[^}]*font-size:\s*)\d+pt',
+            rf'\g<1>{new_size}pt',
+            existing_style)
+        app.setStyleSheet(new_style)
+        self._init_ui(verbose=self.log_output.toPlainText())
+        self._load_initial_data(reload=True)
+        self.mod_table.setColumnWidth(0, int(40*self._scale_factor))
+        #self.mod_table.setColumnWidth(1, int(25*self._scale_factor))
+        self.mod_table.setColumnWidth(3, int(80*self._scale_factor))
+        self.statusBar().showMessage(f"UI Scale: {int(self._scale_factor * 100)}%", SHOW_MSG_TIME) 
 
     def dropEvent(self, event):
         if event.mimeData().hasUrls():
