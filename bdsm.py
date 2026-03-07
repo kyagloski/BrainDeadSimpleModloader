@@ -21,14 +21,12 @@ except:
     from gui import *
 
 VERSION           = "v0.5"
+GLOBAL_INSTANCE   = False
 LOCAL_DIR         = Path(os.path.dirname(os.path.realpath(__file__)))
 CONFIG_FILE       = LOCAL_DIR/"config.yaml"
 LOAD_ORDER        = LOCAL_DIR/"manifest"/"loadorders"/"loadorder.txt"
 PRESET_DIR        = LOCAL_DIR/"manifest"/"loadorders"
-BACKUP_DIR        = LOCAL_DIR/"manifest"
 INI_DIR           = LOCAL_DIR/"inis"
-COPY_MANIFEST     = BACKUP_DIR/"copy_manifest.txt"
-BACKUP_MANIFEST   = BACKUP_DIR/"backup_manifest.txt"
 SOURCE_DIR        = LOCAL_DIR/"mods"
 TARGET_DIR        = LOCAL_DIR/"target"
 COMPAT_DIR        = TARGET_DIR/"compat"
@@ -36,37 +34,69 @@ RELOAD_ON_INSTALL = False
 UPDATE_ON_CLOSE   = True
 LINK_ON_LAUNCH    = True
 EXECUTABLES       = dict()
+INSTANCES         = dict()
+
+BACKUP_DIR        = LOCAL_DIR/"manifest"
+COPY_MANIFEST     = BACKUP_DIR/"copy_manifest.txt"
+BACKUP_MANIFEST   = BACKUP_DIR/"backup_manifest.txt"
 
 VERBOSITY         = False
 OPERATION_TIMEOUT = 500 # 0.5s
 
-def create_cfg(gui=False):
-    # prompt user choice
-    if gui:
-        target=select_directory()
-        if not target: sys.exit()
-    else:
-        choice = input("currently no config file exists or is not configured\nwould you like to create one? [Y/n] ").strip().lower()
-        if (not choice.startswith("y")) and (choice!=""): return
+def create_cfg(path=None, gui=False, is_global=False):
+    # user choices
+    if not gui and not path:
+        cfg_choice = input("currently no config file exists or is not configured\nwould you like to create one? [Y/n] ").strip().lower()
+        if (not cfg_choice.startswith("y")) and (cfg_choice!=""): return
         target = input("enter absolute path to target dir: ")
         if not os.path.exists(target): print("error: invalid target dir: "+target); sys.exit()
         if not target.endswith("Data"): target=os.path.join(target,"Data")
+    elif is_global:
+        target=select_directory()
+    else:
+        target=path.parent.parent
+        name=str(target).split("common"+os.sep)[-1].split(os.sep)[0].strip()
+        if name in game_specific.GAME_IDS.keys(): target=target/"Data"
+    if not path: path=CONFIG_FILE
+    
+    # verification
     try: compat = str(game_specific.infer_compat_path(Path(target)))
-    except Exception as e: 
-        print(e)
-        print("error: path is invalid"); sys.exit()
+    except Exception as e: print(f"error: path is invalid ({e})"); sys.exit() 
     if not compat: compat=target
     if not os.path.exists(compat): print("error: could not infer comapt dir: "+compat)
+
     # write data
-    with open(CONFIG_FILE, "w", encoding="utf-8") as f:
-        f.write("SOURCE_DIR: "+str(SOURCE_DIR)+"\n")
+    f = open(path, 'w')
+    if is_global:
+        f.write("GLOBAL_INSTANCE: true\n")
+        # check for native supported game
+        name=str(target).split("common"+os.sep)[-1].split(os.sep)[0].strip()
+        if Path(target).parent.name in game_specific.GAME_IDS.keys():
+            instance_path=Path(target).parent/"bdsm_instance"
+        else:
+            instance_path=Path(target)/"bdsm_instance"
+        f.write("INSTANCES:\n")
+        f.write(' '*4+name+":\n")
+        f.write(' '*8+"PATH: "+str(instance_path)+"\n")
+        f.write(' '*8+"SELECTED: true\n")
+
+    else:
+        # check for native supported game
+        name=str(target).split("common"+os.sep)[-1].split(os.sep)[0].strip()
+        if Path(target).parent.name in game_specific.GAME_IDS.keys():
+            instance_path=Path(target).parent/"bdsm_instance"
+        else:
+            instance_path=Path(target)/"bdsm_instance"
+        f.write("SOURCE_DIR: "+str(instance_path/"mods")+"\n")
         f.write("TARGET_DIR: "+str(target)+"\n")
         f.write("COMPAT_DIR: "+str(compat)+"\n")
-        f.write("LOAD_ORDER: "+str(LOAD_ORDER)+"\n")
-        f.write("INI_DIR: "+str(INI_DIR)+"\n")
+        f.write("PRESET_DIR: "+str(instance_path/"manifest"/"loadorders")+"\n")
+        f.write("LOAD_ORDER: "+str(instance_path/"manifest"/"loadorders"/"loadorder.txt")+"\n")
+        f.write("INI_DIR: "+str(instance_path/"inis")+"\n")
         f.write("RELOAD_ON_INSTALL: false\n")
         f.write("UPDATE_ON_CLOSE: true\n")
         f.write("LINK_ON_LAUNCH: true\n")
+        f.write("STYLESHEET: dark.qss\n")
         f.write("DO_REQUESTS: true\n")
         launchers=game_specific.get_launchers(target,compat)
         f.write("EXECUTABLES:\n")
@@ -76,65 +106,122 @@ def create_cfg(gui=False):
             f.write(' '*8+"PATH: "+path+"\n")
             f.write(' '*8+"PARAMS: \"\"\n")
             f.write(' '*8+"SELECTED: false\n")
-        
+    f.close()
     print("created new config!")
-    read_cfg()
-
-def read_cfg(sync=True, gui=False):
-    global SOURCE_DIR, TARGET_DIR, COMPAT_DIR, LOAD_ORDER
-    global INI_DIR, RELOAD_ON_INSTALL, UPDATE_ON_CLOSE
-    global LINK_ON_LAUNCH, EXECUTABLES
-    if not os.path.exists(CONFIG_FILE): 
-        create_cfg(gui); return
-        try: create_cfg(gui); return
-        except Exception as e: 
-            os.remove(CONFIG_FILE)
-            print(f"error: could not create config file, exception: {e}")
-    with open(CONFIG_FILE, "r") as f: cfg_dict = OrderedDict(yaml.safe_load(f))
-    SOURCE_DIR=Path(cfg_dict["SOURCE_DIR"])
-    TARGET_DIR=Path(cfg_dict["TARGET_DIR"])
-    COMPAT_DIR=Path(cfg_dict["COMPAT_DIR"])
-    LOAD_ORDER=Path(cfg_dict["LOAD_ORDER"])
-    INI_DIR=Path(cfg_dict["INI_DIR"])
-    RELOAD_ON_INSTALL=bool(cfg_dict["RELOAD_ON_INSTALL"])
-    UPDATE_ON_CLOSE=bool(cfg_dict["UPDATE_ON_CLOSE"])
-    LINK_ON_LAUNCH=bool(cfg_dict["LINK_ON_LAUNCH"])
-    EXECUTABLES=game_specific.get_launchers(TARGET_DIR,COMPAT_DIR)
-    cfg_dict=fix_cfg(cfg_dict)
     
+
+def read_cfg(sync=True, gui=False, update=True):
+    # if portable instance cfg will be parent and child
+    global CONFIG_FILE
+    global BACKUP_DIR, COPY_MANIFEST, BACKUP_MANIFEST
+
+    global_cfg = read_parent_cfg(gui=gui, update=update)
+    if GLOBAL_INSTANCE: 
+        child_instance = Path(next((v["PATH"] for v in INSTANCES.values() if v["SELECTED"]), next(iter(INSTANCES.values()))["PATH"]))
+        ensure_dir(child_instance)
+        CONFIG_FILE       = child_instance/"config.yaml"
+        BACKUP_DIR        = child_instance/"manifest"
+        COPY_MANIFEST     = BACKUP_DIR/"copy_manifest.txt"
+        BACKUP_MANIFEST   = BACKUP_DIR/"backup_manifest.txt"
+    
+    cfg = read_child_cfg(gui=gui, update=update)
+
     ensure_dir(PRESET_DIR)
     ensure_dir(SOURCE_DIR)
-    if sync: sync_loadorder() # just in case
-    return cfg_dict
+
+    if sync: sync_loadorder()
+    return cfg
+        
+
+def read_parent_cfg(gui=False, update=True):
+    global GLOBAL_INSTANCE, INSTANCES
+    global_cfg_file = LOCAL_DIR/"config.yaml"
+
+    # global config doesnt exist
+    if not os.path.exists(global_cfg_file): 
+        try: cfg=create_cfg(gui=gui, is_global=True);
+        except Exception as e: 
+            os.remove(global_cfg_file)
+            print(f"error: could not create global config file, exception: {e}")
+            return None
+    # read values, update globals
+    try: 
+        with open(global_cfg_file, "r") as f: cfg = OrderedDict(yaml.safe_load(f))
+    except: 
+        cfg=create_cfg(gui=gui, is_global=True)
+        with open(global_cfg_file, "r") as f: cfg = OrderedDict(yaml.safe_load(f))
+    if update:
+        cfg=fix_cfg(cfg, is_global=True)
+        GLOBAL_INSTANCE = cfg["GLOBAL_INSTANCE"]
+        INSTANCES = cfg["INSTANCES"]
+    return cfg
+    
+
+def read_child_cfg(gui=False, path=None, update=True):
+    global SOURCE_DIR, TARGET_DIR, COMPAT_DIR, PRESET_DIR, LOAD_ORDER
+    global INI_DIR, RELOAD_ON_INSTALL, UPDATE_ON_CLOSE, LINK_ON_LAUNCH
+    global DO_REQUESTS, EXECUTABLES
+
+    if not path: path=CONFIG_FILE
+    # child config doesnt exist
+    if not os.path.exists(path): 
+        try: cfg=create_cfg(path=path, gui=gui);
+        except Exception as e: 
+            os.remove(cfg_file)
+            print(f"error: could not create config file, exception: {e}")
+            return None
+    # read values, update globals
+    try: 
+        with open(path, "r") as f: cfg = OrderedDict(yaml.safe_load(f))
+    except:
+        cfg=create_cfg(path=path, gui=gui);
+        with open(global_cfg_file, "r") as f: cfg = OrderedDict(yaml.safe_load(f)) 
+    if update:
+        cfg=fix_cfg(cfg)
+        SOURCE_DIR        = Path(cfg["SOURCE_DIR"])
+        TARGET_DIR        = Path(cfg["TARGET_DIR"])
+        COMPAT_DIR        = Path(cfg["COMPAT_DIR"])
+        PRESET_DIR        = Path(cfg["PRESET_DIR"])
+        LOAD_ORDER        = Path(cfg["LOAD_ORDER"])
+        INI_DIR           = Path(cfg["INI_DIR"])
+        RELOAD_ON_INSTALL = bool(cfg["RELOAD_ON_INSTALL"])
+        UPDATE_ON_CLOSE   = bool(cfg["UPDATE_ON_CLOSE"])
+        LINK_ON_LAUNCH    = bool(cfg["LINK_ON_LAUNCH"])
+        DO_REQUESTS       = bool(cfg["DO_REQUESTS"])
+        EXECUTABLES       = cfg["EXECUTABLES"]
+    return cfg
 
 
-def fix_cfg(cfg_dict):
+def fix_cfg(cfg, is_global=False):
     added=False
-    if "EXECUTABLES" not in cfg_dict.keys(): cfg_dict["EXECUTABLES"]=[]; added=True
-    try: values = [v for sub_dict in cfg_dict["EXECUTABLES"].values() for v in sub_dict.values()]
-    except: values=[]
-    for exe in EXECUTABLES:
-        if EXECUTABLES[exe]["PATH"] not in values: 
-            cfg_dict["EXECUTABLES"][exe]=dict()
-            cfg_dict["EXECUTABLES"][exe]["PATH"]=EXECUTABLES[exe]["PATH"]
-            cfg_dict["EXECUTABLES"][exe]["PARAMS"]=""
-            cfg_dict["EXECUTABLES"][exe]["SELECTED"]=False
+    if is_global:
+        if "GLOBAL_INSTANCE"   not in cfg.keys(): cfg["GLOBAL_INSTANCE"]=True;         added=True
+        if "INSTANCES"         not in cfg.keys(): create_cfg(gui=True,is_global=True);
+    else:
+        if "SOURCE_DIR"        not in cfg.keys(): create_cfg(gui=True);                
+        if "TARGET_DIR"        not in cfg.keys(): create_cfg(gui=True);                
+        if "COMPAT_DIR"        not in cfg.keys(): create_cfg(gui=True);                
+        if "PRESET_DIR"        not in cfg.keys(): cfg["PRESET_DIR"]=str(PRESET_DIR);   added=True
+        #if "GLOBAL_INSTANCE"   not in cfg.keys(): cfg["GLOBAL_INSTANCE"]=False;        added=True
+        if "LOAD_ORDER"        not in cfg.keys(): cfg["LOAD_ORDER"]=str(LOAD_ORDER);   added=True
+        if "INI_DIR"           not in cfg.keys(): cfg["INI_DIR"]=str(INI_DIR);         added=True
+        if "RELOAD_ON_INSTALL" not in cfg.keys(): cfg["RELOAD_ON_INSTALL"]=False;      added=True
+        if "UPDATE_ON_CLOSE"   not in cfg.keys(): cfg["UPDATE_ON_CLOSE"]=True;         added=True
+        if "LINK_ON_LAUNCH"    not in cfg.keys(): cfg["LINK_ON_LAUNCH"]=True;          added=True
+        if "DO_REQUESTS"       not in cfg.keys(): cfg["DO_REQUESTS"]=True;             added=True
+        if "STYLESHEET"        not in cfg.keys(): cfg["STYLESHEET"]="dark.qss";        added=True
+        if "EXECUTABLES"       not in cfg.keys(): 
+            cfg_dict["EXECUTABLES"]=game_specific.get_launchers(cfg["TARGET_DIR"],cfg["COMPAT_DIR"]);
             added=True
-    if "SOURCE_DIR"        not in cfg_dict.keys(): create_cfg(gui); return
-    if "TARGET_DIR"        not in cfg_dict.keys(): create_cfg(gui); return
-    if "COMPAT_DIR"        not in cfg_dict.keys(): create_cfg(gui); return
-    if "LOAD_ORDER"        not in cfg_dict.keys(): cfg_dict["LOAD_ORDER"]=LOAD_ORDER;     added=True
-    if "INI_DIR"           not in cfg_dict.keys(): cfg_dict["INI_DIR"]=INI_DIR;           added=True
-    if "RELOAD_ON_INSTALL" not in cfg_dict.keys(): cfg_dict["READLOAD_ON_INSTALL"]=False; added=True
-    if "UPDATE_ON_CLOSE"   not in cfg_dict.keys(): cfg_dict["UPDATE_ON_CLOSE"]=True;      added=True
-    if "LINK_ON_LAUNCH"    not in cfg_dict.keys(): cfg_dict["LINK_ON_LAUNCH"]=True;       added=True
-    if "DO_REQUESTS"       not in cfg_dict.keys(): cfg_dict["DO_REQUESTS"]=True;          added=True
-    if added: write_cfg(cfg_dict)
-    return cfg_dict
+    if added: write_cfg(cfg)
+    return cfg
 
 
-def write_cfg(d):
-    with open(CONFIG_FILE, "w") as f: 
+def write_cfg(d, path=None, is_global=False):
+    if is_global: config_file = LOCAL_DIR/"config.yaml"
+    elif path:    config_file = path 
+    else:         config_file = CONFIG_FILE
+    with open(config_file, "w") as f: 
         yaml.dump(dict(d),f,sort_keys=False,default_flow_style=False)
 
 

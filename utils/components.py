@@ -270,7 +270,7 @@ class EditableComboBox(QComboBox):
         if action == delete_action:    self.upper.del_preset()
     
     def open_in_editor(self):
-        file_path = str(LOAD_ORDER)
+        file_path = str(self.upper.cfg["LOAD_ORDER"])
         print("Opening loadorder file with system text editor...")
         if not os.path.isfile(file_path):
             print("error: could not open "+file_path)
@@ -446,11 +446,11 @@ class ModTable(QTableWidget):
         self.alpha=255
         self.opacity=1
         if self.parent.cfg["DO_REQUESTS"]:
-            self.alpha=ALPHA
-            self.opacity=OPACITY
             bg_paths=get_game_bgs(self.parent.cfg)
-            self.background=FadingBg(self,bg_paths)
-            self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOn)
+            if bg_paths:
+                self.alpha=ALPHA
+                self.opacity=OPACITY
+                self.background=FadingBg(self,bg_paths)
 
     def is_separator_row(self, row):
         name_item = self.item(row, 2)

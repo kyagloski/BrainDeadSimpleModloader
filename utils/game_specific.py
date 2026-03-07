@@ -106,7 +106,7 @@ def determine_game(compat_dir):
     if game!=['']: game=game[0]
     else: game=determine_game_acf(compat_dir)
     if game==-1:
-        print("error: cannot detect game name from compat dir: "+compat_dir)
+        print(f"error: cannot detect game name from compat dir: {compat_dir}")
         game=["Default"]
     return game
   
@@ -163,8 +163,10 @@ def infer_compat_path(target_dir, verbose=False):
         steamapps_dir=Path(str(target_dir).split("steamapps")[0])/"steamapps"
         compat_dir=steamapps_dir/"compatdata"/str(game_id)
     elif os.name == "posix":
-        game=GAME_COMPAT[Path(target_dir).parent.name]
-        u_compat=target_dir.parent.parent.parent/"compatdata"/str(game_id)/"pfx"/"drive_c"/"users"/"steamuser"/"AppData"/"Local"
+        game_dir=str(target_dir).split("common"+os.sep)[-1].split(os.sep)[0].strip()
+        game=GAME_COMPAT[game_dir]
+        steamapps_dir=Path(str(target_dir).split("steamapps")[0])/"steamapps"
+        u_compat=steamapps_dir/"compatdata"/str(game_id)/"pfx"/"drive_c"/"users"/"steamuser"/"AppData"/"Local"
         compat_dir = u_compat/game
     elif os.name == "nt":
         game=GAME_COMPAT[Path(target_dir).parent.name]
@@ -294,6 +296,7 @@ def get_launchers(target_dir,compat_dir):
             launchers[title]=dict()
             launchers[title]["PATH"]=str(exe)
             launchers[title]["PARAMS"]=""
+            launchers[title]["SELECTED"]=False
     return launchers
 
 

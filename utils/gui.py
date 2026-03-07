@@ -35,6 +35,7 @@ except:
     from bdsm import *
 from components import *
 from game_specific import *
+from instance_manager import *
 from ini_manager import *
 from exe_manager import *
 from installer import *
@@ -206,18 +207,26 @@ class ModLoaderUserInterface(QMainWindow):
         self.settings_button.clicked.connect(self.open_settings)
         preset_layout.addWidget(self.settings_button)
 
+        self.instance_button = QPushButton("⇄")
+        self.instance_button.setFixedSize(35, 35)
+        self.instance_button.clicked.connect(self.open_instance_manager)
+        preset_layout.addWidget(self.instance_button)
+
         self.tools_button = QToolButton()
         self.tools_button.setText("⚒")
         self.tools_button.setFixedSize(35, 35)
         self.tools_button.setToolTip("Tools")
         menu = QMenu()
+        #inst_man = menu.addAction("Instance Manager")
         ini_man = menu.addAction("INI Manager")
+        menu.addSeparator()
         open_target = menu.addAction("Open Target Folder")
         def show_menu(): menu.exec(self.tools_button.mapToGlobal(QPoint(0, self.tools_button.height())))
         self.tools_button.clicked.connect(show_menu)
         self.tools_button.setMenu(menu)
         preset_layout.addWidget(self.tools_button)
 
+        #inst_man.triggered.connect(self.open_instance_manager)
         ini_man.triggered.connect(self.open_ini_manager)
         open_target.triggered.connect(lambda: self._open_path(self.cfg["TARGET_DIR"]))
         
@@ -307,6 +316,7 @@ class ModLoaderUserInterface(QMainWindow):
         self.mod_table.setWordWrap(False)
         self.mod_table.setTextElideMode(Qt.TextElideMode.ElideRight)
         self.mod_table.setShowGrid(False) 
+        self.mod_table.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOn)
         self.mod_table.keyPressEvent = self.table_key_press_event
 
         self.mod_table.overriders=dict()
@@ -401,19 +411,17 @@ class ModLoaderUserInterface(QMainWindow):
         """Open a path with system's default application"""
         try:
             if platform.system() == 'Windows':
-                if path.is_dir():
-                    subprocess.run(['explorer', str(path)])
-                else:
-                    subprocess.run(['start', '', str(path)], shell=True)
-            elif platform.system() == 'Darwin':
-                subprocess.run(['open', str(path)])
-            else:
-                subprocess.run(['xdg-open', str(path)])
+                if path.is_dir(): subprocess.run(['explorer', str(path)])
+                else: subprocess.run(['start', '', str(path)], shell=True)
+            elif platform.system() == 'Darwin': subprocess.run(['open', str(path)])
+            else: subprocess.run(['xdg-open', str(path)])
         except Exception as e:
             QMessageBox.warning(self, "Error", f"Failed to open:\n{str(e)}")
 
     def open_settings(self):
-        config_path = Path(CONFIG_FILE)
+        global_cfg = read_parent_cfg(gui=True, update=False)
+        child_instance = Path(next((v["PATH"] for v in global_cfg["INSTANCES"].values() if v["SELECTED"]), next(iter(global_cfg["INSTANCES"].values()))["PATH"]))
+        config_path = Path(child_instance/"config.yaml")
         if not config_path.exists():
             QMessageBox.warning(self, "Error", f"Config file not found:\n{config_path}")
             return
@@ -423,7 +431,7 @@ class ModLoaderUserInterface(QMainWindow):
         global LOAD_ORDER
         LOAD_ORDER=Path(self.cfg["LOAD_ORDER"])
         self.preset_combo.clear()
-        for i in os.listdir(PRESET_DIR):
+        for i in os.listdir(self.cfg["PRESET_DIR"]):
             self.preset_combo.addItem(i)
         self.preset_combo.setCurrentText(LOAD_ORDER.name)
 
@@ -1012,7 +1020,10 @@ class ModLoaderUserInterface(QMainWindow):
             seps=self.mod_table.get_all_separators()
             sep_actions=[]
             for sep in seps:
+                #name = re.sub(r'<[^>]+>', '', sep)
+                #sep_actions.append(sep_menu.addAction(name))
                 sep_actions.append(sep_menu.addAction(sep))
+            
                     
             menu.addSeparator()
             enable_action = menu.addAction("Enable")
@@ -1044,10 +1055,10 @@ class ModLoaderUserInterface(QMainWindow):
                 name=action.text()
                 self.move_mod_separator(name)
 
-    def select_preset(self, text):
-        self.auto_save_load_order(instant=True)
+    def select_preset(self, text, save=False):
+        if save: self.auto_save_load_order(instant=True)
         print("switching to preset "+text)
-        load_order=str(PRESET_DIR / Path(text))
+        load_order=str(Path(self.cfg["PRESET_DIR"]) / text)
         self.cfg["LOAD_ORDER"]=load_order
         write_cfg(self.cfg)
         sync_loadorder()
@@ -1065,11 +1076,11 @@ class ModLoaderUserInterface(QMainWindow):
                 QLineEdit.EchoMode.Normal, "New Preset")
         if ok and name:
             name=name.removesuffix(".txt")+".txt"
-            if name in os.listdir(PRESET_DIR):
+            if name in os.listdir(self.cfg["PRESET_DIR"]):
                 print("error: preset already exists")
                 QMessageBox.warning(self, "Preset Error", f"Preset already exists: {name}")
                 return
-            Path(str(PRESET_DIR / name)).touch() 
+            Path(str(Path(self.cfg["PRESET_DIR"]) / name)).touch() 
             self.select_preset(name)
 
     def rename_preset(self):
@@ -1077,12 +1088,12 @@ class ModLoaderUserInterface(QMainWindow):
             self, "Rename Preset", "New name:"+' '*DIALOGUE_WIDTH,
             QLineEdit.EchoMode.Normal, self.preset_combo.currentText())
         if name:
-            if name in os.listdir(PRESET_DIR):
+            if name in os.listdir(self.cfg["PRESET_DIR"]):
                 print("error: preset already exists")
                 QMessageBox.warning(self, "Preset Error", f"Preset already exists: {name}")
                 return
             name=name.removesuffix(".txt")+".txt"
-            new_name=PRESET_DIR/name
+            new_name=Path(self.cfg["PRESET_DIR"])/name
             os.rename(self.cfg["LOAD_ORDER"], new_name)
             self.cfg["LOAD_ORDER"]=new_name
             self.preset_combo.setItemText(self.preset_combo.currentIndex(),name)
@@ -1092,12 +1103,12 @@ class ModLoaderUserInterface(QMainWindow):
             self, "Duplicate Preset", "Preset name"+' '*DIALOGUE_WIDTH,
             QLineEdit.EchoMode.Normal, self.preset_combo.currentText())
         if name:
-            if name in os.listdir(PRESET_DIR):
+            if name in os.listdir(self.cfg["PRESET_DIR"]):
                 print("error: preset already exists")
                 QMessageBox.warning(self, "Preset Error", f"Preset already exists: {name}")
                 return
             name=name.removesuffix(".txt")+".txt"
-            new_name=PRESET_DIR/name
+            new_name=Path(self.cfg["PRESET_DIR"])/name
             shutil.copy(self.cfg["LOAD_ORDER"],new_name)
             self.cfg["LOAD_ORDER"]=new_name
             self.select_preset(name)
@@ -1109,7 +1120,7 @@ class ModLoaderUserInterface(QMainWindow):
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
         if reply == QMessageBox.StandardButton.Yes:
             print("removing "+str(self.cfg["LOAD_ORDER"]))
-            os.unlink(self.cfg["LOAD_ORDER"])
+            os.remove(self.cfg["LOAD_ORDER"])
             preset_idx=self.preset_combo.currentIndex()
             if self.preset_combo.count()>1:
                 self.preset_combo.removeItem(preset_idx)
@@ -1446,7 +1457,27 @@ class ModLoaderUserInterface(QMainWindow):
             self.cfg["EXECUTABLES"][exe]["SELECTED"]=False
         self.cfg["EXECUTABLES"][self.current_exe]["SELECTED"]=True
         write_cfg(self.cfg) 
+   
+    def open_instance_manager(self):
+        self.instance_manager = InstanceManager(self)
+        self.instance_manager.setWindowModality(Qt.WindowModality.ApplicationModal)
+        self.instance_manager.closed.connect(self.on_instance_manager_close)
+        self.instance_manager.show()
     
+    def on_instance_manager_close(self, instance):
+        self.blockSignals(True)
+        #import bdsm 
+        #bdsm.CONFIG_FILE=LOCAL_DIR/"config.yaml"
+        self.cfg=read_cfg(gui=True)
+       
+        stylesheet=load_stylesheet(Path(LOCAL_DIR)/"utils"/"resources"/"stylesheets"/self.cfg["STYLESHEET"])
+        app.setStyleSheet(stylesheet)
+        self._init_ui(verbose=self.log_output.toPlainText())
+        self._load_initial_data(reload=True)
+        
+        self.blockSignals(False)
+        pass
+ 
     def open_ini_manager(self):
         #cfg_dict=read_cfg(sync=False)
         ensure_dir(Path(self.cfg["INI_DIR"]))
@@ -1516,54 +1547,37 @@ def load_stylesheet(filename):
     return ""
 
 def select_directory():
-    """Show detailed prompt then directory picker with confirmation"""
     app = QApplication(sys.argv)
-    msg = QMessageBox()
-    msg.setIcon(QMessageBox.Icon.Question)
-    msg.setWindowTitle("Target Directory Required")
-    msg.setText("Select the root of your game directory:")
-    msg.setInformativeText(
-        "Choose the directory containing the \"Data\" folder.\n\n"
-        "Click OK to choose a directory."
-    )
-    msg.setStandardButtons(
-        QMessageBox.StandardButton.Ok | 
-        QMessageBox.StandardButton.Cancel
-    )
-    msg.setDefaultButton(QMessageBox.StandardButton.Ok)
-    result = msg.exec()
-    if result == QMessageBox.StandardButton.Ok:
-        while True:
-            directory = QFileDialog.getExistingDirectory(
+    global_msg = QMessageBox(None)
+    global_msg.setWindowTitle("Select Game Location")
+    global_msg.setText("Setup a game instance?"+' '*(DIALOGUE_WIDTH+20))
+    global_msg.setInformativeText("This will create a 'bdsm_instance' folder in the game folder,\nit will be where mods and configs will be stored")
+    global_msg.setStandardButtons(QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+    if global_msg.exec() == QMessageBox.StandardButton.Yes: is_global=True
+    else: sys.exit()
+
+    while True:
+        directory = QFileDialog.getExistingDirectory(
+            None,
+            "Select Target Directory",
+            "/home",
+            QFileDialog.Option.ShowDirsOnly | QFileDialog.Option.DontResolveSymlinks)
+        if directory:
+            directory=Path(os.path.realpath(directory))
+            if not directory.name=="Data" \
+            and directory.name in GAME_IDS.keys(): 
+                directory=os.path.join(directory,"Data")
+
+            confirm = QMessageBox.question(
                 None,
-                "Select Target Directory",
-                "/home",
-                QFileDialog.Option.ShowDirsOnly | QFileDialog.Option.DontResolveSymlinks)
-            if directory:
-                directory=Path(os.path.realpath(directory))
-                if not directory.name=="Data" \
-                and directory.name in GAME_IDS.keys(): 
-                    directory=os.path.join(directory,"Data")
-                #try: compat = str(infer_compat_path(Path(directory))) # test path validity
-                #except Exception as e: 
-                #    directory=Path(directory).parent
-                #    QMessageBox.warning(None, "Warning", f"Path is invalid: {directory}\nChoose a game with a Data directory in it")
-                #    continue
-                confirm = QMessageBox.question(
-                    None,
-                    "Confirm Directory",
-                    f"Are you sure you want to use this directory?\n\n{directory}",
-                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-                    QMessageBox.StandardButton.Yes)
-                
-                if confirm == QMessageBox.StandardButton.Yes: return directory
-                else: continue
-            else:
-                QMessageBox.warning(
-                    None,
-                    "Error",
-                    "No directory was selected!")
-                return None
+                "Confirm Directory",
+                f"Are you sure you want to use this directory?\n\n{directory}",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.Yes)
+            
+            if confirm == QMessageBox.StandardButton.Yes: return directory
+            else: continue
+        else: return None
     else: return None
 
 
@@ -1571,9 +1585,9 @@ if __name__ == "__main__":
     cfg=read_cfg(gui=True)
     app = QApplication(sys.argv)
     window = ModLoaderUserInterface()
-    stylesheet = load_stylesheet(Path(LOCAL_DIR)/"utils"/"resources"/"stylesheets"/"dark.qss")
+    stylesheet = load_stylesheet(Path(LOCAL_DIR)/"utils"/"resources"/"stylesheets"/cfg["STYLESHEET"])
     splash = QSplashScreen(QPixmap(str(LOCAL_DIR/"utils"/"resources"/"splash.png")))
-    app.setStyle("Fusion")
+    #app.setStyle("Fusion")
     app.setStyleSheet(stylesheet)
     if os.name!="posix": window.show()
     splash.show()
