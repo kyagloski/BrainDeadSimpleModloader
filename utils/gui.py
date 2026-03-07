@@ -372,7 +372,7 @@ class ModLoaderUserInterface(QMainWindow):
         self.disable_button.clicked.connect(self.disable_all)
         
         separator = QLabel("|")
-        separator.setStyleSheet("color: gray; font-size: 20px; padding: 0px; margin: 0px 5px;")
+        #separator.setStyleSheet("color: gray; font-size: 20px; padding: 0px; margin: 0px 5px;")
         separator.setFixedWidth(30)
         
         self.save_button = QPushButton("Save Load Order")
@@ -1055,8 +1055,11 @@ class ModLoaderUserInterface(QMainWindow):
                 name=action.text()
                 self.move_mod_separator(name)
 
-    def select_preset(self, text, save=False):
-        if save: self.auto_save_load_order(instant=True)
+    def select_preset(self, text):
+        if Path(self.cfg["LOAD_ORDER"]).name in [self.preset_combo.itemText(i) for i in range(self.preset_combo.count())]:
+            print([self.preset_combo.itemText(i) for i in range(self.preset_combo.count())])
+            print(text)
+            self.auto_save_load_order(instant=True)
         print("switching to preset "+text)
         load_order=str(Path(self.cfg["PRESET_DIR"]) / text)
         self.cfg["LOAD_ORDER"]=load_order
@@ -1096,6 +1099,7 @@ class ModLoaderUserInterface(QMainWindow):
             new_name=Path(self.cfg["PRESET_DIR"])/name
             os.rename(self.cfg["LOAD_ORDER"], new_name)
             self.cfg["LOAD_ORDER"]=new_name
+            write_cfg(self.cfg)
             self.preset_combo.setItemText(self.preset_combo.currentIndex(),name)
 
     def dup_preset(self):
@@ -1111,6 +1115,7 @@ class ModLoaderUserInterface(QMainWindow):
             new_name=Path(self.cfg["PRESET_DIR"])/name
             shutil.copy(self.cfg["LOAD_ORDER"],new_name)
             self.cfg["LOAD_ORDER"]=new_name
+            write_cfg(self.cfg)
             self.select_preset(name)
 
     def del_preset(self):
