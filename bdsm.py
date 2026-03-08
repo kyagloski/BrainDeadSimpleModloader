@@ -96,8 +96,8 @@ def create_cfg(path=None, gui=False, is_global=False):
         f.write("RELOAD_ON_INSTALL: false\n")
         f.write("UPDATE_ON_CLOSE: true\n")
         f.write("LINK_ON_LAUNCH: true\n")
-        f.write("STYLESHEET: dark.qss\n")
         f.write("DO_REQUESTS: true\n")
+        f.write("STYLESHEET: dark.qss\n")
         launchers=game_specific.get_launchers(target,compat)
         f.write("EXECUTABLES:\n")
         for title in launchers:

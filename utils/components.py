@@ -13,15 +13,17 @@ from PyQt6.QtWidgets import (
     QPushButton, QSplitter, QLabel, QLineEdit, QMenu, QMessageBox, 
     QComboBox, QFileDialog, QInputDialog, QTextEdit, QToolButton, 
     QSplashScreen, QToolTip, QStyledItemDelegate, QHeaderView,
-    QGraphicsOpacityEffect, QStyle
+    QGraphicsOpacityEffect, QStyle, QScrollArea, QFrame, QCheckBox,
+    QDialog, QListWidget, QListWidgetItem, QFormLayout, QTreeView
 )
 from PyQt6.QtCore import ( Qt, QItemSelectionModel, QObject, QThread, 
     QWaitCondition, pyqtSignal, QMutex, QMutexLocker, QTimer, QPoint, 
     QSize, QFile, QTextStream, QMetaObject, pyqtSlot, QItemSelection,
-    QPointF, Qt, QPropertyAnimation
+    QPointF, Qt, QPropertyAnimation, QDir, QEvent
 )
 from PyQt6.QtGui import ( QIcon, QFont, QTextCursor, QCursor, QPixmap, 
-    QTextDocument, QPainter, QRadialGradient, QColor
+    QTextDocument, QPainter, QRadialGradient, QColor, QSyntaxHighlighter,
+    QTextCharFormat, QFileSystemModel, QShortcut, QKeySequence
 )
 
 from game_specific import *
@@ -676,3 +678,1365 @@ class ModTable(QTableWidget):
         if self.selectedItems():
             self.itemChanged.emit(self.selectedItems()[0])
 
+
+class ConfigEditor(QMainWindow):
+    applied = pyqtSignal()
+
+    def __init__(self, cfg_dict):
+        super().__init__()
+        self.config = cfg_dict
+        self.widgets = {}
+        self.setWindowTitle("Settings")
+        self.setMinimumWidth(800)
+        self.build_ui()
+
+    def build_ui(self):
+        central = QWidget()
+        self.setCentralWidget(central)
+        outer = QVBoxLayout(central)
+        outer.setContentsMargins(10, 10, 10, 10)
+        outer.setSpacing(8)
+
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
+        outer.addWidget(scroll)
+
+        container = QWidget()
+        scroll.setWidget(container)
+        form = QVBoxLayout(container)
+        form.setSpacing(8)
+        form.setContentsMargins(4, 4, 4, 4)
+
+        longest = max((len(k) for k in self.config.keys()), default=10)
+        label_width = longest * 8 + 8  # rough char width
+        
+        BOOL_KEYS         = {"RELOAD_ON_INSTALL", "UPDATE_ON_CLOSE", "LINK_ON_LAUNCH", "DO_REQUESTS"}
+        PATH_KEYS         = {"SOURCE_DIR", "TARGET_DIR", "COMPAT_DIR", "PRESET_DIR", "LOAD_ORDER", "INI_DIR"}
+        STYLESHEET_KEY    = "STYLESHEET"
+        import bdsm
+        STYLESHEET_OPTIONS = [Path(i).name for i in os.listdir(bdsm.LOCAL_DIR/"utils"/"resources"/"stylesheets") if i.endswith(".qss")]
+
+        for key, value in self.config.items():
+            row = QHBoxLayout()
+            label = QLabel(key.replace("_",' '))
+            label.setFixedWidth(label_width)
+            label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+            row.addWidget(label)
+
+            if key in BOOL_KEYS:
+                cb = QCheckBox()
+                cb.setChecked(value)
+                self.widgets[key] = cb
+                row.addWidget(cb)
+                row.addStretch()
+
+            elif key == STYLESHEET_KEY:
+                combo = QComboBox()
+                options = list(STYLESHEET_OPTIONS)
+                if value not in options:
+                    options.insert(0, value)
+                combo.addItems(options)
+                idx = combo.findText(value)
+                if idx >= 0:
+                    combo.setCurrentIndex(idx)
+                self.widgets[key] = combo
+                row.addWidget(combo)
+                row.addStretch()
+
+            elif key in PATH_KEYS:
+                edit = QLineEdit(value)
+                self.widgets[key] = edit
+                row.addWidget(edit)
+                btn = QPushButton("...")
+                btn.setFixedWidth(28)
+                # Determine if it's a file or directory picker
+                is_file = key == "LOAD_ORDER"
+                btn.clicked.connect(lambda checked, e=edit, f=is_file: self.browse(e, f))
+                row.addWidget(btn)
+
+            else:
+                continue
+                #edit = QLineEdit(value)
+                #self.widgets[key] = edit
+                #row.addWidget(edit)
+
+            form.addLayout(row)
+
+        form.addStretch()
+
+        # Bottom bar
+        bottom = QHBoxLayout()
+        bottom.addStretch()
+        apply_btn = QPushButton("Apply")
+        apply_btn.setFixedWidth(90)
+        apply_btn.clicked.connect(self.apply)
+        bottom.addWidget(apply_btn)
+        outer.addLayout(bottom)
+
+    def browse(self, edit, is_file=False):
+        current = edit.text()
+        start = current if os.path.exists(current) else os.path.expanduser("~")
+        if is_file:
+            path, _ = QFileDialog.getOpenFileName(self, "Select File", start)
+        else:
+            path = QFileDialog.getExistingDirectory(self, "Select Directory", start)
+        if path:
+            edit.setText(path)
+
+    def apply(self):
+        from bdsm import write_cfg
+        for key, widget in self.widgets.items():
+            if isinstance(widget, QCheckBox):   self.config[key] = widget.isChecked()
+            elif isinstance(widget, QComboBox): self.config[key] = widget.currentText()
+            else:                               self.config[key] = widget.text()
+        write_cfg(self.config)
+        self.applied.emit()
+        #QMessageBox.information(self, "Saved", "Settings saved!"+' '*20)
+
+
+class InstanceManager(QDialog):
+    closed = pyqtSignal(str)
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.instances=dict()
+        self.selected_instance=None
+
+        self.setWindowTitle("Instance Manager")
+        self.setMinimumSize(360, 500)
+        self.resize(380, 540)
+        self.setWindowFlags(self.windowFlags() & ~Qt.WindowType.WindowContextHelpButtonHint)
+
+        self._build_ui()
+
+    def _build_ui(self):
+        root = QVBoxLayout(self)
+        root.setContentsMargins(16, 16, 16, 14)
+        root.setSpacing(10)
+
+        # Header labels
+        title = QLabel("Select a game instance")
+        root.addWidget(title)
+
+        # Game list
+        self.list_widget = QListWidget()
+        self.list_widget.setIconSize(QSize(83, 55))
+        self.list_widget.setSpacing(1)
+        self.list_widget.itemSelectionChanged.connect(self._on_selection_changed)
+        self.list_widget.itemDoubleClicked.connect(self._on_select)
+        root.addWidget(self.list_widget)
+
+        # Bottom row
+        bottom = QHBoxLayout()
+        bottom.setSpacing(8)
+
+        self.btn_add = QPushButton("+")
+        self.btn_add.setFixedSize(35, 35)
+        self.btn_add.clicked.connect(self._on_add)
+
+        self.btn_remove = QPushButton("-")
+        self.btn_remove.setFixedSize(35, 35)
+        self.btn_remove.setEnabled(False)
+        self.btn_remove.clicked.connect(self._on_remove)
+
+        bottom.addWidget(self.btn_add)
+        bottom.addWidget(self.btn_remove)
+        bottom.addStretch()
+
+        self.btn_cancel = QPushButton("Cancel")
+        self.btn_cancel.setFixedWidth(80)
+        self.btn_cancel.clicked.connect(self.reject)
+
+        self.btn_select = QPushButton("Select")
+        self.btn_select.setFixedWidth(80)
+        self.btn_select.setEnabled(False)
+        self.btn_select.clicked.connect(self._on_select)
+
+        bottom.addWidget(self.btn_cancel)
+        bottom.addWidget(self.btn_select)
+
+        root.addLayout(bottom)
+
+        self._refresh_list()
+
+    def _refresh_list(self):
+        from bdsm import read_parent_cfg, read_child_cfg
+        local_dir = Path(os.path.dirname(os.path.realpath(__file__))).parent
+        cfg_dict = read_parent_cfg()
+        self.list_widget.clear()
+        for instance in sorted(cfg_dict["INSTANCES"]):
+            item = QListWidgetItem(instance)
+            item.setData(Qt.ItemDataRole.UserRole, instance)
+            
+            instance_path=Path(cfg_dict["INSTANCES"][instance]["PATH"])/"config.yaml"
+
+            instance_cfg=read_child_cfg(gui=True, path=instance_path ,update=False)
+            if instance_cfg==None: continue
+            target_dir=instance_cfg["TARGET_DIR"]
+            game=str(target_dir).split("common"+os.sep)[-1].split(os.sep)[0]
+            steam_id=determine_game_id(target_dir)
+            save_dir=ensure_dir(local_dir/"utils"/"resources"/"requested")
+            icon_path = get_steam_resources(game,steam_id,save_dir,icon=True)
+
+            if icon_path and os.path.exists(icon_path):
+                item.setIcon(QIcon(QPixmap(icon_path)))
+                item.setSizeHint(QSize(0,48))
+            self.list_widget.addItem(item)
+
+    def _on_selection_changed(self):
+        has_sel = bool(self.list_widget.selectedItems())
+        self.btn_select.setEnabled(has_sel)
+        self.btn_remove.setEnabled(has_sel)
+
+    def _on_add(self):
+        from bdsm import read_parent_cfg, write_cfg, create_cfg
+        path = QFileDialog.getExistingDirectory(
+            None,
+            "Select Game Target Directory",
+            "/home",
+            QFileDialog.Option.ShowDirsOnly | QFileDialog.Option.DontResolveSymlinks)
+        path=Path(os.path.realpath(path)) # resolve symlinks
+        if not path: return
+
+        name=str(path).split("common"+os.sep)[-1].split(os.sep)[0].strip()
+
+        # check for native supported games
+        if not path.name=="Data" \
+        and path.name in GAME_IDS.keys(): 
+            path=path/"Data"
+        if Path(path).parent.name in GAME_IDS.keys():
+            instance_path=Path(path).parent/"bdsm_instance"
+        else:
+            instance_path=Path(path)/"bdsm_instance"
+
+        # TODO: actually fix this lol
+        try: compat_dir=infer_compat_path(path)
+        except: return
+
+        # write to parent config
+        cfg_dict=read_parent_cfg()
+        cfg_dict["INSTANCES"][name]=dict()
+        cfg_dict["INSTANCES"][name]["PATH"]=str(instance_path)
+        cfg_dict["INSTANCES"][name]["SELECTED"]=False
+        write_cfg(cfg_dict, is_global=True)
+  
+        ensure_dir(instance_path)
+        create_cfg(gui=True, path=instance_path/"config.yaml") 
+        #write_cfg(instance_cfg,path=instance_path/"config.yaml")
+
+        self._refresh_list()
+        self.list_widget.setCurrentRow(self.list_widget.count() - 1)
+
+    def _on_remove(self):
+        from bdsm import read_parent_cfg, write_cfg 
+
+        item = self.list_widget.currentItem()
+        if not item: return
+        name = item.data(Qt.ItemDataRole.UserRole)
+
+        msg = QMessageBox(self)
+        msg.setWindowTitle("Remove Instance")
+        msg.setText(f"Remove '{name}'?"+' '*60)
+        msg.setInformativeText("This only removes it from the list — no files will be deleted.")
+        msg.setStandardButtons(QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+        msg.setDefaultButton(QMessageBox.StandardButton.No)
+        if msg.exec() != QMessageBox.StandardButton.Yes: return
+
+        cfg_dict=read_parent_cfg()
+        del cfg_dict["INSTANCES"][name]
+        write_cfg(cfg_dict, is_global=True)
+
+        self._refresh_list()
+
+    def _on_select(self):
+        from bdsm import read_parent_cfg, write_cfg
+        item = self.list_widget.currentItem()
+        if not item:
+            return
+        self.selected_instance = item.data(Qt.ItemDataRole.UserRole)
+        cfg_dict=read_parent_cfg(gui=True)
+        instance_path=""
+        for i in cfg_dict["INSTANCES"]:
+            if i==self.selected_instance: 
+                cfg_dict["INSTANCES"][i]["SELECTED"]=True
+            else: cfg_dict["INSTANCES"][i]["SELECTED"]=False
+        write_cfg(cfg_dict, is_global=True)
+        self.closed.emit(self.selected_instance)
+        self.accept()
+        self.close()
+
+
+
+class ListItem:
+    """Class to represent a list item with title, path, and params"""
+    def __init__(self, title="", path="", params=""):
+        self.title = title
+        self.path = path
+        self.params = params
+    
+    def __str__(self):
+        return self.title if self.title else "New Item"
+
+class ExeManager(QMainWindow):
+    # Signal emitted when the window is closed, sends the list of items
+    closed = pyqtSignal(list)
+   
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        import bdsm
+        self.cfg = bdsm.read_cfg(sync=False)
+        self.items = []
+        self.current_item_index = -1
+        self.has_pending_changes = False
+        # Make this window modal if it has a parent
+        if parent is not None:
+            self.setWindowModality(Qt.WindowModality.ApplicationModal)
+        self.init_ui()
+        
+    def init_ui(self):
+        self.setWindowTitle("Executable Manager")
+        self.resize(650, 250)
+        
+        # Central widget
+        central_widget = QWidget()
+        self.setCentralWidget(central_widget)
+        
+        # Main layout
+        main_layout = QHBoxLayout()
+        central_widget.setLayout(main_layout)
+        
+        # Left side - List and buttons
+        left_layout = QVBoxLayout()
+        
+        # List widget
+        self.list_widget = QListWidget()
+        exes=self.cfg["EXECUTABLES"]
+        if exes:
+            for exe in exes:
+                self.add_item(title=exe, path=exes[exe]["PATH"], params=exes[exe]["PARAMS"])
+        self.list_widget.currentRowChanged.connect(self.on_item_selected)
+        left_layout.addWidget(self.list_widget)
+        
+        # Button layout for list controls
+        button_layout = QHBoxLayout()
+        
+        # Plus button
+        self.plus_button = QPushButton("+")
+        self.plus_button.setFixedSize(35, 35)
+        self.plus_button.clicked.connect(self.add_item)
+        button_layout.addWidget(self.plus_button)
+        
+        # Minus button
+        self.minus_button = QPushButton("-")
+        self.minus_button.setFixedSize(35, 35)
+        self.minus_button.clicked.connect(self.remove_item)
+        button_layout.addWidget(self.minus_button)
+        
+        # Up arrow button
+        self.up_button = QPushButton("↑")
+        self.up_button.setFixedSize(35, 35)
+        self.up_button.clicked.connect(self.move_item_up)
+        button_layout.addWidget(self.up_button)
+        
+        # Down arrow button
+        self.down_button = QPushButton("↓")
+        self.down_button.setFixedSize(35, 35)
+        self.down_button.clicked.connect(self.move_item_down)
+        button_layout.addWidget(self.down_button)
+        
+        button_layout.addStretch()
+        
+        left_layout.addLayout(button_layout)
+        
+        main_layout.addLayout(left_layout, 1)
+        
+        # Right side - Form
+        right_layout = QVBoxLayout()
+        
+        # Form layout for labels and text boxes
+        form_layout = QFormLayout()
+        
+        # Title field
+        self.title_edit = QLineEdit()
+        self.title_edit.textChanged.connect(self.mark_pending_changes)
+        form_layout.addRow(QLabel("Title:"), self.title_edit)
+        
+        # Path field
+        self.path_edit = QLineEdit()
+        self.path_edit.textChanged.connect(self.mark_pending_changes)
+        form_layout.addRow(QLabel("Path:"), self.path_edit)
+        
+        # Params field
+        self.params_edit = QLineEdit()
+        self.params_edit.textChanged.connect(self.mark_pending_changes)
+        form_layout.addRow(QLabel("Params:"), self.params_edit)
+        
+        right_layout.addLayout(form_layout)
+        
+        # Use as Steam executable button
+        #steam_layout = QHBoxLayout()
+        #self.steam_button = QPushButton("Use as Steam executable")
+        #self.steam_button.setFixedWidth(180)
+        #self.steam_button.setToolTip("Swap this executable with the original Steam launcher so this is launched in its stead")
+        #self.steam_button.clicked.connect(self.use_as_steam_executable)
+        #self.steam_button.setEnabled(False)
+        #steam_layout.addWidget(self.steam_button)
+        #right_layout.addLayout(steam_layout)
+        #
+        #right_layout.addStretch()
+        
+        # Apply button layout
+        apply_layout = QHBoxLayout()
+        apply_layout.addStretch()
+        
+        # Apply button
+        self.apply_button = QPushButton("Apply")
+        self.apply_button.setFixedWidth(100)
+        self.apply_button.clicked.connect(self.apply_changes)
+        self.apply_button.setEnabled(False)
+        apply_layout.addWidget(self.apply_button)
+        
+        right_layout.addLayout(apply_layout)
+        
+        main_layout.addLayout(right_layout, 2)
+        
+        # Initialize with empty fields disabled
+        self.set_fields_enabled(False)
+
+        # start selection
+        if len(self.items)>0: self.on_item_selected(0)
+        self.list_widget.setCurrentRow(0)
+        
+    def set_fields_enabled(self, enabled):
+        """Enable or disable the text fields and apply button"""
+        self.title_edit.setEnabled(enabled)
+        self.path_edit.setEnabled(enabled)
+        self.params_edit.setEnabled(enabled)
+        #self.steam_button.setEnabled(enabled)
+        
+    def mark_pending_changes(self):
+        """Mark that there are pending changes"""
+        if self.current_item_index >= 0:
+            self.has_pending_changes = True
+            # Only enable apply button if both title and path are not empty
+            title_filled = self.title_edit.text().strip() != ""
+            path_filled = self.path_edit.text().strip() != ""
+            
+            if title_filled and path_filled:
+                self.apply_button.setEnabled(True)
+                self.apply_button.setToolTip("")
+            else:
+                self.apply_button.setEnabled(False)
+                missing = []
+                if not title_filled:
+                    missing.append("Title")
+                if not path_filled:
+                    missing.append("Path")
+                self.apply_button.setToolTip(f"Required field(s) missing: {', '.join(missing)}")
+            
+    def add_item(self, title=None, path=None, params=None):
+        """Add a new item to the list"""
+        # Check if there's already an item with empty title or path
+        for item in self.items:
+            if item.title.strip() == "" or item.path.strip() == "":
+                QMessageBox.warning(self, 'Incomplete Item',
+                                  'Please complete the current item (title and path required) before adding a new one.')
+                return
+        
+        # Check for pending changes
+        if self.has_pending_changes:
+            if not self.prompt_save_changes():
+                return
+        
+        # Create new item
+        new_item = ListItem()
+        if title: new_item.title=title
+        if path: new_item.path=path
+        if params: new_item.params=params
+
+        self.items.append(new_item)
+        self.list_widget.addItem(str(new_item))
+        
+        
+        # Select the new item
+        self.list_widget.setCurrentRow(len(self.items) - 1)
+        
+    def remove_item(self):
+        """Remove the selected item from the list"""
+        import bdsm
+        current_row = self.list_widget.currentRow()
+        name = self.list_widget.item(current_row).text()
+        if current_row >= 0:
+            # Confirm deletion
+            reply = QMessageBox.question(self, 'Remove Item', 
+                                        'Are you sure you want to remove this item?',
+                                        QMessageBox.StandardButton.Yes | 
+                                        QMessageBox.StandardButton.No)
+            
+            if reply == QMessageBox.StandardButton.Yes:
+                self.items.pop(current_row)
+                self.list_widget.takeItem(current_row)
+                self.has_pending_changes = False
+                self.apply_button.setEnabled(False)
+                
+                # Clear fields if no items left
+                if len(self.items) == 0:
+                    self.clear_fields()
+                    self.set_fields_enabled(False)
+                    self.current_item_index = -1
+
+                try: del self.cfg["EXECUTABLES"][name]
+                except: pass
+                bdsm.write_cfg(self.cfg)
+                    
+    def move_item_up(self):
+        """Move the selected item up in the list"""
+        current_row = self.list_widget.currentRow()
+        if current_row > 0:
+            # Check for pending changes
+            if self.has_pending_changes:
+                if not self.prompt_save_changes():
+                    return
+            
+            # Swap items
+            self.items[current_row], self.items[current_row - 1] = \
+                self.items[current_row - 1], self.items[current_row]
+            
+            # Update list widget
+            self.refresh_list()
+            self.list_widget.setCurrentRow(current_row - 1)
+            
+    def move_item_down(self):
+        """Move the selected item down in the list"""
+        current_row = self.list_widget.currentRow()
+        if current_row >= 0 and current_row < len(self.items) - 1:
+            # Check for pending changes
+            if self.has_pending_changes:
+                if not self.prompt_save_changes():
+                    return
+            
+            # Swap items
+            self.items[current_row], self.items[current_row + 1] = \
+                self.items[current_row + 1], self.items[current_row]
+            
+            # Update list widget
+            self.refresh_list()
+            self.list_widget.setCurrentRow(current_row + 1)
+            
+    def refresh_list(self):
+        """Refresh the list widget to show current items"""
+        self.list_widget.clear()
+        for item in self.items:
+            self.list_widget.addItem(str(item))
+            
+    def on_item_selected(self, index):
+        """Handle item selection in the list"""
+        if index < 0: return
+            
+        # Check for pending changes
+        if self.has_pending_changes and index != self.current_item_index:
+            if not self.prompt_save_changes():
+                # Revert selection
+                self.list_widget.setCurrentRow(self.current_item_index)
+                return
+        
+        # Update current index
+        self.current_item_index = index
+        
+        # Enable fields
+        self.set_fields_enabled(True)
+        
+        # Load item data into fields
+        if 0 <= index < len(self.items):
+            item = self.items[index]
+            self.current_item = item
+            self.title_edit.setText(item.title)
+            self.path_edit.setText(item.path)
+            self.params_edit.setText(item.params)
+            
+        # Reset pending changes flag
+        self.has_pending_changes = False
+        self.apply_button.setEnabled(False)
+        
+    def prompt_save_changes(self):
+        """Prompt user to save or discard pending changes"""
+        reply = QMessageBox.question(self, 'Pending Changes',
+                                    'You have unsaved changes. Do you want to apply them?',
+                                    QMessageBox.StandardButton.Yes | 
+                                    QMessageBox.StandardButton.No |
+                                    QMessageBox.StandardButton.Cancel)
+        
+        if reply == QMessageBox.StandardButton.Yes:
+            self.apply_changes()
+            return True
+        elif reply == QMessageBox.StandardButton.No:
+            self.has_pending_changes = False
+            self.apply_button.setEnabled(False)
+            return True
+        else:  # Cancel
+            return False
+            
+    def apply_changes(self):
+        """Apply changes to the current item"""
+        import bdsm
+        if self.current_item_index >= 0 and self.current_item_index < len(self.items):
+            new_title = self.title_edit.text().strip()
+            
+            # Check if the title is unique (excluding the current item)
+            for i, item in enumerate(self.items):
+                if i != self.current_item_index and item.title == new_title:
+                    QMessageBox.warning(self, 'Duplicate Title',
+                                      'An item with this title already exists. Please use a unique title.')
+                    return
+            
+            item = self.items[self.current_item_index]
+            if not self.cfg["EXECUTABLES"]: self.cfg["EXECUTABLES"]=dict()
+            if item.title!=new_title and item.title in self.cfg["EXECUTABLES"]:
+                del self.cfg["EXECUTABLES"][item.title] # rename occured
+                self.cfg["EXECUTABLES"][new_title]=dict()
+                self.cfg["EXECUTABLES"][new_title]["SELECTED"]=False
+            elif item.title not in self.cfg["EXECUTABLES"]:
+                self.cfg["EXECUTABLES"][new_title]=dict()
+                self.cfg["EXECUTABLES"][new_title]["PATH"]=""
+                self.cfg["EXECUTABLES"][new_title]["PARAMS"]=""
+                self.cfg["EXECUTABLES"][new_title]["SELECTED"]=False
+            item.title = new_title
+            item.path = self.path_edit.text()
+            item.params = self.params_edit.text()
+            self.cfg["EXECUTABLES"][item.title]["PATH"]=item.path
+            self.cfg["EXECUTABLES"][item.title]["PARAMS"]=item.params
+            bdsm.write_cfg(self.cfg)
+
+            # Update list widget item text
+            self.list_widget.item(self.current_item_index).setText(str(item))
+            
+            # Clear pending changes
+            self.has_pending_changes = False
+            self.apply_button.setEnabled(False)
+            
+    def clear_fields(self):
+        """Clear all text fields"""
+        self.title_edit.clear()
+        self.path_edit.clear()
+        self.params_edit.clear()
+    
+    def use_as_steam_executable(self):
+        """Swap this executable with Steam launcher"""
+        reply = QMessageBox.question(self, 'Steam Executable',
+                            'This will swap the selected executable with what Steam uses as its launcher.\nWarning, this is kinda broken\nContinue?',
+                             QMessageBox.StandardButton.Yes | 
+                             QMessageBox.StandardButton.No)
+        # this is deplorable
+        if reply == QMessageBox.StandardButton.Yes:
+            exe=self.current_item.path
+            first,van_bin=set_launcher(self.cfg["COMPAT_DIR"],self.cfg["TARGET_DIR"],exe)
+            if first:
+                item=None
+                for i in range(len(self.items)):
+                    if self.items[i].path.strip().endswith(van_bin): item=self.items[i]
+                if item and (not item.path.endswith("_original")): item.path=item.path+"_original"
+            # Placeholder for Steam executable swap functionality
+            QMessageBox.information(self, 'Steam Executable',
+                                  f'Set {exe} as Steam game launcher.')
+    
+    def closeEvent(self, event):
+        """Handle window close event and emit signal with items"""
+        # Emit the closed signal with the current items list
+        self.closed.emit(self.items)
+        event.accept()
+
+
+class IniSyntaxHighlighter(QSyntaxHighlighter):
+    """Syntax highlighter for INI files"""
+    
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        
+        # Define formats
+        self.section_format = QTextCharFormat()
+        self.section_format.setForeground(QColor("#0066CC"))
+        self.section_format.setFontWeight(QFont.Weight.Bold)
+        
+        self.key_format = QTextCharFormat()
+        self.key_format.setForeground(QColor("#008800"))
+        
+        self.value_format = QTextCharFormat()
+        self.value_format.setForeground(QColor("#CC6600"))
+        
+        self.comment_format = QTextCharFormat()
+        self.comment_format.setForeground(QColor("#808080"))
+        self.comment_format.setFontItalic(True)
+
+    def highlightBlock(self, text):
+        # Highlight comments (lines starting with ; or #)
+        if text.strip().startswith(';') or text.strip().startswith('#'):
+            self.setFormat(0, len(text), self.comment_format)
+            return
+        
+        # Highlight sections [section_name]
+        if text.strip().startswith('[') and text.strip().endswith(']'):
+            self.setFormat(0, len(text), self.section_format)
+            return
+        
+        # Highlight key=value pairs
+        if '=' in text:
+            eq_pos = text.index('=')
+            # Key
+            self.setFormat(0, eq_pos, self.key_format)
+            # Value
+            self.setFormat(eq_pos + 1, len(text) - eq_pos - 1, self.value_format)
+
+
+class INIManager(QMainWindow):
+    def __init__(self, compat_dir, backup_dir, ini_dir):
+        super().__init__()
+
+        self.setWindowTitle("BrainDead Simple Modloader - INI Manager")
+        #self.setGeometry(100, 100, 1400, 800)
+        self.resize(1400,800)
+        
+        # Main widget and layout
+        main_widget = QWidget()
+        self.setCentralWidget(main_widget)
+        main_layout = QHBoxLayout(main_widget)
+        
+        # Create left column (backup directory browser)
+        left_column = self.create_left_column()
+        
+        # Create right column (current INI files)
+        right_column = self.create_right_column()
+        
+        # Add columns to a splitter for resizable columns
+        column_splitter = QSplitter(Qt.Orientation.Horizontal)
+        column_splitter.addWidget(left_column)
+        column_splitter.addWidget(right_column)
+        column_splitter.setStretchFactor(0, 1)
+        column_splitter.setStretchFactor(1, 1)
+        
+        main_layout.addWidget(column_splitter)
+        
+        # Add Ctrl+S keyboard shortcut
+        self.save_shortcut = QShortcut(QKeySequence("Ctrl+S"), self)
+        self.save_shortcut.activated.connect(self.save_current_file)
+        
+        # Add zoom shortcuts (Ctrl++ and Ctrl+-)
+        self.zoom_in_shortcut = QShortcut(QKeySequence("Ctrl++"), self)
+        self.zoom_in_shortcut.activated.connect(self.zoom_in)
+        
+        self.zoom_out_shortcut = QShortcut(QKeySequence("Ctrl+-"), self)
+        self.zoom_out_shortcut.activated.connect(self.zoom_out)
+        
+        # Also support Ctrl+= for zoom in (since + requires shift)
+        self.zoom_in_shortcut2 = QShortcut(QKeySequence("Ctrl+="), self)
+        self.zoom_in_shortcut2.activated.connect(self.zoom_in)
+        
+        # Track font size
+        self.editor_font_size = 10
+        
+        # Install event filters for zoom on scroll (after both editors exist)
+        # Install on both the editors and their viewports to catch all events
+        self.left_editor.installEventFilter(self)
+        self.left_editor.viewport().installEventFilter(self)
+        self.right_editor.installEventFilter(self)
+        self.right_editor.viewport().installEventFilter(self)
+
+        # Initialize paths
+        self.compat_dir  = compat_dir
+        self.current_dir = ini_dir
+        self.backup_dir  = backup_dir
+        if "Documents" not in str(ini_dir):
+            print("reading inis from: "+str(ini_dir)) # testing
+        self.game = determine_game(ini_dir)
+        self.set_current_directory(self.current_dir)
+        self.set_backup_directory(self.backup_dir)
+
+        # Add Ctrl+F for find
+        self.find_shortcut = QShortcut(QKeySequence("Ctrl+F"), self)
+        self.find_shortcut.activated.connect(self.show_find_dialog)
+        
+        # Track font size
+        self.editor_font_size = 10
+        
+        # Track find state
+        self.find_dialog = None
+        self.current_matches = []
+        self.current_match_index = -1
+
+    def create_left_column(self):
+        """Create left column with directory tree and read-only editor"""
+        column_widget = QWidget()
+        layout = QVBoxLayout(column_widget)
+        
+        # Directory name label at top
+        self.left_dir_label = QLabel("No directory selected")
+        self.left_dir_label.setMaximumHeight(25)
+        self.left_dir_label.setStyleSheet("font-weight: bold;")
+        layout.addWidget(self.left_dir_label)
+        
+        # File tree for backup directories
+        self.left_tree = QTreeView()
+        self.left_model = QFileSystemModel()
+        self.left_model.setRootPath("")
+        self.left_tree.setModel(self.left_model)
+        self.left_tree.setHeaderHidden(True)
+        
+        # Hide all columns except name
+        for i in range(1, 4):
+            self.left_tree.hideColumn(i)
+        
+        self.left_tree.clicked.connect(self.on_left_file_clicked)
+        
+        # Text editor (read-only)
+        self.left_editor = QTextEdit()
+        self.left_editor.setReadOnly(True)
+        self.left_editor.setFont(QFont("Courier New", 10))
+        self.left_highlighter = IniSyntaxHighlighter(self.left_editor.document())
+        
+        # Splitter for tree and editor (horizontal)
+        splitter = QSplitter(Qt.Orientation.Horizontal)
+        splitter.addWidget(self.left_tree)
+        splitter.addWidget(self.left_editor)
+        splitter.setStretchFactor(0, 1)
+        splitter.setStretchFactor(1, 2)
+        
+        layout.addWidget(splitter)
+        
+        # Buttons
+        button_layout = QHBoxLayout()
+        
+        self.restore_btn = QPushButton("Restore")
+        self.restore_btn.clicked.connect(self.restore_on_click)
+        self.restore_btn.setEnabled(False)
+        button_layout.addWidget(self.restore_btn)
+        
+        self.delete_btn = QPushButton("Delete Backup")
+        self.delete_btn.clicked.connect(self.delete_on_click)
+        self.delete_btn.setEnabled(False)
+        button_layout.addWidget(self.delete_btn)
+        
+        button_layout.addStretch()
+        
+        layout.addLayout(button_layout)
+        
+        return column_widget
+    
+    def create_right_column(self):
+        """Create right column with INI file tree and editable editor"""
+        column_widget = QWidget()
+        layout = QVBoxLayout(column_widget)
+        
+        # Directory name label at top
+        self.right_dir_label = QLabel("No directory selected")
+        self.right_dir_label.setMaximumHeight(25)
+        self.right_dir_label.setStyleSheet("font-weight: bold;")
+        layout.addWidget(self.right_dir_label)
+        
+        # File tree for current INI files
+        self.right_tree = QTreeView()
+        self.right_model = QFileSystemModel()
+        self.right_model.setRootPath("")
+        self.right_model.setNameFilters(["*.ini"])
+        self.right_model.setFilter(QDir.Filter.Files | QDir.Filter.NoDotAndDotDot)
+        self.right_model.setNameFilterDisables(False)
+        self.right_tree.setModel(self.right_model)
+        self.right_tree.setHeaderHidden(True)
+ 
+        # Hide all columns except name
+        for i in range(1, 4):
+            self.right_tree.hideColumn(i)
+        
+        self.right_tree.clicked.connect(self.on_right_file_clicked)
+        
+        # Text editor (editable)
+        self.right_editor = QTextEdit()
+        self.right_editor.setFont(QFont("Courier New", 10))
+        self.right_highlighter = IniSyntaxHighlighter(self.right_editor.document())
+        self.right_editor.textChanged.connect(self.on_right_editor_changed)
+        
+        # Splitter for tree and editor (horizontal)
+        splitter = QSplitter(Qt.Orientation.Horizontal)
+        splitter.addWidget(self.right_tree)
+        splitter.addWidget(self.right_editor)
+        splitter.setStretchFactor(0, 1)
+        splitter.setStretchFactor(1, 2)
+        
+        layout.addWidget(splitter)
+        
+        # Buttons
+        button_layout = QHBoxLayout()
+        button_layout.addStretch()
+        
+        self.save_btn = QPushButton("Save")
+        self.save_btn.clicked.connect(self.save_current_file)
+        self.save_btn.setEnabled(False)
+        button_layout.addWidget(self.save_btn)
+        
+        self.backup_btn = QPushButton("Backup")
+        self.backup_btn.clicked.connect(self.backup_on_click)
+        self.backup_btn.setEnabled(False)
+        button_layout.addWidget(self.backup_btn)
+        
+        layout.addLayout(button_layout)
+        
+        return column_widget
+    
+    def set_backup_directory(self, directory):
+        """Set the backup directory for left column"""
+        #directory = QFileDialog.getExistingDirectory(self, "Select Backup Directory")
+        self.backup_dir = Path(directory)
+        self.left_tree.setRootIndex(self.left_model.index(str(self.backup_dir)))
+        self.left_tree.expandAll()
+        self.left_dir_label.setText("Backups - "+self.backup_dir.name)
+    
+    def set_current_directory(self, directory):
+        """Set the current directory for right column (INI files only)"""
+        self.current_dir = Path(directory)
+        self.right_tree.setSortingEnabled(True)
+        self.right_tree.sortByColumn(0, Qt.SortOrder.AscendingOrder)
+        root_index = self.right_model.index(str(self.current_dir)+os.sep)
+        self.right_tree.setRootIndex(root_index)
+        self.right_model.setRootPath(str(self.current_dir))
+        
+        # Hide all subdirectories
+        for i in range(self.right_model.rowCount(root_index)):
+            index = self.right_model.index(i, 0, root_index)
+            if self.right_model.isDir(index):
+                self.right_tree.setRowHidden(i, root_index, True)
+        
+        self.backup_btn.setEnabled(True)
+        self.right_dir_label.setText(self.game)
+    
+    def on_left_file_clicked(self, index):
+        """Handle file selection in left tree"""
+        file_path = Path(self.left_model.filePath(index))
+        
+        # Update label with current directory or file's parent directory
+        if file_path.is_dir():
+            self.left_dir_label.setText(file_path.name)
+            self.restore_btn.setEnabled(True)
+            self.delete_btn.setEnabled(True)
+            self.selected_backup_file = file_path
+        else:
+            self.left_dir_label.setText(file_path.parent.name+" - "+file_path.name)
+            self.restore_btn.setEnabled(False)
+            self.delete_btn.setEnabled(False)
+
+        if file_path.is_file() and file_path.suffix.lower() == '.ini':
+            self.selected_backup_file = file_path
+            try:
+                with open(file_path, 'r', encoding='utf-8') as f:
+                    content = f.read()
+                self.left_editor.setPlainText(content)
+            except Exception as e:
+                QMessageBox.warning(self, "Error", f"Could not read file:\n{str(e)}")
+    
+    def on_right_file_clicked(self, index):
+        """Handle file selection in right tree"""
+        file_path = Path(self.right_model.fileInfo(index).absoluteFilePath())
+
+        if file_path.is_dir():
+            self.right_dir_label.setText(self.game+" - "+file_path.name)
+        else:
+            self.right_dir_label.setText(self.game+" - "+file_path.name)
+        
+        if file_path.is_file() and file_path.suffix.lower() == '.ini':
+            self.selected_current_file = file_path
+            try:
+                with open(file_path, 'r', encoding='utf-8') as f:
+                    content = f.read()
+                self.right_editor.setPlainText(content)
+                self.save_btn.setEnabled(False)
+                self.right_editor_modified = False
+            except Exception as e:
+                QMessageBox.warning(self, "Error", f"Could not read file:\n{str(e)}")
+    
+    def on_right_editor_changed(self):
+        """Track changes to right editor"""
+        if hasattr(self, 'selected_current_file') and self.selected_current_file:
+            self.save_btn.setEnabled(True)
+            self.right_editor_modified = True
+    
+    def save_current_file(self):
+        """Save the current file being edited"""
+        if not self.selected_current_file:
+            return
+        
+        try:
+            set_full_perms_file(self.selected_current_file) 
+            with open(self.selected_current_file, 'w', encoding='utf-8') as f:
+                f.write(self.right_editor.toPlainText())
+            self.save_btn.setEnabled(False)
+            self.right_editor_modified = False
+            self.right_model.setRootPath(str(self.current_dir))
+            self.right_tree.setRootIndex(self.right_model.index(str(self.current_dir)))
+            self.on_right_file_clicked(self.right_tree.currentIndex())
+            #self.right_editor.setPlainText("")
+            QMessageBox.information(self, "Success", "File saved successfully!")
+        except Exception as e:
+            QMessageBox.warning(self, "Error", f"Could not save file:\n{str(e)}")
+
+    def backup_on_click(self):
+        # Check if there are unsaved changes
+        if hasattr(self, 'right_editor_modified') and self.right_editor_modified:
+            reply = QMessageBox.question(
+                self, 
+                "Unsaved Changes",
+                "You have unsaved changes. Do you want to save before backing up?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No | QMessageBox.StandardButton.Cancel
+            )
+            
+            if reply == QMessageBox.StandardButton.Cancel:
+                return
+            elif reply == QMessageBox.StandardButton.Yes:
+                self.save_current_file()
+
+        reply = QMessageBox.question(
+            self, "Confirm Backup Creation",
+            "Create Backup?\n",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+        if reply == QMessageBox.StandardButton.Yes:
+            # backup files
+            res=backup_ini(self.compat_dir, self.backup_dir)
+            if res: QMessageBox.information(self, "Success", f"Backed up to dir:\n{self.backup_dir}")
+            else: QMessageBox.information(self, "Failure", f"Failed to backup ini files")
+
+            # Refresh left tree
+            self.left_model.setRootPath("")
+            self.left_tree.setRootIndex(self.left_model.index(str(self.backup_dir)))
+
+    def delete_on_click(self):
+        """Delete selected backup file"""
+        if not self.selected_backup_file:
+            QMessageBox.warning(self, "Warning", "Please select a backup file to delete.")
+            return
+        
+        # Ask for confirmation
+        reply = QMessageBox.question(
+            self,
+            "Confirm Delete",
+            f"Delete backup file:\n{self.selected_backup_file.name}?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+        )
+        if reply == QMessageBox.StandardButton.No:
+            return
+        try:
+            #self.selected_backup_file.unlink()
+            shutil.rmtree(self.selected_backup_file)
+            self.left_editor.clear()
+            self.restore_btn.setEnabled(False)
+            self.delete_btn.setEnabled(False)
+            
+            QMessageBox.information(self, "Success", "Backup file deleted.")
+            
+            # Refresh left tree
+            self.left_model.setRootPath("")
+            self.left_tree.setRootIndex(self.left_model.index(str(self.backup_dir)))
+            
+        except Exception as e:
+            QMessageBox.warning(self, "Error", f"Could not delete file:\n{str(e)}")
+
+    def restore_on_click(self):
+        if not self.selected_backup_file:
+            QMessageBox.warning(self, "Warning", "Please select a backup directory to restore from.")
+            return
+        # Ask for confirmation
+        reply = QMessageBox.question(
+            self,
+            "Confirm Restore",
+            f"Restore {self.selected_backup_file.name} to current directory?\nThis will overwrite any existing file with the same name.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+        if reply == QMessageBox.StandardButton.No:
+            return
+        # restore
+        res,exc=restore_ini(self.compat_dir, self.selected_backup_file, ui=True)
+
+        if res: QMessageBox.information(self, "Success", f"Successfully restored INIs to:\n{Path(self.selected_backup_file).name}")
+        else: QMessageBox.information(self, "Failure", f"Failed to restore ini files\nEncountered exception: {exc}")
+        # Refresh right tree
+        self.right_model.setRootPath(str(self.current_dir))
+        self.right_tree.setRootIndex(self.right_model.index(str(self.current_dir)))
+        self.right_editor.setPlainText("")
+    
+    def zoom_in(self):
+        """Increase font size in both editors"""
+        self.editor_font_size = min(self.editor_font_size + 1, 72)  # Max 72pt
+        self.update_editor_fonts()
+    
+    def zoom_out(self):
+        """Decrease font size in both editors"""
+        self.editor_font_size = max(self.editor_font_size - 1, 6)  # Min 6pt
+        self.update_editor_fonts()
+    
+    def update_editor_fonts(self):
+        """Update font size for both editors"""
+        font = QFont("Courier New", self.editor_font_size)
+        if hasattr(self, 'left_editor'):
+            self.left_editor.setFont(font)
+        if hasattr(self, 'right_editor'):
+            self.right_editor.setFont(font)
+    
+    def eventFilter(self, obj, event):
+        """Handle Ctrl+Scroll zoom for editors"""
+        from PyQt6.QtGui import QWheelEvent
+        
+        # Check if both editors exist yet
+        if not (hasattr(self, 'left_editor') and hasattr(self, 'right_editor')):
+            return super().eventFilter(obj, event)
+        
+        # Check if this is one of our editors or their viewports
+        is_left = obj in (self.left_editor, self.left_editor.viewport())
+        is_right = obj in (self.right_editor, self.right_editor.viewport())
+        
+        if not (is_left or is_right):
+            return super().eventFilter(obj, event)
+        
+        # Check if this is a wheel event with Ctrl held
+        if event.type() == QEvent.Type.Wheel:
+            wheel_event = event
+            if wheel_event.modifiers() == Qt.KeyboardModifier.ControlModifier:
+                if wheel_event.angleDelta().y() > 0:
+                    self.zoom_in()
+                else:
+                    self.zoom_out()
+                return True  # Block the scroll event completely
+        
+        return super().eventFilter(obj, event)
+
+
+    def show_find_dialog(self):
+        """Show or focus the find dialog"""
+        if self.find_dialog is None:
+            self.find_dialog = QDialog(self)
+            self.find_dialog.setWindowTitle("Find")
+            self.find_dialog.setModal(False)
+            
+            layout = QVBoxLayout(self.find_dialog)
+            
+            # Search input
+            search_layout = QHBoxLayout()
+            search_layout.addWidget(QLabel("Find:"))
+            self.find_input = QLineEdit()
+            self.find_input.textChanged.connect(self.on_find_text_changed)
+            self.find_input.returnPressed.connect(self.find_next)
+            search_layout.addWidget(self.find_input)
+            layout.addLayout(search_layout)
+            
+            # Match count label
+            self.match_count_label = QLabel("0 matches")
+            layout.addWidget(self.match_count_label)
+            
+            # Checkboxes
+            self.case_insensitive_check = QCheckBox("Case insensitive")
+            self.case_insensitive_check.setChecked(True)
+            self.case_insensitive_check.stateChanged.connect(self.on_find_text_changed)
+            layout.addWidget(self.case_insensitive_check)
+            
+            self.search_both_check = QCheckBox("Search both editors")
+            self.search_both_check.stateChanged.connect(self.on_find_text_changed)
+            layout.addWidget(self.search_both_check)
+            
+            # Navigation buttons
+            button_layout = QHBoxLayout()
+            prev_btn = QPushButton("Previous")
+            prev_btn.clicked.connect(self.find_previous)
+            button_layout.addWidget(prev_btn)
+            
+            next_btn = QPushButton("Next")
+            next_btn.clicked.connect(self.find_next)
+            button_layout.addWidget(next_btn)
+            
+            layout.addLayout(button_layout)
+            
+            self.find_dialog.setLayout(layout)
+        
+        self.find_dialog.show()
+        self.find_dialog.raise_()
+        self.find_dialog.activateWindow()
+        self.find_input.setFocus()
+        self.find_input.selectAll()
+    
+    def on_find_text_changed(self):
+        """Update search results when text or options change"""
+        search_text = self.find_input.text()
+        
+        if not search_text:
+            self.current_matches = []
+            self.current_match_index = -1
+            self.match_count_label.setText("0 matches")
+            self.clear_highlights()
+            return
+        
+        # Get search flags
+        case_sensitive = not self.case_insensitive_check.isChecked()
+        search_both = self.search_both_check.isChecked()
+        
+        # Find all matches
+        self.current_matches = []
+        
+        if search_both:
+            # Search in both editors
+            self.find_in_editor(self.left_editor, search_text, case_sensitive, 'left')
+            self.find_in_editor(self.right_editor, search_text, case_sensitive, 'right')
+        else:
+            # Determine which editor has focus or was last used
+            if self.right_editor.hasFocus() or (hasattr(self, 'selected_current_file') and self.selected_current_file):
+                self.find_in_editor(self.right_editor, search_text, case_sensitive, 'right')
+            else:
+                self.find_in_editor(self.left_editor, search_text, case_sensitive, 'left')
+        
+        # Update match count
+        self.match_count_label.setText(f"{len(self.current_matches)} matches")
+        
+        # Reset match index
+        self.current_match_index = -1
+        
+        # Highlight all matches
+        self.highlight_all_matches()
+    
+    def find_in_editor(self, editor, search_text, case_sensitive, editor_id):
+        """Find all occurrences in a specific editor"""
+        document = editor.document()
+        cursor = QTextCursor(document)
+        
+        flags = QTextDocument.FindFlag(0)
+        if case_sensitive:
+            flags |= QTextDocument.FindFlag.FindCaseSensitively
+        
+        while True:
+            cursor = document.find(search_text, cursor, flags)
+            if cursor.isNull():
+                break
+            self.current_matches.append({
+                'editor': editor,
+                'editor_id': editor_id,
+                'position': cursor.position(),
+                'start': cursor.selectionStart(),
+                'end': cursor.selectionEnd()
+            })
+    
+    def highlight_all_matches(self):
+        """Highlight all matches in the editors"""
+        self.clear_highlights()
+        
+        # Create highlight format
+        highlight_format = QTextCharFormat()
+        highlight_format.setBackground(QColor("#FFFF00"))  # Yellow background
+        
+        for match in self.current_matches:
+            editor = match['editor']
+            cursor = QTextCursor(editor.document())
+            cursor.setPosition(match['start'])
+            cursor.setPosition(match['end'], QTextCursor.MoveMode.KeepAnchor)
+            
+            # Apply highlight using extra selections
+            selection = QTextEdit.ExtraSelection()
+            selection.cursor = cursor
+            selection.format = highlight_format
+            
+            current_selections = editor.extraSelections()
+            current_selections.append(selection)
+            editor.setExtraSelections(current_selections)
+    
+    def clear_highlights(self):
+        """Clear all highlights from both editors"""
+        self.left_editor.setExtraSelections([])
+        self.right_editor.setExtraSelections([])
+    
+    def find_next(self):
+        """Go to next match"""
+        if not self.current_matches:
+            return
+        
+        # Move to next match (wrap around)
+        self.current_match_index = (self.current_match_index + 1) % len(self.current_matches)
+        self.select_current_match()
+    
+    def find_previous(self):
+        """Go to previous match"""
+        if not self.current_matches:
+            return
+        
+        # Move to previous match (wrap around)
+        self.current_match_index = (self.current_match_index - 1) % len(self.current_matches)
+        self.select_current_match()
+    
+    def select_current_match(self):
+        """Select and scroll to the current match"""
+        if not self.current_matches or self.current_match_index < 0:
+            return
+        
+        match = self.current_matches[self.current_match_index]
+        editor = match['editor']
+        
+        # Create cursor and select the match
+        cursor = QTextCursor(editor.document())
+        cursor.setPosition(match['start'])
+        cursor.setPosition(match['end'], QTextCursor.MoveMode.KeepAnchor)
+        
+        # Set the cursor (this also scrolls to it)
+        editor.setTextCursor(cursor)
+        
+        # Give focus to the editor
+        editor.setFocus()
+        
+        # Re-highlight with current selection emphasized
+        self.highlight_all_matches()
+        
+        # Add a different color for current match
+        current_format = QTextCharFormat()
+        current_format.setBackground(QColor("#FFA500"))  # Orange background
+        
+        selection = QTextEdit.ExtraSelection()
+        selection.cursor = cursor
+        selection.format = current_format
+        
+        current_selections = editor.extraSelections()
+        current_selections.append(selection)
+        editor.setExtraSelections(current_selections)
+
+
+
+def load_stylesheet(filename):
+    file = QFile(str(filename))
+    if file.open(QFile.OpenModeFlag.ReadOnly | QFile.OpenModeFlag.Text):
+        stream = QTextStream(file)
+        stylesheet = stream.readAll()
+        file.close()
+        return stylesheet
+    return ""
+
+
+def select_directory():
+    app = QApplication(sys.argv)
+    global_msg = QMessageBox(None)
+    global_msg.setWindowTitle("Select Game Location")
+    global_msg.setText("Setup a game instance?"+' '*(DIALOGUE_WIDTH+20))
+    global_msg.setInformativeText("This will create a 'bdsm_instance' folder in the game folder,\nit will be where mods and configs will be stored")
+    global_msg.setStandardButtons(QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+    if global_msg.exec() == QMessageBox.StandardButton.Yes: is_global=True
+    else: sys.exit()
+
+    while True:
+        directory = QFileDialog.getExistingDirectory(
+            None,
+            "Select Target Directory",
+            "/home",
+            QFileDialog.Option.ShowDirsOnly | QFileDialog.Option.DontResolveSymlinks)
+        if directory:
+            directory=Path(os.path.realpath(directory))
+            if not directory.name=="Data" \
+            and directory.name in GAME_IDS.keys(): 
+                directory=os.path.join(directory,"Data")
+
+            confirm = QMessageBox.question(
+                None,
+                "Confirm Directory",
+                f"Are you sure you want to use this directory?\n\n{directory}",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.Yes)
+            
+            if confirm == QMessageBox.StandardButton.Yes: return directory
+            else: continue
+        else: return None
+    else: return None

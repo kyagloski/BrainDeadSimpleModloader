@@ -35,9 +35,9 @@ except:
     from bdsm import *
 from components import *
 from game_specific import *
-from instance_manager import *
-from ini_manager import *
-from exe_manager import *
+#from instance_manager import *
+#from ini_manager import *
+#from exe_manager import *
 from installer import *
 
 SHOW_MSG_TIME    = 10000000
@@ -204,7 +204,8 @@ class ModLoaderUserInterface(QMainWindow):
         
         self.settings_button = QPushButton("⚙")
         self.settings_button.setFixedSize(35, 35)
-        self.settings_button.clicked.connect(self.open_settings)
+        #self.settings_button.clicked.connect(self.open_settings)
+        self.settings_button.clicked.connect(self.open_cfg_editor)
         preset_layout.addWidget(self.settings_button)
 
         self.instance_button = QPushButton("⇄")
@@ -1025,7 +1026,6 @@ class ModLoaderUserInterface(QMainWindow):
                 #name = re.sub(r'<[^>]+>', '', sep)
                 #sep_actions.append(sep_menu.addAction(name))
                 sep_actions.append(sep_menu.addAction(sep))
-            
                     
             menu.addSeparator()
             enable_action = menu.addAction("Enable")
@@ -1462,6 +1462,22 @@ class ModLoaderUserInterface(QMainWindow):
             self.cfg["EXECUTABLES"][exe]["SELECTED"]=False
         self.cfg["EXECUTABLES"][self.current_exe]["SELECTED"]=True
         write_cfg(self.cfg) 
+
+    def open_cfg_editor(self):
+        self.config_editor = ConfigEditor(self.cfg)
+        self.config_editor.applied.connect(self.on_cfg_editor_applied)
+        self.config_editor.show()
+
+    def on_cfg_editor_applied(self):
+        self.blockSignals(True)
+        self.cfg=read_cfg(gui=True)
+       
+        stylesheet=load_stylesheet(Path(LOCAL_DIR)/"utils"/"resources"/"stylesheets"/self.cfg["STYLESHEET"])
+        app.setStyleSheet(stylesheet)
+        self._init_ui(verbose=self.log_output.toPlainText())
+        self._load_initial_data(reload=True)
+        
+        self.blockSignals(False)
    
     def open_instance_manager(self):
         self.instance_manager = InstanceManager(self)
@@ -1481,7 +1497,6 @@ class ModLoaderUserInterface(QMainWindow):
         self._load_initial_data(reload=True)
         
         self.blockSignals(False)
-        pass
  
     def open_ini_manager(self):
         #cfg_dict=read_cfg(sync=False)
@@ -1540,50 +1555,6 @@ class ModLoaderUserInterface(QMainWindow):
             self.auto_save_load_order(instant=True)
             perform_copy()
         launch_game(self.cfg, self.current_exe) 
-
-
-def load_stylesheet(filename):
-    file = QFile(str(filename))
-    if file.open(QFile.OpenModeFlag.ReadOnly | QFile.OpenModeFlag.Text):
-        stream = QTextStream(file)
-        stylesheet = stream.readAll()
-        file.close()
-        return stylesheet
-    return ""
-
-def select_directory():
-    app = QApplication(sys.argv)
-    global_msg = QMessageBox(None)
-    global_msg.setWindowTitle("Select Game Location")
-    global_msg.setText("Setup a game instance?"+' '*(DIALOGUE_WIDTH+20))
-    global_msg.setInformativeText("This will create a 'bdsm_instance' folder in the game folder,\nit will be where mods and configs will be stored")
-    global_msg.setStandardButtons(QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
-    if global_msg.exec() == QMessageBox.StandardButton.Yes: is_global=True
-    else: sys.exit()
-
-    while True:
-        directory = QFileDialog.getExistingDirectory(
-            None,
-            "Select Target Directory",
-            "/home",
-            QFileDialog.Option.ShowDirsOnly | QFileDialog.Option.DontResolveSymlinks)
-        if directory:
-            directory=Path(os.path.realpath(directory))
-            if not directory.name=="Data" \
-            and directory.name in GAME_IDS.keys(): 
-                directory=os.path.join(directory,"Data")
-
-            confirm = QMessageBox.question(
-                None,
-                "Confirm Directory",
-                f"Are you sure you want to use this directory?\n\n{directory}",
-                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-                QMessageBox.StandardButton.Yes)
-            
-            if confirm == QMessageBox.StandardButton.Yes: return directory
-            else: continue
-        else: return None
-    else: return None
 
 
 if __name__ == "__main__":
