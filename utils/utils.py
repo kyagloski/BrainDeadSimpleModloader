@@ -196,13 +196,13 @@ def launch_game(cfg,game_exe):
         exe=cfg["EXECUTABLES"][game_exe]["PATH"]
         exe_dir=str(Path(exe).parent).replace(' ','\\ ')
         params=cfg["EXECUTABLES"][game_exe]["PARAMS"]
-        #appid=f"SteamAppId={str(Path(c).name)}"
-        #gameid=f"SteamGameId={str(Path(c).name)}"
+        appid=f"SteamAppId={str(Path(c).name)}"
+        gameid=f"SteamGameId={str(Path(c).name)}"
         #compat_appid=f"STEAM_COMPAT_APP_ID={str(Path(c).name)}"
         data_path="STEAM_COMPAT_DATA_PATH="+c
         client_path="STEAM_COMPAT_CLIENT_INSTALL_PATH="+os.path.expanduser("~/.steam/steam")
         #cmd=f"cd {exe_dir}; {cpath} {spath} {appid} {compat_appid} {gameid} {runtime} {proton} waitforexitandrun \"{exe}\" {params} &"
-        cmd=f"cd {exe_dir}; {data_path} {client_path} {runtime} {proton} waitforexitandrun \"{exe}\" {params} &"
+        cmd=f"cd {exe_dir}; {data_path} {client_path} {appid} {gameid} {runtime} {proton} waitforexitandrun \"{exe}\" {params} &"
     else:
         exe=cfg["EXECUTABLES"][game_exe]["PATH"]
         exe_dir=str(Path(exe).parent)
