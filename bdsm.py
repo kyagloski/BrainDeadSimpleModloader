@@ -141,7 +141,7 @@ def read_parent_cfg(gui=False, update=True):
     if not os.path.exists(global_cfg_file): 
         try: cfg=create_cfg(gui=gui, is_global=True);
         except Exception as e: 
-            os.remove(global_cfg_file)
+            #os.remove(global_cfg_file)
             print(f"error: could not create global config file, exception: {e}")
             return None
     # read values, update globals
@@ -167,7 +167,7 @@ def read_child_cfg(gui=False, path=None, update=True):
     if not os.path.exists(path): 
         try: cfg=create_cfg(path=path, gui=gui);
         except Exception as e: 
-            os.remove(cfg_file)
+            #os.unlink(path)
             print(f"error: could not create config file, exception: {e}")
             return None
     # read values, update globals

@@ -438,7 +438,8 @@ class ModLoaderUserInterface(QMainWindow):
     def load_plugins_list(self):
         self.plugins_list.clear()
         try:
-            backup_path = Path(BACKUP_DIR)
+            import bdsm
+            backup_path = Path(bdsm.BACKUP_DIR)
             plugins_file = None
             
             for filename in ['Plugins.txt', 'plugins.txt']:
@@ -457,7 +458,8 @@ class ModLoaderUserInterface(QMainWindow):
 
     def update_unload_button_state(self):
         try:
-            backup_path = Path(BACKUP_DIR)
+            import bdsm
+            backup_path = Path(bdsm.BACKUP_DIR)
             state=False
             if backup_path.exists() and "backup_manifest.txt" in os.listdir(backup_path): state=True
             self.unload_button.setEnabled(state)
@@ -1057,8 +1059,6 @@ class ModLoaderUserInterface(QMainWindow):
 
     def select_preset(self, text):
         if Path(self.cfg["LOAD_ORDER"]).name in [self.preset_combo.itemText(i) for i in range(self.preset_combo.count())]:
-            print([self.preset_combo.itemText(i) for i in range(self.preset_combo.count())])
-            print(text)
             self.auto_save_load_order(instant=True)
         print("switching to preset "+text)
         load_order=str(Path(self.cfg["PRESET_DIR"]) / text)

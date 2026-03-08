@@ -90,10 +90,11 @@ class InstanceManager(QDialog):
             instance_path=Path(cfg_dict["INSTANCES"][instance]["PATH"])/"config.yaml"
 
             instance_cfg=read_child_cfg(gui=True, path=instance_path ,update=False)
+            if instance_cfg==None: continue
             target_dir=instance_cfg["TARGET_DIR"]
             game=str(target_dir).split("common"+os.sep)[-1].split(os.sep)[0]
             steam_id=determine_game_id(target_dir)
-            save_dir=ensure_dir(local_dir/"resources"/"requested")
+            save_dir=ensure_dir(local_dir/"utils"/"resources"/"requested")
             icon_path = get_steam_resources(game,steam_id,save_dir,icon=True)
 
             if icon_path and os.path.exists(icon_path):
