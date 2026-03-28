@@ -20,7 +20,7 @@ except:
     import game_specific
     from gui import *
 
-VERSION           = "v0.5"
+VERSION           = "v0.8"
 GLOBAL_INSTANCE   = False
 LOCAL_DIR         = Path(os.path.dirname(os.path.realpath(__file__)))
 CONFIG_FILE       = LOCAL_DIR/"config.yaml"
@@ -104,7 +104,7 @@ def create_cfg(path=None, gui=False, is_global=False):
             path=launchers[title]["PATH"]
             f.write(' '*4+title+":\n")
             f.write(' '*8+"PATH: "+path+"\n")
-            f.write(' '*8+"PARAMS: \"\"\n")
+            f.write(' '*8+"PARAMS: {cmd}\"\"\n")
             f.write(' '*8+"SELECTED: false\n")
     f.close()
     print("created new config!")
@@ -411,7 +411,8 @@ def sync_loadorder():
     additions  = []
     exclusions = []
     for mod in os.listdir(SOURCE_DIR): # find add new mods
-        if mod not in clean_loadorder: additions.append('~'+mod)
+        if mod not in clean_loadorder \
+        and os.path.isdir(SOURCE_DIR/mod): additions.append('~'+mod)
     for mod in clean_loadorder: # find remove mods
         if any(mod.startswith(sub) for sub in ['>#','v#']): continue # skip seps
         if mod not in os.listdir(SOURCE_DIR): exclusions.append(mod)

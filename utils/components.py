@@ -35,6 +35,7 @@ OVERRIDING_COLOR = "#053005"
 OVERRIDDEN_COLOR = "#300505"
 ALPHA   = 20
 OPACITY = ALPHA/255
+DIALOGUE_WIDTH   = 60
 
 class StdoutRedirector(QObject):
     text_written = pyqtSignal(str)
@@ -679,7 +680,7 @@ class ModTable(QTableWidget):
             self.itemChanged.emit(self.selectedItems()[0])
 
 
-class ConfigEditor(QMainWindow):
+class ConfigManager(QMainWindow):
     applied = pyqtSignal()
 
     def __init__(self, cfg_dict):
@@ -719,7 +720,7 @@ class ConfigEditor(QMainWindow):
 
         for key, value in self.config.items():
             row = QHBoxLayout()
-            label = QLabel(key.replace("_",' '))
+            label = QLabel(f"<b>{key.replace("_",' ')}</b>")
             label.setFixedWidth(label_width)
             label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
             row.addWidget(label)
@@ -752,7 +753,8 @@ class ConfigEditor(QMainWindow):
                 btn.setFixedWidth(28)
                 # Determine if it's a file or directory picker
                 is_file = key == "LOAD_ORDER"
-                btn.clicked.connect(lambda checked, e=edit, f=is_file: self.browse(e, f))
+                #btn.clicked.connect(lambda checked, e=edit, f=is_file: self.browse(e, f))
+                btn.clicked.connect(lambda checked, e=edit, f=is_file: file_select(e, f))
                 row.addWidget(btn)
 
             else:
@@ -774,15 +776,15 @@ class ConfigEditor(QMainWindow):
         bottom.addWidget(apply_btn)
         outer.addLayout(bottom)
 
-    def browse(self, edit, is_file=False):
-        current = edit.text()
-        start = current if os.path.exists(current) else os.path.expanduser("~")
-        if is_file:
-            path, _ = QFileDialog.getOpenFileName(self, "Select File", start)
-        else:
-            path = QFileDialog.getExistingDirectory(self, "Select Directory", start)
-        if path:
-            edit.setText(path)
+    #def browse(self, edit, is_file=False):
+    #    current = edit.text()
+    #    start = current if os.path.exists(current) else os.path.expanduser("~")
+    #    if is_file:
+    #        path, _ = QFileDialog.getOpenFileName(self, "Select File", start)
+    #    else:
+    #        path = QFileDialog.getExistingDirectory(self, "Select Directory", start)
+    #    if path:
+    #        edit.setText(path)
 
     def apply(self):
         from bdsm import write_cfg
@@ -840,8 +842,14 @@ class InstanceManager(QDialog):
         self.btn_remove.setEnabled(False)
         self.btn_remove.clicked.connect(self._on_remove)
 
+        self.btn_edit = QPushButton("☰")
+        self.btn_edit.setFixedSize(35, 35)
+        self.btn_edit.setEnabled(False)
+        self.btn_edit.clicked.connect(self.open_instance_editor)
+
         bottom.addWidget(self.btn_add)
         bottom.addWidget(self.btn_remove)
+        bottom.addWidget(self.btn_edit)
         bottom.addStretch()
 
         self.btn_cancel = QPushButton("Cancel")
@@ -888,6 +896,7 @@ class InstanceManager(QDialog):
         has_sel = bool(self.list_widget.selectedItems())
         self.btn_select.setEnabled(has_sel)
         self.btn_remove.setEnabled(has_sel)
+        self.btn_edit.setEnabled(has_sel)
 
     def _on_add(self):
         from bdsm import read_parent_cfg, write_cfg, create_cfg
@@ -935,6 +944,7 @@ class InstanceManager(QDialog):
         if not item: return
         name = item.data(Qt.ItemDataRole.UserRole)
 
+        # TODO: add checkbox to remove files
         msg = QMessageBox(self)
         msg.setWindowTitle("Remove Instance")
         msg.setText(f"Remove '{name}'?"+' '*60)
@@ -952,8 +962,7 @@ class InstanceManager(QDialog):
     def _on_select(self):
         from bdsm import read_parent_cfg, write_cfg
         item = self.list_widget.currentItem()
-        if not item:
-            return
+        if not item: return
         self.selected_instance = item.data(Qt.ItemDataRole.UserRole)
         cfg_dict=read_parent_cfg(gui=True)
         instance_path=""
@@ -966,6 +975,98 @@ class InstanceManager(QDialog):
         self.accept()
         self.close()
 
+    def open_instance_editor(self):
+        item = self.list_widget.currentItem().text()
+        if not item: return
+        self.instance_editor = InstanceEditor(item, self)
+        self.instance_editor.setWindowModality(Qt.WindowModality.ApplicationModal)
+        #self.instance_editor.closed.connect(self.on_instance_manager_close)
+        self.instance_editor.show()
+
+
+class InstanceEditor(QMainWindow):
+    closed = pyqtSignal(str)
+
+    def __init__(self, instance_name, parent=None):
+        super().__init__(parent)
+        self.instance_name = instance_name 
+
+        self.setWindowTitle("Edit Instance")
+        self.setMinimumSize(480, 200)
+        self.resize(480, 200)
+        self.setWindowFlags(self.windowFlags() & ~Qt.WindowType.WindowContextHelpButtonHint)
+
+        self._build_ui()
+        self._add_data()
+
+    def _build_ui(self):
+        # Central widget
+        central_widget = QWidget()
+        self.setCentralWidget(central_widget)
+        
+        # Main layout
+        main_layout = QHBoxLayout()
+        central_widget.setLayout(main_layout)
+
+        layout = QVBoxLayout()
+        layout.setContentsMargins(10, 10, 10, 10)
+
+        form_layout = QFormLayout()
+        
+        # Name field
+        self.name_edit = QLineEdit()
+        #self.name_edit.textChanged.connect(self.mark_pending_changes)
+        form_layout.addRow(QLabel("Name:"), self.name_edit)
+
+        # Path field
+        self.icon_edit = QLineEdit()
+        #self.icon_edit.textChanged.connect(self.mark_pending_changes)
+        icon_row = QHBoxLayout()
+        icon_row.addWidget(self.icon_edit)
+        icon_btn = QPushButton("...")
+        icon_btn.setFixedWidth(28)
+        icon_btn.clicked.connect(lambda checked, e=self.icon_edit, f=True: file_select(e, f))
+        icon_row.addWidget(icon_btn)
+        form_layout.addRow(QLabel("Icon:"), icon_row)
+
+        # Path field
+        self.path_edit = QLineEdit()
+        #self.path_edit.textChanged.connect(self.mark_pending_changes)
+        path_row = QHBoxLayout()
+        path_row.addWidget(self.path_edit)
+        path_btn = QPushButton("...")
+        path_btn.setFixedWidth(28)
+        path_btn.clicked.connect(lambda checked, e=self.path_edit, f=True: file_select(e, f))
+        path_row.addWidget(path_btn)
+        form_layout.addRow(QLabel("Path:"), path_row)
+        
+        layout.addLayout(form_layout)
+        main_layout.addLayout(layout, 1)
+
+        bottom_layout = QHBoxLayout()
+        bottom_layout.addStretch()
+       
+        # Cancel button
+        self.cancel_button = QPushButton("Cancel")
+        self.cancel_button.setFixedWidth(100)
+        self.cancel_button.clicked.connect(self.close)
+        bottom_layout.addWidget(self.cancel_button)
+ 
+        # Apply button
+        self.apply_button = QPushButton("Apply")
+        self.apply_button.setFixedWidth(100)
+        #self.apply_button.clicked.connect(self.apply_changes)
+        self.apply_button.setEnabled(False)
+        bottom_layout.addWidget(self.apply_button)
+        
+        layout.addLayout(bottom_layout)
+
+    def _add_data(self):
+        from bdsm import read_parent_cfg
+        cfg=read_parent_cfg(gui=True) 
+        instance_data=cfg["INSTANCES"][self.instance_name]
+        self.name_edit.setText(self.instance_name)
+        self.path_edit.setText(instance_data["PATH"])
 
 
 class ListItem:
@@ -1065,10 +1166,16 @@ class ExeManager(QMainWindow):
         # Path field
         self.path_edit = QLineEdit()
         self.path_edit.textChanged.connect(self.mark_pending_changes)
-        form_layout.addRow(QLabel("Path:"), self.path_edit)
+        path_row = QHBoxLayout()
+        path_row.addWidget(self.path_edit)
+        path_btn = QPushButton("...")
+        path_btn.setFixedWidth(28)
+        path_btn.clicked.connect(lambda checked, e=self.path_edit, f=True: file_select(e, f))
+        path_row.addWidget(path_btn)
+        form_layout.addRow(QLabel("Path:"), path_row)
         
         # Params field
-        self.params_edit = QLineEdit()
+        self.params_edit = QLineEdit("{cmd}")
         self.params_edit.textChanged.connect(self.mark_pending_changes)
         form_layout.addRow(QLabel("Params:"), self.params_edit)
         
@@ -1304,6 +1411,7 @@ class ExeManager(QMainWindow):
             item.title = new_title
             item.path = self.path_edit.text()
             item.params = self.params_edit.text()
+            if not item.params: item.params="{cmd}"
             self.cfg["EXECUTABLES"][item.title]["PATH"]=item.path
             self.cfg["EXECUTABLES"][item.title]["PARAMS"]=item.params
             bdsm.write_cfg(self.cfg)
@@ -1666,13 +1774,17 @@ class INIManager(QMainWindow):
             set_full_perms_file(self.selected_current_file) 
             with open(self.selected_current_file, 'w', encoding='utf-8') as f:
                 f.write(self.right_editor.toPlainText())
+            rscroll=self.right_editor.verticalScrollBar().value()
+            lscroll=self.left_editor.verticalScrollBar().value()
             self.save_btn.setEnabled(False)
             self.right_editor_modified = False
             self.right_model.setRootPath(str(self.current_dir))
             self.right_tree.setRootIndex(self.right_model.index(str(self.current_dir)))
             self.on_right_file_clicked(self.right_tree.currentIndex())
             #self.right_editor.setPlainText("")
-            QMessageBox.information(self, "Success", "File saved successfully!")
+            self.right_editor.verticalScrollBar().setValue(rscroll)
+            self.left_editor.verticalScrollBar().setValue(lscroll)
+            #QMessageBox.information(self, "Success", "File saved successfully!")
         except Exception as e:
             QMessageBox.warning(self, "Error", f"Could not save file:\n{str(e)}")
 
@@ -2005,6 +2117,17 @@ def load_stylesheet(filename):
         file.close()
         return stylesheet
     return ""
+
+
+def file_select(edit, is_file=False):
+    current = edit.text()
+    start = current if os.path.exists(current) else os.path.expanduser("~")
+    if is_file:
+        path, _ = QFileDialog.getOpenFileName(None, "Select File", start)
+    else:
+        path = QFileDialog.getExistingDirectory(None, "Select Directory", start)
+    if path:
+        edit.setText(path)
 
 
 def select_directory():

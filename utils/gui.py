@@ -40,6 +40,7 @@ from game_specific import *
 #from exe_manager import *
 from installer import *
 
+os.environ["QT_WAYLAND_SHELL_INTEGRATION"] = "xdg-shell"
 SHOW_MSG_TIME    = 10000000
 DIALOGUE_WIDTH   = 60
 
@@ -54,6 +55,7 @@ class ModLoaderUserInterface(QMainWindow):
         except:pass
         self.setWindowIcon(QIcon(icon))
         self.resize(1000, 600)
+        self.splitters=[] # for resize state later
         
         self._loading = True
         self._scale_factor = 1.0
@@ -63,11 +65,14 @@ class ModLoaderUserInterface(QMainWindow):
         self.showing_fomod = False
         self._loading = False
         self._extracting = False
-        
         self.setAcceptDrops(True)
+
+        # create ui and load data
         self._init_ui()
         self._setup_stdout_redirect()
         self._load_initial_data()
+
+        # status bar
         self.status_label=QLabel("")
         self.status_label.setStyleSheet("font-weight: bold;")
         self.status_label.setFont(QFont("Courier"))
@@ -77,9 +82,17 @@ class ModLoaderUserInterface(QMainWindow):
         self.executor = CommandExecutorThread(self)
         self.executor.commands_finished.connect(self.load_plugins_list)
         self.executor.start()
-        # threads
+
+        # thread containers
         self.extract_threads=[]
         self.status_threads=[]
+
+        # remember ui state
+        #geom_path = os.path.join(os.path.dirname(__file__), ".win_geometry")
+        #self.settings = QSettings(geom_path, )
+        #self.restoreGeometry(self.settings.value("geometry", b""))
+        #self.restoreState(self.settings.value("windowState", b""))
+        #self.splitter.restoreState(self.settings.value("splitter", b""))
 
     def _setup_stdout_redirect(self):
         self._stdout_redirector = StdoutRedirector(sys.stdout)
@@ -205,7 +218,7 @@ class ModLoaderUserInterface(QMainWindow):
         self.settings_button = QPushButton("⚙")
         self.settings_button.setFixedSize(35, 35)
         #self.settings_button.clicked.connect(self.open_settings)
-        self.settings_button.clicked.connect(self.open_cfg_editor)
+        self.settings_button.clicked.connect(self.open_cfg_manager)
         preset_layout.addWidget(self.settings_button)
 
         self.instance_button = QPushButton("⇄")
@@ -1463,12 +1476,12 @@ class ModLoaderUserInterface(QMainWindow):
         self.cfg["EXECUTABLES"][self.current_exe]["SELECTED"]=True
         write_cfg(self.cfg) 
 
-    def open_cfg_editor(self):
-        self.config_editor = ConfigEditor(self.cfg)
-        self.config_editor.applied.connect(self.on_cfg_editor_applied)
-        self.config_editor.show()
+    def open_cfg_manager(self):
+        self.config_manager = ConfigManager(self.cfg)
+        self.config_manager.applied.connect(self.on_cfg_manager_applied)
+        self.config_manager.show()
 
-    def on_cfg_editor_applied(self):
+    def on_cfg_manager_applied(self):
         self.blockSignals(True)
         self.cfg=read_cfg(gui=True)
        
@@ -1565,8 +1578,9 @@ if __name__ == "__main__":
     splash = QSplashScreen(QPixmap(str(LOCAL_DIR/"utils"/"resources"/"splash.png")))
     #app.setStyle("Fusion")
     app.setStyleSheet(stylesheet)
-    if os.name!="posix": window.show()
+    window.show()
     splash.show()
     QTimer.singleShot(1700, splash.close)
-    window.show()
     sys.exit(app.exec())
+
+
