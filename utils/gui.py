@@ -234,7 +234,9 @@ class ModLoaderUserInterface(QMainWindow):
         #inst_man = menu.addAction("Instance Manager")
         ini_man = menu.addAction("INI Manager")
         menu.addSeparator()
+        open_instance = menu.addAction("Open Instance Folder")
         open_target = menu.addAction("Open Target Folder")
+        open_bdsm = menu.addAction("Open BDSM Folder")
         def show_menu(): menu.exec(self.tools_button.mapToGlobal(QPoint(0, self.tools_button.height())))
         self.tools_button.clicked.connect(show_menu)
         self.tools_button.setMenu(menu)
@@ -242,7 +244,11 @@ class ModLoaderUserInterface(QMainWindow):
 
         #inst_man.triggered.connect(self.open_instance_manager)
         ini_man.triggered.connect(self.open_ini_manager)
+        parent_cfg=read_parent_cfg()
+        instance_path = next(v["PATH"] for v in parent_cfg["INSTANCES"].values() if v["SELECTED"]) 
+        open_instance.triggered.connect(lambda: self._open_path(instance_path))
         open_target.triggered.connect(lambda: self._open_path(self.cfg["TARGET_DIR"]))
+        open_bdsm.triggered.connect(lambda: self._open_path(LOCAL_DIR))
         
         preset_layout.addWidget(QLabel("Preset:"))
         self.preset_combo = EditableComboBox(upper=self)
@@ -279,9 +285,12 @@ class ModLoaderUserInterface(QMainWindow):
         if exes:
             for exe in exes:
                 if exes[exe]["SELECTED"]: self.current_exe=deepcopy(exe)
-                if self.cfg["DO_REQUESTS"]: icon_path=QIcon(get_game_icon(exes[exe]["PATH"],self.cfg))
-                else: icon_path=None
-                icon=QIcon(icon_path)
+                if "ICON" in exes[exe].keys() and exes[exe]["ICON"].strip(): 
+                    image = QPixmap(exes[exe]["ICON"]).scaled(128, 60, Qt.AspectRatioMode.IgnoreAspectRatio, Qt.TransformationMode.SmoothTransformation)
+                elif self.cfg["DO_REQUESTS"]: 
+                    image = QPixmap(get_game_icon(exes[exe]["PATH"],self.cfg)).scaled(128, 60, Qt.AspectRatioMode.IgnoreAspectRatio, Qt.TransformationMode.SmoothTransformation)
+                else: image=None
+                icon=QIcon(image)
                 self.bin_combo.addItem(icon,exe)
             if not self.current_exe: self.current_exe=deepcopy(list(exes.keys())[0])
         self.bin_combo.setIconSize(QSize(63,34))
@@ -289,13 +298,11 @@ class ModLoaderUserInterface(QMainWindow):
         self.bin_combo.currentTextChanged.connect(self.select_exe)
         preset_layout.addWidget(self.bin_combo,2)
 
-
         self.settings_button = QPushButton("☰")
         self.settings_button.setFixedSize(35, 35)
         self.settings_button.setToolTip("Settings")
         self.settings_button.clicked.connect(self.open_exe_manager)
         preset_layout.addWidget(self.settings_button)
-
 
         self.play_button = QPushButton("▶︎")
         self.play_button.setFixedSize(35, 35)
@@ -517,7 +524,9 @@ class ModLoaderUserInterface(QMainWindow):
             self.populate_file_explorer(Path(self.cfg["SOURCE_DIR"]) / Path(mod_name))
 
         try: self.highlight_conflicts(selected_rows)
-        except: self.highlight_conflicts([])
+        except: 
+            try: self.highlight_conflicts([])
+            except: pass # broke really hard
 
     def highlight_conflicts(self, rows):
         if self._loading: QTimer.singleShot(1000,lambda: self.highlight_conflicts(rows)); return
@@ -1543,9 +1552,12 @@ class ModLoaderUserInterface(QMainWindow):
         new_select=None
         for exe in exes:
             if exes[exe]["SELECTED"]: new_select=deepcopy(exe)
-            if self.cfg["DO_REQUESTS"]: icon_path=QIcon(get_game_icon(exes[exe]["PATH"],self.cfg))
-            else: icon_path=None
-            icon=QIcon(icon_path)
+            if "ICON" in exes[exe].keys() and exes[exe]["ICON"].strip(): 
+                image = QPixmap(exes[exe]["ICON"]).scaled(128, 60, Qt.AspectRatioMode.IgnoreAspectRatio, Qt.TransformationMode.SmoothTransformation)
+            elif self.cfg["DO_REQUESTS"]: 
+                image = QPixmap(get_game_icon(exes[exe]["PATH"],self.cfg)).scaled(128, 60, Qt.AspectRatioMode.IgnoreAspectRatio, Qt.TransformationMode.SmoothTransformation)
+            else: image =None
+            icon=QIcon(image)
             self.bin_combo.addItem(icon,exe)
         if new_select: self.current_exe=new_select
         elif cur_selected in exes: self.current_exe=cur_selected

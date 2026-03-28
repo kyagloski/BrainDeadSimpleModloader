@@ -56,7 +56,7 @@ def create_cfg(path=None, gui=False, is_global=False):
     else:
         target=path.parent.parent
         name=str(target).split("common"+os.sep)[-1].split(os.sep)[0].strip()
-        if name in game_specific.GAME_IDS.keys(): target=target/"Data"
+        if name in game_specific.GAME_IDS.keys(): target=target/"Data" # supported game
     if not path: path=CONFIG_FILE
     
     # verification
@@ -78,6 +78,7 @@ def create_cfg(path=None, gui=False, is_global=False):
         f.write("INSTANCES:\n")
         f.write(' '*4+name+":\n")
         f.write(' '*8+"PATH: "+str(instance_path)+"\n")
+        f.write(' '*8+"ICON: \"\"\n")
         f.write(' '*8+"SELECTED: true\n")
 
     else:
@@ -104,7 +105,8 @@ def create_cfg(path=None, gui=False, is_global=False):
             path=launchers[title]["PATH"]
             f.write(' '*4+title+":\n")
             f.write(' '*8+"PATH: "+path+"\n")
-            f.write(' '*8+"PARAMS: {cmd}\"\"\n")
+            f.write(' '*8+"ICON: \"\"\n")
+            f.write(' '*8+"PARAMS: \"%command%\"\n")
             f.write(' '*8+"SELECTED: false\n")
     f.close()
     print("created new config!")

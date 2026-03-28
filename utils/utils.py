@@ -196,7 +196,7 @@ def launch_game(cfg,game_exe):
         exe=cfg["EXECUTABLES"][game_exe]["PATH"]
         exe_dir=str(Path(exe).parent).replace(' ','\\ ')
         params=cfg["EXECUTABLES"][game_exe]["PARAMS"]
-        if not params: params="{cmd}"
+        if not params or params=="%command%": params="{cmd}"
         appid=f"SteamAppId={str(Path(c).name)}"
         gameid=f"SteamGameId={str(Path(c).name)}"
         #compat_appid=f"STEAM_COMPAT_APP_ID={str(Path(c).name)}"
@@ -213,3 +213,6 @@ def launch_game(cfg,game_exe):
     print("Launching using: "+cmd)
     #os.system(cmd) # breaks on wayland
     subprocess.Popen(cmd, shell=True)
+
+
+

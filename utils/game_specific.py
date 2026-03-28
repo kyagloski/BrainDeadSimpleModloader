@@ -294,6 +294,7 @@ def get_launchers(target_dir,compat_dir):
         if os.path.exists(exe):
             title=str(exe.name).replace(".exe",'')
             launchers[title]=dict()
+            launchers[title]["ICON"]=""
             launchers[title]["PATH"]=str(exe)
             launchers[title]["PARAMS"]=""
             launchers[title]["SELECTED"]=False

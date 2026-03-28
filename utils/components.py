@@ -6,6 +6,7 @@ import tempfile
 import random
 from pathlib import Path
 from copy import deepcopy
+from time import sleep
 
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, 
@@ -14,7 +15,8 @@ from PyQt6.QtWidgets import (
     QComboBox, QFileDialog, QInputDialog, QTextEdit, QToolButton, 
     QSplashScreen, QToolTip, QStyledItemDelegate, QHeaderView,
     QGraphicsOpacityEffect, QStyle, QScrollArea, QFrame, QCheckBox,
-    QDialog, QListWidget, QListWidgetItem, QFormLayout, QTreeView
+    QDialog, QListWidget, QListWidgetItem, QFormLayout, QTreeView,
+    QDialogButtonBox
 )
 from PyQt6.QtCore import ( Qt, QItemSelectionModel, QObject, QThread, 
     QWaitCondition, pyqtSignal, QMutex, QMutexLocker, QTimer, QPoint, 
@@ -802,6 +804,7 @@ class InstanceManager(QDialog):
 
     def __init__(self, parent=None):
         super().__init__(parent)
+        self.parent=parent
         self.instances=dict()
         self.selected_instance=None
 
@@ -827,6 +830,8 @@ class InstanceManager(QDialog):
         self.list_widget.setSpacing(1)
         self.list_widget.itemSelectionChanged.connect(self._on_selection_changed)
         self.list_widget.itemDoubleClicked.connect(self._on_select)
+        self.list_widget.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.list_widget.customContextMenuRequested.connect(self.show_context_menu)
         root.addWidget(self.list_widget)
 
         # Bottom row
@@ -871,26 +876,171 @@ class InstanceManager(QDialog):
     def _refresh_list(self):
         from bdsm import read_parent_cfg, read_child_cfg
         local_dir = Path(os.path.dirname(os.path.realpath(__file__))).parent
-        cfg_dict = read_parent_cfg()
+        cfg = read_parent_cfg()
         self.list_widget.clear()
-        for instance in sorted(cfg_dict["INSTANCES"]):
+        for instance in sorted(cfg["INSTANCES"]):
             item = QListWidgetItem(instance)
             item.setData(Qt.ItemDataRole.UserRole, instance)
             
-            instance_path=Path(cfg_dict["INSTANCES"][instance]["PATH"])/"config.yaml"
-
+            instance_path=Path(cfg["INSTANCES"][instance]["PATH"])/"config.yaml"
             instance_cfg=read_child_cfg(gui=True, path=instance_path ,update=False)
             if instance_cfg==None: continue
             target_dir=instance_cfg["TARGET_DIR"]
             game=str(target_dir).split("common"+os.sep)[-1].split(os.sep)[0]
             steam_id=determine_game_id(target_dir)
             save_dir=ensure_dir(local_dir/"utils"/"resources"/"requested")
-            icon_path = get_steam_resources(game,steam_id,save_dir,icon=True)
+            if "ICON" in cfg["INSTANCES"][instance].keys() and \
+            cfg["INSTANCES"][instance]["ICON"]: icon_path=cfg["INSTANCES"][instance]["ICON"]
+            else: icon_path = get_steam_resources(game,steam_id,save_dir,icon=True)
 
             if icon_path and os.path.exists(icon_path):
                 item.setIcon(QIcon(QPixmap(icon_path)))
                 item.setSizeHint(QSize(0,48))
+
             self.list_widget.addItem(item)
+    
+    def show_context_menu(self, pos):
+        menu = QMenu(self)
+        open_action = menu.addAction("Open Instance Folder")
+        edit_action = menu.addAction("Edit")
+        duplicate_action = menu.addAction("Duplicate")
+        delete_action = menu.addAction("Delete")
+        action = menu.exec(QCursor.pos())
+        
+        if action == open_action:      self.open_instance_dir()
+        if action == edit_action:      self.open_instance_editor()
+        if action == duplicate_action: self.dup_instance()
+        if action == delete_action:    self._on_remove()
+
+    def open_instance_dir(self):
+        """Open a path with system's default application"""
+        from bdsm import read_parent_cfg
+        item = self.list_widget.currentItem().text()
+        cfg=read_parent_cfg()
+        path=cfg["INSTANCES"][item]["PATH"]
+        try:
+            if platform.system() == 'Windows':
+                if path.is_dir(): subprocess.run(['explorer', str(path)])
+                else: subprocess.run(['start', '', str(path)], shell=True)
+            elif platform.system() == 'Darwin': subprocess.run(['open', str(path)])
+            else: subprocess.run(['xdg-open', str(path)])
+        except Exception as e:
+            QMessageBox.warning(self, "Error", f"Failed to open:\n{str(e)}")
+
+    def dup_instance(self, prev_name=None, prev_path=None):
+        from bdsm import read_parent_cfg, read_child_cfg, write_cfg
+        dialog = QDialog(self)
+        dialog.setWindowTitle("New Instance Setup")
+        layout = QVBoxLayout(dialog)
+        dialog.setMinimumWidth(480)
+
+        item = self.list_widget.currentItem().text()
+        cfg = read_parent_cfg()
+        old_name = item
+        old_path = cfg["INSTANCES"][item]["PATH"]
+
+        layout.addWidget(QLabel("<b>New Name:</b>"))
+        h = QHBoxLayout()
+        name_input = QLineEdit()
+        h.addWidget(name_input)
+        layout.addLayout(h)
+
+        layout.addWidget(QLabel("<b>New Path:</b>"))
+        h = QHBoxLayout()
+        path_input = QLineEdit()
+        browse = QPushButton("...")
+        browse.clicked.connect(lambda: path_input.setText(QFileDialog.getExistingDirectory(dialog, "Select Directory") or path_input.text()))
+        h.addWidget(path_input)
+        h.addWidget(browse)
+        layout.addLayout(h)
+
+        if prev_name: name_input.setText(prev_name)
+        else: name_input.setText(old_name)
+        if prev_path: path_input.setText(old_path)
+        else: path_input.setText(old_path)
+
+        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
+        ok = buttons.button(QDialogButtonBox.StandardButton.Ok)
+        ok.setEnabled(False)
+        buttons.accepted.connect(dialog.accept)
+        buttons.rejected.connect(dialog.reject)
+        layout.addWidget(buttons)
+
+        def check():
+            if name_input.text()!=old_name and path_input.text()!=old_path: ok.setEnabled(True)
+            else: ok.setEnabled(False)
+
+        name_input.textChanged.connect(check)
+        path_input.textChanged.connect(check)
+
+        if dialog.exec() != QDialog.DialogCode.Accepted: return
+
+        name=name_input.text()
+        path=path_input.text()
+        # check valid dir
+        if os.path.exists(path) and os.listdir(path)!=[]: QMessageBox.warning(self, 'Move Error',
+                      'Target path is non-empty (choose an empty directory)'); self.dup_instance(name,path); return
+
+        # copy dirs
+        def copy_dirs():
+            for item in os.listdir(old_path):
+                s = os.path.join(old_path, item)
+                d = os.path.join(path, item)
+                if os.path.isdir(s): print(f"copying file: {d}"); shutil.copytree(s, d);
+                else: print(f"copying file: {d}"); shutil.copy2(s, d);
+
+            child_cfg=read_child_cfg(path=Path(path)/"config.yaml") 
+            for i in ["SOURCE_DIR","PRESET_DIR","LOAD_ORDER","INI_DIR"]: child_cfg[i]=child_cfg[i].replace(old_path,path)
+            write_cfg(child_cfg, path=Path(path)/"config.yaml")
+            # update global config
+            if "ICON" in cfg["INSTANCES"][old_name].keys(): icon=cfg["INSTANCES"][old_name]["ICON"]
+            else: icon=""
+            cfg["INSTANCES"][name]=dict()
+            cfg["INSTANCES"][name]["ICON"]=icon
+            cfg["INSTANCES"][name]["PATH"]=path
+            cfg["INSTANCES"][name]["SELECTED"]=False
+            write_cfg(cfg, is_global=True)
+    
+            self._refresh_list() 
+            
+        self.info = QDialog(self)
+        self.info.setWindowTitle("Processing")
+        layout = QVBoxLayout(self.info)
+        layout.addWidget(QLabel("   Copying files (this may take a while)...   "))
+        self.info.setWindowModality(Qt.WindowModality.ApplicationModal)
+        self.info.show()
+        #sleep(4)
+
+        ensure_dir(path)
+        thread = QThread()
+        thread.run = lambda: copy_dirs()
+        thread.finished.connect(self.info.close)
+        thread.start()
+        self.thread = thread  # keep reference
+
+        #ensure_dir(path)
+        #for item in os.listdir(old_path):
+        #    s = os.path.join(old_path, item)
+        #    d = os.path.join(path, item)
+        #    if os.path.isdir(s): shutil.copytree(s, d); print(f"copied file: {d}")
+        #    else: shutil.copy2(s, d); print(f"copied file: {d}")
+        # update instance config
+        #thread.join()
+        #child_cfg=read_child_cfg(path=Path(path)/"config.yaml") 
+        #for i in ["SOURCE_DIR","PRESET_DIR","LOAD_ORDER","INI_DIR"]: child_cfg[i]=child_cfg[i].replace(old_path,path)
+        #write_cfg(child_cfg, path=Path(path)/"config.yaml")
+        ## update global config
+        #if "ICON" in cfg["INSTANCES"][old_name].keys(): icon=cfg["INSTANCES"][old_name]["ICON"]
+        #else: icon=""
+        #cfg["INSTANCES"][name]=dict()
+        #cfg["INSTANCES"][name]["ICON"]=icon
+        #cfg["INSTANCES"][name]["PATH"]=path
+        #cfg["INSTANCES"][name]["SELECTED"]=False
+        #write_cfg(cfg, is_global=True)
+        
+        #info.close()
+        #self._refresh_list() 
+            
 
     def _on_selection_changed(self):
         has_sel = bool(self.list_widget.selectedItems())
@@ -944,17 +1094,25 @@ class InstanceManager(QDialog):
         if not item: return
         name = item.data(Qt.ItemDataRole.UserRole)
 
-        # TODO: add checkbox to remove files
+
+        cfg_dict=read_parent_cfg()
+        path=cfg_dict["INSTANCES"][name]["PATH"]
+
         msg = QMessageBox(self)
         msg.setWindowTitle("Remove Instance")
-        msg.setText(f"Remove '{name}'?"+' '*60)
-        msg.setInformativeText("This only removes it from the list — no files will be deleted.")
+        msg.setText(f"Remove '{name}' instance at '{path}'?")
+        msg.setInformativeText("(Leaving box unchecked will only remove instance from config)")
         msg.setStandardButtons(QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
         msg.setDefaultButton(QMessageBox.StandardButton.No)
+        checkbox = QCheckBox("Remove instance files")
+        checkbox.setChecked(False)
+        msg.setCheckBox(checkbox)
         if msg.exec() != QMessageBox.StandardButton.Yes: return
 
         cfg_dict=read_parent_cfg()
+        path=cfg_dict["INSTANCES"][name]["PATH"]
         del cfg_dict["INSTANCES"][name]
+        if checkbox.isChecked(): shutil.rmtree(path)
         write_cfg(cfg_dict, is_global=True)
 
         self._refresh_list()
@@ -989,12 +1147,15 @@ class InstanceEditor(QMainWindow):
 
     def __init__(self, instance_name, parent=None):
         super().__init__(parent)
+        self.parent=parent
         self.instance_name = instance_name 
 
         self.setWindowTitle("Edit Instance")
         self.setMinimumSize(480, 200)
         self.resize(480, 200)
         self.setWindowFlags(self.windowFlags() & ~Qt.WindowType.WindowContextHelpButtonHint)
+
+        self.has_pending_changes = False
 
         self._build_ui()
         self._add_data()
@@ -1015,12 +1176,12 @@ class InstanceEditor(QMainWindow):
         
         # Name field
         self.name_edit = QLineEdit()
-        #self.name_edit.textChanged.connect(self.mark_pending_changes)
+        self.name_edit.textChanged.connect(self.mark_pending_changes)
         form_layout.addRow(QLabel("Name:"), self.name_edit)
 
         # Path field
         self.icon_edit = QLineEdit()
-        #self.icon_edit.textChanged.connect(self.mark_pending_changes)
+        self.icon_edit.textChanged.connect(self.mark_pending_changes)
         icon_row = QHBoxLayout()
         icon_row.addWidget(self.icon_edit)
         icon_btn = QPushButton("...")
@@ -1031,7 +1192,7 @@ class InstanceEditor(QMainWindow):
 
         # Path field
         self.path_edit = QLineEdit()
-        #self.path_edit.textChanged.connect(self.mark_pending_changes)
+        self.path_edit.textChanged.connect(self.mark_pending_changes)
         path_row = QHBoxLayout()
         path_row.addWidget(self.path_edit)
         path_btn = QPushButton("...")
@@ -1055,7 +1216,7 @@ class InstanceEditor(QMainWindow):
         # Apply button
         self.apply_button = QPushButton("Apply")
         self.apply_button.setFixedWidth(100)
-        #self.apply_button.clicked.connect(self.apply_changes)
+        self.apply_button.clicked.connect(self.apply_changes)
         self.apply_button.setEnabled(False)
         bottom_layout.addWidget(self.apply_button)
         
@@ -1065,8 +1226,77 @@ class InstanceEditor(QMainWindow):
         from bdsm import read_parent_cfg
         cfg=read_parent_cfg(gui=True) 
         instance_data=cfg["INSTANCES"][self.instance_name]
+        self.name_edit.blockSignals(True)
+        self.path_edit.blockSignals(True)
+        self.icon_edit.blockSignals(True)
         self.name_edit.setText(self.instance_name)
         self.path_edit.setText(instance_data["PATH"])
+        if "ICON" in instance_data.keys(): self.icon_edit.setText(instance_data["ICON"])
+        self.name_edit.blockSignals(False)
+        self.path_edit.blockSignals(False)
+        self.icon_edit.blockSignals(False)
+   
+    def mark_pending_changes(self):
+        self.has_pending_changes = True
+        # Only enable apply button if both title and path are not empty
+        name_filled = self.name_edit.text().strip() != ""
+        path_filled = self.path_edit.text().strip() != ""
+        
+        if name_filled and path_filled:
+            self.apply_button.setEnabled(True)
+            self.apply_button.setToolTip("")
+        else:
+            self.apply_button.setEnabled(False)
+            missing = []
+            if not name_filled:
+                missing.append("Name")
+            if not path_filled:
+                missing.append("Path")
+            self.apply_button.setToolTip(f"Required field(s) missing: {', '.join(missing)}")
+
+    def apply_changes(self):
+        from bdsm import read_parent_cfg, read_child_cfg, write_cfg
+        cfg=read_parent_cfg(gui=True) 
+
+        name=self.name_edit.text().strip()
+        path=self.path_edit.text().strip()
+        icon=self.icon_edit.text().strip()
+        
+        if name: cfg["INSTANCES"][name] = cfg["INSTANCES"].pop(self.instance_name); self.instance_name=name
+        if icon: cfg["INSTANCES"][self.instance_name]["ICON"]=icon if os.path.exists(icon) else ""
+        if path and path!=cfg["INSTANCES"][self.instance_name]["PATH"]:
+            msg = QMessageBox()
+            msg.setWindowTitle("Confirm Instance Path Change")
+            msg.setText("Are you sure you want to change instance path?"+' '*DIALOGUE_WIDTH)
+            msg.setStandardButtons(QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+            checkbox = QCheckBox("Move instance files\n(A new instance will be created if not moved)")
+            checkbox.setChecked(True)
+            msg.setCheckBox(checkbox)
+            result = msg.exec()
+    
+            if result==QMessageBox.StandardButton.Yes:
+                old_path=cfg["INSTANCES"][self.instance_name]["PATH"]
+                child_cfg=read_child_cfg(gui=True, path=Path(old_path)/"config.yaml")
+                if checkbox.isChecked(): 
+                    if os.path.exists(path) and os.listdir(path)!=[]: QMessageBox.warning(self, 'Move Error',
+                                  'Target path is non-empty (choose an empty directory)\nAlternatively, uncheck the move files box (creates a new instance)'); return
+                    for i in ["SOURCE_DIR","PRESET_DIR","LOAD_ORDER","INI_DIR"]: child_cfg[i]=child_cfg[i].replace(old_path,path)
+                    write_cfg(child_cfg, path=Path(old_path)/"config.yaml")
+                    ensure_dir(path)
+                    for item in os.listdir(old_path): shutil.move(os.path.join(old_path, item), os.path.join(path, item))
+                    #shutil.move(old_path, path)
+                else: 
+                    #if not os.path.exists(Path(path)/"config.yaml"):
+                    for i in ["SOURCE_DIR","PRESET_DIR","LOAD_ORDER","INI_DIR"]: child_cfg[i]=child_cfg[i].replace(old_path,path)
+                    write_cfg(child_cfg, path=Path(old_path)/"config.yaml")
+                    ensure_dir(path); shutil.copy(Path(old_path)/"config.yaml",Path(path)/"config.yaml") # im too lazy to figure this one out
+                cfg["INSTANCES"][self.instance_name]["PATH"]=path
+            else: return
+        write_cfg(cfg, is_global=True)
+        self.parent._refresh_list()
+        # update current instance with change if edited
+        if cfg["INSTANCES"][self.instance_name]["SELECTED"]: self.parent.parent.on_instance_manager_close(self.instance_name)
+        self.close()
 
 
 class ListItem:
@@ -1115,7 +1345,8 @@ class ExeManager(QMainWindow):
         exes=self.cfg["EXECUTABLES"]
         if exes:
             for exe in exes:
-                self.add_item(title=exe, path=exes[exe]["PATH"], params=exes[exe]["PARAMS"])
+                if "ICON" not in exes[exe]: exes[exe]["ICON"]="" # for prev installs
+                self.add_item(title=exe, icon=exes[exe]["ICON"], path=exes[exe]["PATH"], params=exes[exe]["PARAMS"])
         self.list_widget.currentRowChanged.connect(self.on_item_selected)
         left_layout.addWidget(self.list_widget)
         
@@ -1162,7 +1393,18 @@ class ExeManager(QMainWindow):
         self.title_edit = QLineEdit()
         self.title_edit.textChanged.connect(self.mark_pending_changes)
         form_layout.addRow(QLabel("Title:"), self.title_edit)
-        
+       
+        # Icon field
+        self.icon_edit = QLineEdit()
+        self.icon_edit.textChanged.connect(self.mark_pending_changes)
+        icon_row = QHBoxLayout()
+        icon_row.addWidget(self.icon_edit)
+        icon_btn = QPushButton("...")
+        icon_btn.setFixedWidth(28)
+        icon_btn.clicked.connect(lambda checked, e=self.icon_edit, f=True: file_select(e, f))
+        icon_row.addWidget(icon_btn)
+        form_layout.addRow(QLabel("Icon:"), icon_row)
+ 
         # Path field
         self.path_edit = QLineEdit()
         self.path_edit.textChanged.connect(self.mark_pending_changes)
@@ -1175,7 +1417,7 @@ class ExeManager(QMainWindow):
         form_layout.addRow(QLabel("Path:"), path_row)
         
         # Params field
-        self.params_edit = QLineEdit("{cmd}")
+        self.params_edit = QLineEdit("%command%")
         self.params_edit.textChanged.connect(self.mark_pending_changes)
         form_layout.addRow(QLabel("Params:"), self.params_edit)
         
@@ -1242,7 +1484,7 @@ class ExeManager(QMainWindow):
                     missing.append("Path")
                 self.apply_button.setToolTip(f"Required field(s) missing: {', '.join(missing)}")
             
-    def add_item(self, title=None, path=None, params=None):
+    def add_item(self, title=None, icon=None, path=None, params=None):
         """Add a new item to the list"""
         # Check if there's already an item with empty title or path
         for item in self.items:
@@ -1259,12 +1501,12 @@ class ExeManager(QMainWindow):
         # Create new item
         new_item = ListItem()
         if title: new_item.title=title
+        if icon is not None: new_item.icon=icon
         if path: new_item.path=path
-        if params: new_item.params=params
+        if params: new_item.params=params if params.strip() else "%command%"
 
         self.items.append(new_item)
         self.list_widget.addItem(str(new_item))
-        
         
         # Select the new item
         self.list_widget.setCurrentRow(len(self.items) - 1)
@@ -1353,13 +1595,15 @@ class ExeManager(QMainWindow):
         
         # Enable fields
         self.set_fields_enabled(True)
-        
+ 
         # Load item data into fields
         if 0 <= index < len(self.items):
             item = self.items[index]
             self.current_item = item
             self.title_edit.setText(item.title)
+            self.icon_edit.setText(item.icon)
             self.path_edit.setText(item.path)
+            item.params = item.params if item.params.strip() else "%command%"
             self.params_edit.setText(item.params)
             
         # Reset pending changes flag
@@ -1406,13 +1650,17 @@ class ExeManager(QMainWindow):
             elif item.title not in self.cfg["EXECUTABLES"]:
                 self.cfg["EXECUTABLES"][new_title]=dict()
                 self.cfg["EXECUTABLES"][new_title]["PATH"]=""
+                self.cfg["EXECUTABLES"][new_title]["ICON"]=""
                 self.cfg["EXECUTABLES"][new_title]["PARAMS"]=""
                 self.cfg["EXECUTABLES"][new_title]["SELECTED"]=False
             item.title = new_title
+            item.icon = self.icon_edit.text()
             item.path = self.path_edit.text()
             item.params = self.params_edit.text()
-            if not item.params: item.params="{cmd}"
+            if not item.params: item.params="%command%"
             self.cfg["EXECUTABLES"][item.title]["PATH"]=item.path
+            self.cfg["EXECUTABLES"][item.title]["ICON"]=item.icon if os.path.exists(item.icon) else ""
+            if not os.path.exists(item.icon): self.icon_edit.setText("")
             self.cfg["EXECUTABLES"][item.title]["PARAMS"]=item.params
             bdsm.write_cfg(self.cfg)
 
@@ -2106,7 +2354,6 @@ class INIManager(QMainWindow):
         current_selections = editor.extraSelections()
         current_selections.append(selection)
         editor.setExtraSelections(current_selections)
-
 
 
 def load_stylesheet(filename):
