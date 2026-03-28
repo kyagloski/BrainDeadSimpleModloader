@@ -133,7 +133,7 @@ def determine_game_id(target_dir):
     gid=[gid for gid in ids if gid in str(target_dir)]
     if gid!=[]: gid=str(GAME_IDS[gid[0]])
     else: gid=determine_game_id_acf(target_dir) 
-    if gid==-1: print("error: cannot detect game id")
+    #if gid==-1: print("error: cannot detect game id")
     return int(gid)
 
 

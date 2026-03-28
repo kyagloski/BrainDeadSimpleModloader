@@ -87,6 +87,9 @@ class ModLoaderUserInterface(QMainWindow):
         self.extract_threads=[]
         self.status_threads=[]
 
+        QShortcut(QKeySequence("Escape"), self).activated.connect(self.close)
+        QShortcut(QKeySequence("Ctrl+S"), self).activated.connect(self.auto_save_load_order)
+
         # remember ui state
         #geom_path = os.path.join(os.path.dirname(__file__), ".win_geometry")
         #self.settings = QSettings(geom_path, )
@@ -251,7 +254,12 @@ class ModLoaderUserInterface(QMainWindow):
         open_bdsm.triggered.connect(lambda: self._open_path(LOCAL_DIR))
         
         preset_layout.addWidget(QLabel("Preset:"))
-        self.preset_combo = EditableComboBox(upper=self)
+        self.preset_combo = EditableComboBox({"Add":"self.parent.add_preset()",
+                                              "Edit":"self.open_in_editor()",
+                                              "Rename":"self.parent.rename_preset()",
+                                              "Duplicate":"self.parent.dup_preset()",
+                                              "Delete":"self.parent.del_preset()"},
+                                             parent=self)
         self.preset_combo.setSizePolicy(self.preset_combo.sizePolicy().horizontalPolicy().Expanding,
                                         self.preset_combo.sizePolicy().verticalPolicy().Preferred)
         self.read_presets()
@@ -277,7 +285,7 @@ class ModLoaderUserInterface(QMainWindow):
         preset_layout.addStretch()
 
         preset_layout.addWidget(QLabel("Binary:"))
-        self.bin_combo = QComboBox()
+        self.bin_combo = EditableComboBox({"Edit":"self.parent.open_exe_manager()"}, parent=self)
         self.bin_combo.setSizePolicy(self.bin_combo.sizePolicy().horizontalPolicy().Expanding,
                                      self.bin_combo.sizePolicy().verticalPolicy().Preferred)
         exes=self.cfg["EXECUTABLES"]
@@ -572,6 +580,18 @@ class ModLoaderUserInterface(QMainWindow):
         if not path.exists() or not path.is_dir(): return
         self.add_directory_to_tree(path, self.file_explorer.invisibleRootItem())
         self.file_explorer.expandAll()
+        self.file_explorer.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.file_explorer.customContextMenuRequested.connect(self.show_file_context_menu)
+    
+    def show_file_context_menu(self, pos):
+        item = self.file_explorer.itemAt(pos)
+        if item is None: return
+        menu = QMenu()
+        open_action = menu.addAction("Open")
+        action = menu.exec(QCursor.pos())
+        if action == open_action:
+            print(f"Opening {item.text(0).strip()}...")
+            self.on_file_explorer_double_click(item,0)
     
     def add_directory_to_tree(self, directory, parent_item):
         try:

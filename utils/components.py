@@ -255,27 +255,23 @@ class ConflictThread(QThread):
 
 
 class EditableComboBox(QComboBox):
-    def __init__(self, upper=None):
+    def __init__(self, action_dict, parent=None):
         super().__init__(None)
-        self.upper=upper
+        self.action_dict = action_dict
+        self.parent=parent
         self.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.customContextMenuRequested.connect(self.show_context_menu)
     
     def show_context_menu(self, pos):
-        menu = QMenu(self)
-        open_action = menu.addAction("Edit")
-        rename_action = menu.addAction("Rename")
-        duplicate_action = menu.addAction("Duplicate")
-        delete_action = menu.addAction("Delete")
-        action = menu.exec(self.mapToGlobal(pos))
-        
-        if action == open_action:      self.open_in_editor()
-        if action == rename_action:    self.upper.rename_preset()
-        if action == duplicate_action: self.upper.dup_preset()
-        if action == delete_action:    self.upper.del_preset()
-    
+        menu=QMenu(self)
+        actions=[]
+        for action in self.action_dict: actions.append(menu.addAction(action))
+        action=menu.exec(self.mapToGlobal(pos))
+        for check_action in actions:
+            if action==check_action: exec(self.action_dict[action.text()])
+            
     def open_in_editor(self):
-        file_path = str(self.upper.cfg["LOAD_ORDER"])
+        file_path = str(self.parent.cfg["LOAD_ORDER"])
         print("Opening loadorder file with system text editor...")
         if not os.path.isfile(file_path):
             print("error: could not open "+file_path)
@@ -320,7 +316,7 @@ class RichTextDelegate(QStyledItemDelegate):
 
 
 class FadingBg:
-    def __init__(self, table, paths, interval_ms=30000):
+    def __init__(self, table, paths, interval_ms=20000):
         global OVERRIDING_COLOR, OVERRIDDEN_COLOR
         OVERRIDING_COLOR = "#00ff00"
         OVERRIDDEN_COLOR = "#ff0000"
@@ -693,6 +689,9 @@ class ConfigManager(QMainWindow):
         self.setMinimumWidth(800)
         self.build_ui()
 
+        QShortcut(QKeySequence("Escape"), self).activated.connect(self.close)
+        QShortcut(QKeySequence("Ctrl+S"), self).activated.connect(self.apply)
+
     def build_ui(self):
         central = QWidget()
         self.setCentralWidget(central)
@@ -815,6 +814,8 @@ class InstanceManager(QDialog):
 
         self._build_ui()
 
+        QShortcut(QKeySequence("Escape"), self).activated.connect(self.close)
+
     def _build_ui(self):
         root = QVBoxLayout(self)
         root.setContentsMargins(16, 16, 16, 14)
@@ -901,12 +902,14 @@ class InstanceManager(QDialog):
     
     def show_context_menu(self, pos):
         menu = QMenu(self)
+        add_action = menu.addAction("Add Instance")
         open_action = menu.addAction("Open Instance Folder")
         edit_action = menu.addAction("Edit")
         duplicate_action = menu.addAction("Duplicate")
         delete_action = menu.addAction("Delete")
         action = menu.exec(QCursor.pos())
-        
+       
+        if action == add_action:       self._on_add() 
         if action == open_action:      self.open_instance_dir()
         if action == edit_action:      self.open_instance_editor()
         if action == duplicate_action: self.dup_instance()
@@ -981,7 +984,6 @@ class InstanceManager(QDialog):
         if os.path.exists(path) and os.listdir(path)!=[]: QMessageBox.warning(self, 'Move Error',
                       'Target path is non-empty (choose an empty directory)'); self.dup_instance(name,path); return
 
-        # copy dirs
         def copy_dirs():
             for item in os.listdir(old_path):
                 s = os.path.join(old_path, item)
@@ -1009,7 +1011,6 @@ class InstanceManager(QDialog):
         layout.addWidget(QLabel("   Copying files (this may take a while)...   "))
         self.info.setWindowModality(Qt.WindowModality.ApplicationModal)
         self.info.show()
-        #sleep(4)
 
         ensure_dir(path)
         thread = QThread()
@@ -1017,30 +1018,6 @@ class InstanceManager(QDialog):
         thread.finished.connect(self.info.close)
         thread.start()
         self.thread = thread  # keep reference
-
-        #ensure_dir(path)
-        #for item in os.listdir(old_path):
-        #    s = os.path.join(old_path, item)
-        #    d = os.path.join(path, item)
-        #    if os.path.isdir(s): shutil.copytree(s, d); print(f"copied file: {d}")
-        #    else: shutil.copy2(s, d); print(f"copied file: {d}")
-        # update instance config
-        #thread.join()
-        #child_cfg=read_child_cfg(path=Path(path)/"config.yaml") 
-        #for i in ["SOURCE_DIR","PRESET_DIR","LOAD_ORDER","INI_DIR"]: child_cfg[i]=child_cfg[i].replace(old_path,path)
-        #write_cfg(child_cfg, path=Path(path)/"config.yaml")
-        ## update global config
-        #if "ICON" in cfg["INSTANCES"][old_name].keys(): icon=cfg["INSTANCES"][old_name]["ICON"]
-        #else: icon=""
-        #cfg["INSTANCES"][name]=dict()
-        #cfg["INSTANCES"][name]["ICON"]=icon
-        #cfg["INSTANCES"][name]["PATH"]=path
-        #cfg["INSTANCES"][name]["SELECTED"]=False
-        #write_cfg(cfg, is_global=True)
-        
-        #info.close()
-        #self._refresh_list() 
-            
 
     def _on_selection_changed(self):
         has_sel = bool(self.list_widget.selectedItems())
@@ -1160,6 +1137,8 @@ class InstanceEditor(QMainWindow):
         self._build_ui()
         self._add_data()
 
+        QShortcut(QKeySequence("Ctrl+S"), self).activated.connect(self.apply_changes)
+
     def _build_ui(self):
         # Central widget
         central_widget = QWidget()
@@ -1255,6 +1234,7 @@ class InstanceEditor(QMainWindow):
             self.apply_button.setToolTip(f"Required field(s) missing: {', '.join(missing)}")
 
     def apply_changes(self):
+        if not self.has_pending_changes: return
         from bdsm import read_parent_cfg, read_child_cfg, write_cfg
         cfg=read_parent_cfg(gui=True) 
 
@@ -1263,7 +1243,7 @@ class InstanceEditor(QMainWindow):
         icon=self.icon_edit.text().strip()
         
         if name: cfg["INSTANCES"][name] = cfg["INSTANCES"].pop(self.instance_name); self.instance_name=name
-        if icon: cfg["INSTANCES"][self.instance_name]["ICON"]=icon if os.path.exists(icon) else ""
+        if icon is not None: cfg["INSTANCES"][self.instance_name]["ICON"]=icon if os.path.exists(icon) else ""
         if path and path!=cfg["INSTANCES"][self.instance_name]["PATH"]:
             msg = QMessageBox()
             msg.setWindowTitle("Confirm Instance Path Change")
@@ -1324,6 +1304,8 @@ class ExeManager(QMainWindow):
         if parent is not None:
             self.setWindowModality(Qt.WindowModality.ApplicationModal)
         self.init_ui()
+
+        QShortcut(QKeySequence("Escape"), self).activated.connect(self.close)
         
     def init_ui(self):
         self.setWindowTitle("Executable Manager")
@@ -1456,6 +1438,8 @@ class ExeManager(QMainWindow):
         # start selection
         if len(self.items)>0: self.on_item_selected(0)
         self.list_widget.setCurrentRow(0)
+
+        QShortcut(QKeySequence("Ctrl+S"), self).activated.connect(self.apply_changes)
         
     def set_fields_enabled(self, enabled):
         """Enable or disable the text fields and apply button"""
@@ -1818,6 +1802,8 @@ class INIManager(QMainWindow):
         self.find_dialog = None
         self.current_matches = []
         self.current_match_index = -1
+
+        QShortcut(QKeySequence("Escape"), self).activated.connect(self.close)
 
     def create_left_column(self):
         """Create left column with directory tree and read-only editor"""
