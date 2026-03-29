@@ -546,6 +546,7 @@ class ModTable(QTableWidget):
         priority_item = QTableWidgetItem(collapse_state)
         priority_item.setFlags(Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsSelectable | Qt.ItemFlag.ItemIsDragEnabled)
         priority_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+        priority_item.setToolTip("Collapse/expand separator")
         self.setItem(row, 0, priority_item)
         
         checkbox_item = QTableWidgetItem("")
@@ -716,12 +717,27 @@ class ConfigManager(QMainWindow):
         BOOL_KEYS         = {"RELOAD_ON_INSTALL", "UPDATE_ON_CLOSE", "LINK_ON_LAUNCH", "DO_REQUESTS"}
         PATH_KEYS         = {"SOURCE_DIR", "TARGET_DIR", "COMPAT_DIR", "PRESET_DIR", "LOAD_ORDER", "INI_DIR"}
         STYLESHEET_KEY    = "STYLESHEET"
+        
+        tooltips = {"RELOAD_ON_INSTALL":"Reload all mods upon change to loadorder (priority changes, mod install, mod deletion, etc.)",
+                    "UPDATE_ON_CLOSE"  :"Save loadorder on close of application",
+                    "LINK_ON_LAUNCH"   :"Link all mods upon launching executable",
+                    "DO_REQUESTS"      :"Request assets (background and icon images) from Steam API\n(Disabling will not render default background and icons)",
+                    "SOURCE_DIR"       :"Mod install directory (location mods are linked from)",
+                    "TARGET_DIR"       :"Mod load target directory (location mods are linked to)",
+                    "COMPAT_DIR"       :"Steam game compatability data directory (necessarily the 'AppData/Local' directory)",
+                    "PRESET_DIR"       :"Preset directory location (location loadorder files are stored)",
+                    "LOAD_ORDER"       :"Currently selected loadorder preset file",
+                    "INI_DIR"          :"INI backup directory location",
+                    "STYLESHEET"       :"Application theme stylesheet (located in <BDSM_INSTALL_DIR>/utils/resources/stylesheets)",
+                    "EXECUTABLES"      :""}
+
         import bdsm
         STYLESHEET_OPTIONS = [Path(i).name for i in os.listdir(bdsm.LOCAL_DIR/"utils"/"resources"/"stylesheets") if i.endswith(".qss")]
 
         for key, value in self.config.items():
             row = QHBoxLayout()
             label = QLabel(f"<b>{key.replace("_",' ')}</b>")
+            label.setToolTip(tooltips[key])
             label.setFixedWidth(label_width)
             label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
             row.addWidget(label)
@@ -729,6 +745,7 @@ class ConfigManager(QMainWindow):
             if key in BOOL_KEYS:
                 cb = QCheckBox()
                 cb.setChecked(value)
+                cb.setToolTip(tooltips[key])
                 self.widgets[key] = cb
                 row.addWidget(cb)
                 row.addStretch()
@@ -745,12 +762,15 @@ class ConfigManager(QMainWindow):
                 self.widgets[key] = combo
                 row.addWidget(combo)
                 row.addStretch()
+                combo.setToolTip(tooltips[key])
 
             elif key in PATH_KEYS:
                 edit = QLineEdit(value)
                 self.widgets[key] = edit
+                edit.setToolTip(tooltips[key])
                 row.addWidget(edit)
                 btn = QPushButton("...")
+                btn.setToolTip("Browse files")
                 btn.setFixedWidth(28)
                 # Determine if it's a file or directory picker
                 is_file = key == "LOAD_ORDER"
@@ -841,15 +861,18 @@ class InstanceManager(QDialog):
 
         self.btn_add = QPushButton("+")
         self.btn_add.setFixedSize(35, 35)
+        self.btn_add.setToolTip("Add instance")
         self.btn_add.clicked.connect(self._on_add)
 
         self.btn_remove = QPushButton("-")
         self.btn_remove.setFixedSize(35, 35)
+        self.btn_remove.setToolTip("Remove instance")
         self.btn_remove.setEnabled(False)
         self.btn_remove.clicked.connect(self._on_remove)
 
         self.btn_edit = QPushButton("☰")
         self.btn_edit.setFixedSize(35, 35)
+        self.btn_edit.setToolTip("Edit instance configuration")
         self.btn_edit.setEnabled(False)
         self.btn_edit.clicked.connect(self.open_instance_editor)
 
@@ -893,6 +916,8 @@ class InstanceManager(QDialog):
             if "ICON" in cfg["INSTANCES"][instance].keys() and \
             cfg["INSTANCES"][instance]["ICON"]: icon_path=cfg["INSTANCES"][instance]["ICON"]
             else: icon_path = get_steam_resources(game,steam_id,save_dir,icon=True)
+
+            item.setToolTip(f"Instance at {instance_path.parent}")
 
             if icon_path and os.path.exists(icon_path):
                 item.setIcon(QIcon(QPixmap(icon_path)))
@@ -1156,14 +1181,17 @@ class InstanceEditor(QMainWindow):
         # Name field
         self.name_edit = QLineEdit()
         self.name_edit.textChanged.connect(self.mark_pending_changes)
+        self.name_edit.setToolTip("Instance name")
         form_layout.addRow(QLabel("Name:"), self.name_edit)
 
         # Path field
         self.icon_edit = QLineEdit()
         self.icon_edit.textChanged.connect(self.mark_pending_changes)
+        self.icon_edit.setToolTip("Instance icon path")
         icon_row = QHBoxLayout()
         icon_row.addWidget(self.icon_edit)
         icon_btn = QPushButton("...")
+        icon_btn.setToolTip("Browse files")
         icon_btn.setFixedWidth(28)
         icon_btn.clicked.connect(lambda checked, e=self.icon_edit, f=True: file_select(e, f))
         icon_row.addWidget(icon_btn)
@@ -1172,9 +1200,11 @@ class InstanceEditor(QMainWindow):
         # Path field
         self.path_edit = QLineEdit()
         self.path_edit.textChanged.connect(self.mark_pending_changes)
+        self.path_edit.setToolTip("Instance path")
         path_row = QHBoxLayout()
         path_row.addWidget(self.path_edit)
         path_btn = QPushButton("...")
+        path_btn.setToolTip("Browse files")
         path_btn.setFixedWidth(28)
         path_btn.clicked.connect(lambda checked, e=self.path_edit, f=True: file_select(e, f))
         path_row.addWidget(path_btn)
@@ -1338,26 +1368,28 @@ class ExeManager(QMainWindow):
         # Plus button
         self.plus_button = QPushButton("+")
         self.plus_button.setFixedSize(35, 35)
+        self.plus_button.setToolTip("Add executable")
         self.plus_button.clicked.connect(self.add_item)
         button_layout.addWidget(self.plus_button)
         
         # Minus button
         self.minus_button = QPushButton("-")
         self.minus_button.setFixedSize(35, 35)
+        self.minus_button.setToolTip("Remove executable")
         self.minus_button.clicked.connect(self.remove_item)
         button_layout.addWidget(self.minus_button)
         
         # Up arrow button
-        self.up_button = QPushButton("↑")
-        self.up_button.setFixedSize(35, 35)
-        self.up_button.clicked.connect(self.move_item_up)
-        button_layout.addWidget(self.up_button)
-        
-        # Down arrow button
-        self.down_button = QPushButton("↓")
-        self.down_button.setFixedSize(35, 35)
-        self.down_button.clicked.connect(self.move_item_down)
-        button_layout.addWidget(self.down_button)
+        #self.up_button = QPushButton("↑")
+        #self.up_button.setFixedSize(35, 35)
+        #self.up_button.clicked.connect(self.move_item_up)
+        #button_layout.addWidget(self.up_button)
+        #
+        ## Down arrow button
+        #self.down_button = QPushButton("↓")
+        #self.down_button.setFixedSize(35, 35)
+        #self.down_button.clicked.connect(self.move_item_down)
+        #button_layout.addWidget(self.down_button)
         
         button_layout.addStretch()
         
@@ -1374,14 +1406,17 @@ class ExeManager(QMainWindow):
         # Title field
         self.title_edit = QLineEdit()
         self.title_edit.textChanged.connect(self.mark_pending_changes)
+        self.title_edit.setToolTip("Executable configuration name")
         form_layout.addRow(QLabel("Title:"), self.title_edit)
        
         # Icon field
         self.icon_edit = QLineEdit()
         self.icon_edit.textChanged.connect(self.mark_pending_changes)
+        self.icon_edit.setToolTip("Icon path")
         icon_row = QHBoxLayout()
         icon_row.addWidget(self.icon_edit)
         icon_btn = QPushButton("...")
+        icon_btn.setToolTip("Browse files")
         icon_btn.setFixedWidth(28)
         icon_btn.clicked.connect(lambda checked, e=self.icon_edit, f=True: file_select(e, f))
         icon_row.addWidget(icon_btn)
@@ -1390,9 +1425,11 @@ class ExeManager(QMainWindow):
         # Path field
         self.path_edit = QLineEdit()
         self.path_edit.textChanged.connect(self.mark_pending_changes)
+        self.path_edit.setToolTip("Executable path")
         path_row = QHBoxLayout()
         path_row.addWidget(self.path_edit)
         path_btn = QPushButton("...")
+        path_btn.setToolTip("Browse files")
         path_btn.setFixedWidth(28)
         path_btn.clicked.connect(lambda checked, e=self.path_edit, f=True: file_select(e, f))
         path_row.addWidget(path_btn)
@@ -1400,6 +1437,7 @@ class ExeManager(QMainWindow):
         
         # Params field
         self.params_edit = QLineEdit("%command%")
+        self.params_edit.setToolTip("Add parameters before/after launch command\nEquivalent to Steam launch options")
         self.params_edit.textChanged.connect(self.mark_pending_changes)
         form_layout.addRow(QLabel("Params:"), self.params_edit)
         
@@ -1848,11 +1886,13 @@ class INIManager(QMainWindow):
         button_layout = QHBoxLayout()
         
         self.restore_btn = QPushButton("Restore")
+        self.restore_btn.setToolTip("Restore INIs from selected backup")
         self.restore_btn.clicked.connect(self.restore_on_click)
         self.restore_btn.setEnabled(False)
         button_layout.addWidget(self.restore_btn)
         
         self.delete_btn = QPushButton("Delete Backup")
+        self.delete_btn.setToolTip("Delete INI backup")
         self.delete_btn.clicked.connect(self.delete_on_click)
         self.delete_btn.setEnabled(False)
         button_layout.addWidget(self.delete_btn)
@@ -1910,11 +1950,13 @@ class INIManager(QMainWindow):
         button_layout.addStretch()
         
         self.save_btn = QPushButton("Save")
+        self.save_btn.setToolTip("Save edits to compat INI")
         self.save_btn.clicked.connect(self.save_current_file)
         self.save_btn.setEnabled(False)
         button_layout.addWidget(self.save_btn)
         
         self.backup_btn = QPushButton("Backup")
+        self.backup_btn.setToolTip("Backup compat INIs")
         self.backup_btn.clicked.connect(self.backup_on_click)
         self.backup_btn.setEnabled(False)
         button_layout.addWidget(self.backup_btn)

@@ -147,7 +147,7 @@ class ModLoaderUserInterface(QMainWindow):
             self.log_output.setPlainText(verbose)
             self.log_output.moveCursor(QTextCursor.MoveOperation.End)
             self.log_output.ensureCursorVisible()
-        else: self.log_output.setPlaceholderText("Click '+' or drag archive to install mods!")
+        else: self.log_output.setPlaceholderText("Click '+' or drag archive/folder to install mods!")
         self.log_output.setStyleSheet("QTextEdit { font-family: monospace; }")
         log_layout.addWidget(self.log_output)
         
@@ -222,11 +222,13 @@ class ModLoaderUserInterface(QMainWindow):
         self.settings_button.setFixedSize(35, 35)
         #self.settings_button.clicked.connect(self.open_settings)
         self.settings_button.clicked.connect(self.open_cfg_manager)
+        self.settings_button.setToolTip("Open settings")
         preset_layout.addWidget(self.settings_button)
 
         self.instance_button = QPushButton("⇄")
         self.instance_button.setFixedSize(35, 35)
         self.instance_button.clicked.connect(self.open_instance_manager)
+        self.instance_button.setToolTip("Switch instance")
         preset_layout.addWidget(self.instance_button)
 
         self.tools_button = QToolButton()
@@ -264,6 +266,7 @@ class ModLoaderUserInterface(QMainWindow):
                                         self.preset_combo.sizePolicy().verticalPolicy().Preferred)
         self.read_presets()
         self.preset_combo.currentTextChanged.connect(self.select_preset)
+        self.preset_combo.setToolTip("Selected preset loadorder")
         preset_layout.addWidget(self.preset_combo,2)
 
         self.add_preset_button = QPushButton("+")
@@ -304,17 +307,18 @@ class ModLoaderUserInterface(QMainWindow):
         self.bin_combo.setIconSize(QSize(63,34))
         self.bin_combo.setCurrentText(self.current_exe)
         self.bin_combo.currentTextChanged.connect(self.select_exe)
+        self.bin_combo.setToolTip("Selected executable")
         preset_layout.addWidget(self.bin_combo,2)
 
         self.settings_button = QPushButton("☰")
         self.settings_button.setFixedSize(35, 35)
-        self.settings_button.setToolTip("Settings")
+        self.settings_button.setToolTip("Edit executables")
         self.settings_button.clicked.connect(self.open_exe_manager)
         preset_layout.addWidget(self.settings_button)
 
         self.play_button = QPushButton("▶︎")
         self.play_button.setFixedSize(35, 35)
-        self.play_button.setToolTip("Settings")
+        self.play_button.setToolTip("Launch executable")
         self.play_button.clicked.connect(self.on_play)
         preset_layout.addWidget(self.play_button)
 
@@ -326,6 +330,10 @@ class ModLoaderUserInterface(QMainWindow):
         self.mod_table.setItemDelegateForColumn(2, RichTextDelegate(self))
         self.mod_table.setItemDelegateForColumn(3, RichTextDelegate(self))
         self.mod_table.setHorizontalHeaderLabels(["#", "", "Mod Name", "Conflicts" ])
+        self.mod_table.horizontalHeaderItem(0).setToolTip("Click to sort by priority")
+        self.mod_table.horizontalHeaderItem(2).setToolTip("Click to sort by name")
+        self.mod_table.horizontalHeaderItem(3).setToolTip("Overwritten and overriding mods")
+
         self.mod_table.verticalHeader().setVisible(False)
         self.mod_table.itemSelectionChanged.connect(self.on_mod_selected)
         self.mod_table.selectionModel().selectionChanged.connect(self.on_item_deselect)
@@ -372,6 +380,7 @@ class ModLoaderUserInterface(QMainWindow):
         self.search_box = QLineEdit()
         self.search_box.setPlaceholderText("Filter")
         self.search_box.textChanged.connect(self.filter_mods)
+        self.search_box.setToolTip("Filter items")
         return self.search_box
 
     def _create_button_layout(self):
@@ -379,26 +388,28 @@ class ModLoaderUserInterface(QMainWindow):
         
         self.add_button = QPushButton("+")
         self.add_button.setFixedSize(35, 35)
-        self.add_button.setToolTip("Add Mod")
+        self.add_button.setToolTip("Install Mod")
         self.add_button.clicked.connect(self.add_mod_dialog)
         
         self.move_up_button = QPushButton("↑")
         self.move_up_button.setFixedSize(35, 35)
-        self.move_up_button.setToolTip("Move Up")
+        self.move_up_button.setToolTip("Move Item Up")
         self.move_up_button.clicked.connect(self.move_mod_up)
         self.move_up_button.setEnabled(False)
         
         self.move_down_button = QPushButton("↓")
         self.move_down_button.setFixedSize(35, 35)
-        self.move_down_button.setToolTip("Move Down")
+        self.move_down_button.setToolTip("Move Item Down")
         self.move_down_button.clicked.connect(self.move_mod_down)
         self.move_down_button.setEnabled(False)
         
         self.enable_button = QPushButton("Enable All")
         self.enable_button.clicked.connect(self.enable_all)
+        self.enable_button.setToolTip("Enable all mods")
         
         self.disable_button = QPushButton("Disable All")
         self.disable_button.clicked.connect(self.disable_all)
+        self.disable_button.setToolTip("Disable all mods")
         
         separator = QLabel("|")
         #separator.setStyleSheet("color: gray; font-size: 20px; padding: 0px; margin: 0px 5px;")
@@ -406,12 +417,15 @@ class ModLoaderUserInterface(QMainWindow):
         
         self.save_button = QPushButton("Save Load Order")
         self.save_button.clicked.connect(self.save_load_order)
+        self.save_button.setToolTip("Save current load order to preset file")
         
         self.load_button = QPushButton("Load Mods")
         self.load_button.clicked.connect(self.load_mods)
+        self.load_button.setToolTip("Link mods to target direcotory")
         
         self.unload_button = QPushButton("Unload Mods")
         self.unload_button.clicked.connect(self.unload_mods)
+        self.unload_button.setToolTip("Unlink mods from target direcotory")
         
         for btn in [self.add_button, self.move_up_button, self.move_down_button, 
                     self.enable_button, self.disable_button, separator, 
