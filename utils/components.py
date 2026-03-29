@@ -823,11 +823,17 @@ class ConfigManager(QMainWindow):
         layout = QVBoxLayout(dialog)
         layout.setSpacing(10)
 
+        from bdsm import VERSION, LOCAL_DIR
+
         title = QLabel("BrainDead Simple Modloader")
         title.setStyleSheet("font-size: 18px; font-weight: bold;")
         title.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
-        from bdsm import VERSION
+        image = QLabel()
+        pixmap = QPixmap(str(Path(LOCAL_DIR)/"utils"/"resources"/"icon.png")).scaled(200, 100, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+        image.setPixmap(pixmap)
+        image.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
         version = QLabel(f"Version {VERSION}")
         version.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
@@ -847,10 +853,14 @@ class ConfigManager(QMainWindow):
         layout2=QHBoxLayout()
         donate = QPushButton("❤ Donate")
         donate.setFixedWidth(80)
-        donate.setStyleSheet("color: white; background-color: #003087; font-weight: bold;")
+        donate.setStyleSheet("""
+            QPushButton { color: white; background-color: #003087; font-weight: bold; }
+            QPushButton:hover { background-color: #ff99ff; }
+            QPushButton:pressed { background-color: #ff1493; }""")
         donate.clicked.connect(lambda: QDesktopServices.openUrl(QUrl("https://www.paypal.com/donate/?business=V8SHLGV7N7WSN&no_recurring=0&item_name=If+you+are+super+generous%2C+enjoy+my+software%2C+and+would+like+to+support+its+development%2C+donations+are+greatly+appreciated%21&currency_code=USD")))
 
         layout.addWidget(title)
+        layout.addWidget(image)
         layout.addWidget(author)
         layout.addWidget(version)
         layout.addWidget(github)
