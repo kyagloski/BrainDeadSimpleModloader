@@ -250,7 +250,8 @@ class ModLoaderUserInterface(QMainWindow):
         #inst_man.triggered.connect(self.open_instance_manager)
         ini_man.triggered.connect(self.open_ini_manager)
         parent_cfg=read_parent_cfg()
-        instance_path = next(v["PATH"] for v in parent_cfg["INSTANCES"].values() if v["SELECTED"]) 
+        try: instance_path = next(v["PATH"] for v in parent_cfg["INSTANCES"].values() if v["SELECTED"]) 
+        except: instance_path = parent_cfg["INSTANCES"][list(parent_cfg["INSTANCES"].keys())[0]]["PATH"]
         open_instance.triggered.connect(lambda: self._open_path(instance_path))
         open_target.triggered.connect(lambda: self._open_path(self.cfg["TARGET_DIR"]))
         open_bdsm.triggered.connect(lambda: self._open_path(LOCAL_DIR))
@@ -1062,10 +1063,11 @@ class ModLoaderUserInterface(QMainWindow):
             elif action == expand_all_action:    self.expand_all_seps()
         else:
             if not self.mod_table.selectedItems():
+                add_mod_action = menu.addAction("Install Mod")
                 add_sep_action = menu.addAction("Add Separator")
                 action = menu.exec(self.mod_table.viewport().mapToGlobal(position))
-                if action == add_sep_action:
-                    self.add_separator_at(clicked_row if clicked_row >= 0 else self.mod_table.rowCount())
+                if action == add_mod_action: self.add_mod_dialog()
+                if action == add_sep_action: self.add_separator_at(clicked_row if clicked_row >= 0 else self.mod_table.rowCount())
                 return
             move_to_menu = menu.addMenu("Move to...")
             sep_menu=move_to_menu.addMenu("Separator")

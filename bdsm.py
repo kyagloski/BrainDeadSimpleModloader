@@ -43,7 +43,7 @@ BACKUP_MANIFEST   = BACKUP_DIR/"backup_manifest.txt"
 VERBOSITY         = False
 OPERATION_TIMEOUT = 500 # 0.5s
 
-def create_cfg(path=None, gui=False, is_global=False):
+def create_cfg(path=None, gui=False, is_global=False, instance_path=None):
     # user choices
     if not gui and not path:
         cfg_choice = input("currently no config file exists or is not configured\nwould you like to create one? [Y/n] ").strip().lower()
@@ -71,10 +71,9 @@ def create_cfg(path=None, gui=False, is_global=False):
         f.write("GLOBAL_INSTANCE: true\n")
         # check for native supported game
         name=str(target).split("common"+os.sep)[-1].split(os.sep)[0].strip()
-        if Path(target).parent.name in game_specific.GAME_IDS.keys():
-            instance_path=Path(target).parent/"bdsm_instance"
-        else:
-            instance_path=Path(target)/"bdsm_instance"
+        if not instance_path:
+            if Path(target).parent.name in game_specific.GAME_IDS.keys(): instance_path=Path(target).parent/"bdsm_instance"
+            else: instance_path=Path(target)/"bdsm_instance"
         f.write("INSTANCES:\n")
         f.write(' '*4+name+":\n")
         f.write(' '*8+"PATH: "+str(instance_path)+"\n")
@@ -84,10 +83,9 @@ def create_cfg(path=None, gui=False, is_global=False):
     else:
         # check for native supported game
         name=str(target).split("common"+os.sep)[-1].split(os.sep)[0].strip()
-        if Path(target).parent.name in game_specific.GAME_IDS.keys():
-            instance_path=Path(target).parent/"bdsm_instance"
-        else:
-            instance_path=Path(target)/"bdsm_instance"
+        if not instance_path:
+            if Path(target).parent.name in game_specific.GAME_IDS.keys(): instance_path=Path(target).parent/"bdsm_instance"
+            else: instance_path=Path(target)/"bdsm_instance"
         f.write("SOURCE_DIR: "+str(instance_path/"mods")+"\n")
         f.write("TARGET_DIR: "+str(target)+"\n")
         f.write("COMPAT_DIR: "+str(compat)+"\n")

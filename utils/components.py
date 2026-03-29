@@ -684,7 +684,9 @@ class ConfigManager(QMainWindow):
 
     def __init__(self, cfg_dict):
         super().__init__()
-        self.config = cfg_dict
+        from bdsm import read_cfg
+        #self.config = cfg_dict
+        self.config = read_cfg()
         self.widgets = {}
         self.setWindowTitle("Settings")
         self.setMinimumWidth(800)
@@ -754,6 +756,7 @@ class ConfigManager(QMainWindow):
 
             elif key == STYLESHEET_KEY:
                 combo = QComboBox()
+                combo.setMinimumWidth(250)
                 options = list(STYLESHEET_OPTIONS)
                 if value not in options:
                     options.insert(0, value)
@@ -1072,6 +1075,11 @@ class InstanceManager(QDialog):
             instance_path=Path(path).parent/"bdsm_instance"
         else:
             instance_path=Path(path)/"bdsm_instance"
+        
+        if os.path.exists(instance_path): 
+            instance_path, dirname = fix_dirname_used(instance_path)
+            print(f"prexisting instance found, creating instance at {instance_path}")
+            name+=str(instance_path)[-1]
 
         # TODO: actually fix this lol
         try: compat_dir=infer_compat_path(path)
@@ -1085,7 +1093,7 @@ class InstanceManager(QDialog):
         write_cfg(cfg_dict, is_global=True)
   
         ensure_dir(instance_path)
-        create_cfg(gui=True, path=instance_path/"config.yaml") 
+        create_cfg(gui=True, path=instance_path/"config.yaml", instance_path=instance_path) 
         #write_cfg(instance_cfg,path=instance_path/"config.yaml")
 
         self._refresh_list()
@@ -1097,7 +1105,6 @@ class InstanceManager(QDialog):
         item = self.list_widget.currentItem()
         if not item: return
         name = item.data(Qt.ItemDataRole.UserRole)
-
 
         cfg_dict=read_parent_cfg()
         path=cfg_dict["INSTANCES"][name]["PATH"]
@@ -1113,6 +1120,10 @@ class InstanceManager(QDialog):
         msg.setCheckBox(checkbox)
         if msg.exec() != QMessageBox.StandardButton.Yes: return
 
+        # check if deleting selected instance
+        sel_name = next(k for k, v in cfg_dict["INSTANCES"].items() if v["SELECTED"])
+        if name==sel_name: self._on_select(item=self.list_widget.item(0))
+
         cfg_dict=read_parent_cfg()
         path=cfg_dict["INSTANCES"][name]["PATH"]
         del cfg_dict["INSTANCES"][name]
@@ -1121,10 +1132,12 @@ class InstanceManager(QDialog):
 
         self._refresh_list()
 
-    def _on_select(self):
+    def _on_select(self, item=None):
         from bdsm import read_parent_cfg, write_cfg
-        item = self.list_widget.currentItem()
-        if not item: return
+        if not item:
+            item = self.list_widget.currentItem()
+            if not item: item=self.list_widget.item(0)
+        
         self.selected_instance = item.data(Qt.ItemDataRole.UserRole)
         cfg_dict=read_parent_cfg(gui=True)
         instance_path=""
