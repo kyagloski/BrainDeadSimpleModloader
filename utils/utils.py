@@ -195,8 +195,8 @@ def launch_game(cfg,game_exe):
         runtime=proton.split("common")[0]+"common/SteamLinuxRuntime_sniper/_v2-entry-point --verb=waitforexitandrun -- "
         exe=cfg["EXECUTABLES"][game_exe]["PATH"]
         exe_dir=str(Path(exe).parent).replace(' ','\\ ')
-        params=cfg["EXECUTABLES"][game_exe]["PARAMS"]
-        if not params or params=="%command%": params="{cmd}"
+        params=cfg["EXECUTABLES"][game_exe]["PARAMS"].replace("%command%",'{cmd}')
+        if not params: params="{cmd}"
         appid=f"SteamAppId={str(Path(c).name)}"
         gameid=f"SteamGameId={str(Path(c).name)}"
         #compat_appid=f"STEAM_COMPAT_APP_ID={str(Path(c).name)}"
