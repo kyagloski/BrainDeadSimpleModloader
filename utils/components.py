@@ -729,12 +729,14 @@ class ConfigManager(QMainWindow):
                     "LOAD_ORDER"       :"Currently selected loadorder preset file",
                     "INI_DIR"          :"INI backup directory location",
                     "STYLESHEET"       :"Application theme stylesheet (located in <BDSM_INSTALL_DIR>/utils/resources/stylesheets)",
-                    "EXECUTABLES"      :""}
+                    "EXECUTABLES"      :"",
+                    "INSTANCES"        :""}
 
         import bdsm
         STYLESHEET_OPTIONS = [Path(i).name for i in os.listdir(bdsm.LOCAL_DIR/"utils"/"resources"/"stylesheets") if i.endswith(".qss")]
 
         for key, value in self.config.items():
+            if key not in tooltips: continue
             row = QHBoxLayout()
             label = QLabel(f"<b>{key.replace("_",' ')}</b>")
             label.setToolTip(tooltips[key])
