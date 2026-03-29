@@ -21,11 +21,12 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import ( Qt, QItemSelectionModel, QObject, QThread, 
     QWaitCondition, pyqtSignal, QMutex, QMutexLocker, QTimer, QPoint, 
     QSize, QFile, QTextStream, QMetaObject, pyqtSlot, QItemSelection,
-    QPointF, Qt, QPropertyAnimation, QDir, QEvent
+    QPointF, Qt, QPropertyAnimation, QDir, QEvent, QUrl
 )
 from PyQt6.QtGui import ( QIcon, QFont, QTextCursor, QCursor, QPixmap, 
     QTextDocument, QPainter, QRadialGradient, QColor, QSyntaxHighlighter,
-    QTextCharFormat, QFileSystemModel, QShortcut, QKeySequence
+    QTextCharFormat, QFileSystemModel, QShortcut, QKeySequence,
+    QDesktopServices
 )
 
 from game_specific import *
@@ -779,15 +780,11 @@ class ConfigManager(QMainWindow):
                 btn.setFixedWidth(28)
                 # Determine if it's a file or directory picker
                 is_file = key == "LOAD_ORDER"
-                #btn.clicked.connect(lambda checked, e=edit, f=is_file: self.browse(e, f))
                 btn.clicked.connect(lambda checked, e=edit, f=is_file: file_select(e, f))
                 row.addWidget(btn)
 
             else:
                 continue
-                #edit = QLineEdit(value)
-                #self.widgets[key] = edit
-                #row.addWidget(edit)
 
             form.addLayout(row)
 
@@ -800,17 +797,14 @@ class ConfigManager(QMainWindow):
         apply_btn.setFixedWidth(90)
         apply_btn.clicked.connect(self.apply)
         bottom.addWidget(apply_btn)
-        outer.addLayout(bottom)
 
-    #def browse(self, edit, is_file=False):
-    #    current = edit.text()
-    #    start = current if os.path.exists(current) else os.path.expanduser("~")
-    #    if is_file:
-    #        path, _ = QFileDialog.getOpenFileName(self, "Select File", start)
-    #    else:
-    #        path = QFileDialog.getExistingDirectory(self, "Select Directory", start)
-    #    if path:
-    #        edit.setText(path)
+        info_btn = QPushButton("ⓘ")
+        info_btn.setToolTip("About")
+        info_btn.setFixedSize(30, 35)
+        info_btn.clicked.connect(lambda: self.show_info(self))
+        bottom.addWidget(info_btn)
+
+        outer.addLayout(bottom)
 
     def apply(self):
         from bdsm import write_cfg
@@ -821,6 +815,52 @@ class ConfigManager(QMainWindow):
         write_cfg(self.config)
         self.applied.emit()
         #QMessageBox.information(self, "Saved", "Settings saved!"+' '*20)
+
+    def show_info(self, parent=None):
+        dialog = QDialog(parent)
+        dialog.setWindowTitle("About")
+        dialog.setMinimumWidth(300)
+        layout = QVBoxLayout(dialog)
+        layout.setSpacing(10)
+
+        title = QLabel("BrainDead Simple Modloader")
+        title.setStyleSheet("font-size: 18px; font-weight: bold;")
+        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+        from bdsm import VERSION
+        version = QLabel(f"Version {VERSION}")
+        version.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+        author = QLabel("Author: Kyle Yagloski (kyleyagloski@gmail.com)")
+        author.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+        github = QLabel('<a href="https://github.com/kyagloski/BrainDeadSimpleModloader">Github</a>')
+        github.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        github.setOpenExternalLinks(True)
+
+        check_update = QPushButton("Check for Updates")
+        check_update.clicked.connect(lambda: QDesktopServices.openUrl(QUrl("https://github.com/kyagloski/BrainDeadSimpleModloader/releases")))
+
+        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
+        buttons.rejected.connect(dialog.close)
+
+        layout2=QHBoxLayout()
+        donate = QPushButton("❤ Donate")
+        donate.setFixedWidth(80)
+        donate.setStyleSheet("color: white; background-color: #003087; font-weight: bold;")
+        donate.clicked.connect(lambda: QDesktopServices.openUrl(QUrl("https://www.paypal.com/donate/?business=V8SHLGV7N7WSN&no_recurring=0&item_name=If+you+are+super+generous%2C+enjoy+my+software%2C+and+would+like+to+support+its+development%2C+donations+are+greatly+appreciated%21&currency_code=USD")))
+
+        layout.addWidget(title)
+        layout.addWidget(author)
+        layout.addWidget(version)
+        layout.addWidget(github)
+        layout.addWidget(check_update)
+        layout2.addWidget(donate)
+        layout2.addStretch()
+        layout2.addWidget(buttons)
+        layout.addLayout(layout2)
+
+        dialog.exec() 
 
 
 class InstanceManager(QDialog):
@@ -1122,7 +1162,7 @@ class InstanceManager(QDialog):
 
         # check if deleting selected instance
         sel_name = next(k for k, v in cfg_dict["INSTANCES"].items() if v["SELECTED"])
-        if name==sel_name: self._on_select(item=self.list_widget.item(0))
+        if name==sel_name: self._on_select(item=self.list_widget.item(0), close=False)
 
         cfg_dict=read_parent_cfg()
         path=cfg_dict["INSTANCES"][name]["PATH"]
@@ -1132,7 +1172,7 @@ class InstanceManager(QDialog):
 
         self._refresh_list()
 
-    def _on_select(self, item=None):
+    def _on_select(self, item=None, close=True):
         from bdsm import read_parent_cfg, write_cfg
         if not item:
             item = self.list_widget.currentItem()
@@ -1147,6 +1187,7 @@ class InstanceManager(QDialog):
             else: cfg_dict["INSTANCES"][i]["SELECTED"]=False
         write_cfg(cfg_dict, is_global=True)
         self.closed.emit(self.selected_instance)
+        if not close: return
         self.accept()
         self.close()
 
