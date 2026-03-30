@@ -22,7 +22,7 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import ( Qt, QItemSelectionModel, QObject, QThread, 
     QWaitCondition, pyqtSignal, QMutex, QMutexLocker, QTimer, QPoint, 
     QSize, QFile, QTextStream, QMetaObject, pyqtSlot, QItemSelection,
-    QPointF, Qt
+    QPointF, Qt, QCoreApplication
 )
 from PyQt6.QtGui import ( QIcon, QFont, QTextCursor, QCursor, QPixmap, 
     QTextDocument, QPainter, QRadialGradient, QColor
@@ -35,12 +35,11 @@ except:
     from bdsm import *
 from components import *
 from game_specific import *
-#from instance_manager import *
-#from ini_manager import *
-#from exe_manager import *
 from installer import *
 
 os.environ["QT_WAYLAND_SHELL_INTEGRATION"] = "xdg-shell"
+os.environ["QT_QPA_PLATFORMTHEME"] = ""
+QCoreApplication.setAttribute(Qt.ApplicationAttribute.AA_DontUseNativeDialogs)
 SHOW_MSG_TIME    = 10000000
 DIALOGUE_WIDTH   = 60
 

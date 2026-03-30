@@ -21,8 +21,14 @@ except:
     from gui import *
 
 VERSION           = "v0.8"
+
+RUN_AS_EXE = False
+if RUN_AS_EXE: 
+    LOCAL_DIR     = Path(os.path.dirname(sys.executable))
+else:
+    LOCAL_DIR     = Path(os.path.dirname(os.path.realpath(__file__)))
+
 GLOBAL_INSTANCE   = False
-LOCAL_DIR         = Path(os.path.dirname(os.path.realpath(__file__)))
 CONFIG_FILE       = LOCAL_DIR/"config.yaml"
 LOAD_ORDER        = LOCAL_DIR/"manifest"/"loadorders"/"loadorder.txt"
 PRESET_DIR        = LOCAL_DIR/"manifest"/"loadorders"
