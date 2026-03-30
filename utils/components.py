@@ -1171,14 +1171,22 @@ class InstanceManager(QDialog):
         if msg.exec() != QMessageBox.StandardButton.Yes: return
 
         # check if deleting selected instance
-        sel_name = next(k for k, v in cfg_dict["INSTANCES"].items() if v["SELECTED"])
+        try: sel_name = next(k for k, v in cfg_dict["INSTANCES"].items() if v["SELECTED"])
+        except: sel_name = cfg_dict["INSTANCES"][list(cfg_dict["INSTANCES"].keys())[0]]["PATH"] 
         if name==sel_name: self._on_select(item=self.list_widget.item(0), close=False)
-
+        
         cfg_dict=read_parent_cfg()
         path=cfg_dict["INSTANCES"][name]["PATH"]
         del cfg_dict["INSTANCES"][name]
         if checkbox.isChecked(): shutil.rmtree(path)
         write_cfg(cfg_dict, is_global=True)
+
+        # last instance was deleted
+        if cfg_dict["INSTANCES"]=={}:
+            from bdsm import create_cfg
+            reply = QMessageBox.warning(None,"No Remaining Instances", "There are no remaining instances.\nRerunning initial instance setup..."+' '*20, QMessageBox.StandardButton.Ok)
+            os.execv(sys.executable, [sys.executable]+sys.argv) # restart application
+            return
 
         self._refresh_list()
 
