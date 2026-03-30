@@ -520,10 +520,7 @@ def main():
     elif args.switch_launcher: game_specific.switch_launcher(COMPAT_DIR, TARGET_DIR) 
     elif args.backup_ini: game_specific.backup_ini(COMPAT_DIR, INI_DIR)
     elif args.restore_ini: game_specific.restore_ini(COMPAT_DIR, INI_DIR)
-    else: 
-        if os.name=="posix": cmd=f"{sys.executable} {str(LOCAL_DIR/'utils'/'gui.py')}"
-        else: cmd=f"{sys.executable} {str(LOCAL_DIR/'utils'/'gui.py')}"
-        os.system(cmd)
+    else: os.system(f"{sys.executable} {str(LOCAL_DIR/'utils'/'gui.py')}")
 
 if __name__ == "__main__":
     main()
