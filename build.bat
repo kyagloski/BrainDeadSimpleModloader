@@ -20,6 +20,7 @@ python -m PyInstaller --hidden-import=yaml ^
                       --hidden-import=patoolib.programs.bzip2 ^
                       --hidden-import=patoolib.programs.zip ^
                       --hidden-import=patoolib.programs.unar ^
+                      --icon=resources/icon.png ^
                       --onefile --windowed --name bdsm gui.py
 
 mkdir dist\utils

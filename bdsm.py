@@ -49,7 +49,7 @@ BACKUP_MANIFEST   = BACKUP_DIR/"backup_manifest.txt"
 VERBOSITY         = False
 OPERATION_TIMEOUT = 500 # 0.5s
 
-def create_cfg(path=None, gui=False, is_global=False, instance_path=None):
+def create_cfg(path=None, gui=False, is_global=False, instance_path=None, app=None):
     # user choices
     if not gui and not path:
         cfg_choice = input("currently no config file exists or is not configured\nwould you like to create one? [Y/n] ").strip().lower()
@@ -58,7 +58,7 @@ def create_cfg(path=None, gui=False, is_global=False, instance_path=None):
         if not os.path.exists(target): print("error: invalid target dir: "+target); sys.exit()
         if not target.endswith("Data"): target=os.path.join(target,"Data")
     elif is_global:
-        target=select_directory()
+        target=select_directory(app=app)
     else:
         target=path.parent.parent
         name=str(target).split("common"+os.sep)[-1].split(os.sep)[0].strip()
@@ -123,7 +123,11 @@ def read_cfg(sync=True, gui=False, update=True):
 
     global_cfg = read_parent_cfg(gui=gui, update=update)
     if GLOBAL_INSTANCE: 
-        child_instance = Path(next((v["PATH"] for v in INSTANCES.values() if v["SELECTED"]), next(iter(INSTANCES.values()))["PATH"]))
+        try: child_instance = Path(next((v["PATH"] for v in INSTANCES.values() if v["SELECTED"]), next(iter(INSTANCES.values()))["PATH"]))
+        except: 
+            create_cfg(gui=True, is_global=True)
+            global_cfg=read_parent_cfg(gui=gui, update=update)
+            child_instance = Path(global_cfg["INSTANCES"][list(global_cfg["INSTANCES"].keys())[0]]["PATH"])
         ensure_dir(child_instance)
         CONFIG_FILE       = child_instance/"config.yaml"
         BACKUP_DIR        = child_instance/"manifest"
