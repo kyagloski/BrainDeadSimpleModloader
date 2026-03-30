@@ -219,7 +219,7 @@ def set_launcher(compat_dir, target_dir, launcher):
     if not van_bin+"_original" in os.listdir(bin_dir): # fresh setup
         first=True
         os.rename(bin_dir/van_bin, bin_dir/(van_bin+"_original"))
-        LOCAL_DIR=Path(os.path.dirname(os.path.realpath(__file__))).parent
+        from bdsm import LOCAL_DIR
         CONFIG_FILE=LOCAL_DIR/"config.yaml"
         with open(CONFIG_FILE, "r") as f: cfg = OrderedDict(yaml.safe_load(f))
         #cfg=read_cfg(sync=False)
@@ -302,11 +302,11 @@ def get_launchers(target_dir,compat_dir):
 
 
 def get_game_icon(exe, cfg):
+    from bdsm import LOCAL_DIR
     game=determine_game(cfg["COMPAT_DIR"])
     game_dir=Path(cfg["TARGET_DIR"]).parent
     steamid=determine_game_id(cfg["TARGET_DIR"])
-    local_dir=Path(os.path.dirname(os.path.realpath(__file__)))
-    save_dir=ensure_dir(local_dir/"resources"/"requested")
+    save_dir=ensure_dir(LOCAL_DIR/"utils"/"resources"/"requested")
     if game in VANILLA_LAUNCHERS.keys():
         launcher_exe=VANILLA_LAUNCHERS[game]
         game_exe=VANILLA_GAMES[game]
@@ -322,11 +322,11 @@ def get_game_icon(exe, cfg):
 
 
 def get_game_bgs(cfg):
+    from bdsm import LOCAL_DIR
     game=determine_game(cfg["COMPAT_DIR"])
     game_dir=Path(cfg["TARGET_DIR"]).parent
     steamid=determine_game_id(cfg["TARGET_DIR"])
-    local_dir=Path(os.path.dirname(os.path.realpath(__file__)))
-    save_dir=ensure_dir(local_dir/"resources"/"requested")
+    save_dir=ensure_dir(LOCAL_DIR/"utils"/"resources"/"requested")
     bg_paths=get_steam_resources(game,steamid,save_dir,bg=True)
     bg_paths=[i for i in bg_paths if i!=None]
     return bg_paths

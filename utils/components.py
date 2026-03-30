@@ -953,8 +953,8 @@ class InstanceManager(QDialog):
         self._refresh_list()
 
     def _refresh_list(self):
-        from bdsm import read_parent_cfg, read_child_cfg
-        local_dir = Path(os.path.dirname(os.path.realpath(__file__))).parent
+        from bdsm import read_parent_cfg, read_child_cfg, LOCAL_DIR
+        #local_dir = Path(os.path.dirname(os.path.realpath(__file__))).parent
         cfg = read_parent_cfg()
         self.list_widget.clear()
         for instance in sorted(cfg["INSTANCES"]):
@@ -967,7 +967,7 @@ class InstanceManager(QDialog):
             target_dir=instance_cfg["TARGET_DIR"]
             game=str(target_dir).split("common"+os.sep)[-1].split(os.sep)[0]
             steam_id=determine_game_id(target_dir)
-            save_dir=ensure_dir(local_dir/"utils"/"resources"/"requested")
+            save_dir=ensure_dir(LOCAL_DIR/"utils"/"resources"/"requested")
             if "ICON" in cfg["INSTANCES"][instance].keys() and \
             cfg["INSTANCES"][instance]["ICON"]: icon_path=cfg["INSTANCES"][instance]["ICON"]
             else: icon_path = get_steam_resources(game,steam_id,save_dir,icon=True)

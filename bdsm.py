@@ -20,7 +20,7 @@ except:
     import game_specific
     from gui import *
 
-VERSION           = "v0.8"
+VERSION           = "v0.9"
 
 RUN_AS_EXE = False
 if RUN_AS_EXE: 
