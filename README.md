@@ -41,7 +41,6 @@ After configuring your target path you should be greeted with a screen such as t
 <img width="1214" height="770" alt="sky" src="https://github.com/user-attachments/assets/c5e1059c-1f16-4bf1-a2a1-05d8be83c824" />
 
 There are many themes to choose from and now resources are pulled from the Steam API for things like backgrounds and game icons. There a few more themes not listed here and you can create more yourself, the are located in the `/resources/stylesheets` directory, based on the qss file format.
-![drac]()
 
 <table style="border:none; border-collapse:collapse;">
   <tr>
