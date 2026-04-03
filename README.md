@@ -3,6 +3,7 @@
 
 ## Overview
 A Python-based mod management tool designed as an alternative to Mod Organizer 2 for Linux and Windows platforms. This application enables efficient management of mod collections for Bethesda games, including Skyrim, Fallout 3, Fallout 4, and Fallout: New Vegas.
+Multiple instances for one or many games can all be managed at the same time by this powerful mod tool.
 
 Currently this tool is supported on both Linux and Windows. Its primary maintenance focus will be on Linux, however.
 
@@ -19,11 +20,11 @@ Currently this tool is supported on both Linux and Windows. Its primary maintena
 - Skyrim (Legacy Version)
 - Skyrim VR
 
-### In Development
-- Oblivion Remastered
+*You can try your luck with other games, as arbitary folder choices are acceptable, but more work needs to be done to fully support this*
 
 ## Features
 - **Multi-File Drag-and-Drop Installation**: Install multiple mods simultaneously with intuitive drag-and-drop functionality
+- **Multi Instance Management**: Manage multiple BDSM instances for one or many games, separating your mod list and configuration
 - **INI Editor and Backup System**: Edit configuration files with built-in backup protection
 - **Game Executable Management**: Launch game executables directly from the application
 - **Multiple Preset Support**: Create and manage different mod configurations
@@ -37,7 +38,23 @@ Upon launching the application for the first time, you will be prompted to speci
 The tool will install mods to the `Data` folder within your game directory. While you can manually select the `Data` folder during setup, the application will automatically append it to your specified path if not already included.
 
 After configuring your target path you should be greeted with a screen such as this:
-<img width="1249" height="782" alt="test" src="https://github.com/user-attachments/assets/0d86590c-72a6-4df7-b277-e2ddf318ac32" />
+<img width="1214" height="770" alt="sky" src="https://github.com/user-attachments/assets/c5e1059c-1f16-4bf1-a2a1-05d8be83c824" />
+
+There are many themes to choose from and now resources are pulled from the Steam API for things like backgrounds and game icons. There a few more themes not listed here and you can create more yourself, the are located in the `/resources/stylesheets` directory, based on the qss file format.
+
+<table style="border:none; border-collapse:collapse;">
+  <tr>
+    <td style="border:none; padding:4px;"><img src="https://github.com/user-attachments/assets/1baadc22-d7f6-42ee-9171-56510d65dc1f" width="310"/></td>
+    <td style="border:none; padding:4px;"><img src="https://github.com/user-attachments/assets/19cacaa7-9642-499a-9460-8c645c3edeac" width="310"/></td>
+    <td style="border:none; padding:4px;"><img src="https://github.com/user-attachments/assets/65d6bc02-0299-4d9b-9a75-053bd93e0cb1" width="310"/></td>
+  </tr>
+  <tr>
+    <td style="border:none; padding:4px;"><img src="https://github.com/user-attachments/assets/43e05b8b-14b9-4f59-8fe1-8e15675c38a5" width="310"/></td>
+    <td style="border:none; padding:4px;"><img src="https://github.com/user-attachments/assets/efe764d1-173f-41c0-8385-e15705b7bc2a" width="310"/></td>
+    <td style="border:none; padding:4px;"><img src="https://github.com/user-attachments/assets/0988352b-009f-4564-94ce-7b8450d41e28" width="310"/></td>
+  </tr>
+</table>
+
 
 ## Installing Mods
 
@@ -62,14 +79,17 @@ Example of multiple mod install by dragging and dropping files
 
 The listed binaries can be configured by the user by clicking the button next to the drop down.
 
-Example of Executable Manager
-<img width="1248" height="785" alt="testaaaa" src="https://github.com/user-attachments/assets/e71b17a4-0611-4c4c-9f3b-279a12de004a" />
+<img width="678" height="304" alt="em" src="https://github.com/user-attachments/assets/ba489aef-f7be-44aa-b759-17801b28c088" />
 
+
+## Instance Manager
+Add multiple instances for a game or multiple games. You can also duplicate instances to have a known starting point for a new instance configuration.
+
+<img width="408" height="594" alt="im" src="https://github.com/user-attachments/assets/96248692-7552-4daf-8973-5593bc10664d" /><img width="508" height="254" alt="ie" src="https://github.com/user-attachments/assets/898940cc-4c8a-4e0c-bbaa-28187059a716" />
 
 ## INI Manager
 The INI Manager can manage backups for your INI files because Bethesda is really good at breaking INI configurations. Upon opening you'll find two columns, your backups, and your current game files. By clicking `Backup` it will create a timestamped backup in the root folder of your instance under the `./BrainDeadSimpleModloader/inis/` directory.
 
-Example of INI Manager
 <img width="1746" height="1031" alt="aaa" src="https://github.com/user-attachments/assets/5650c9e0-b9d0-4bf9-a9a6-d23f8255209b" />
 (Soon there will be a diff mode to view changes across files)
 
@@ -77,7 +97,7 @@ Example of INI Manager
 
 ### How It Works
 
-The modloader operates similarly to Mod Organizer 2's portable mode, with each instance managing a single game installation. The workflow is as follows:
+The technical workflow for how mods are injected is as follows:
 
 1. **Mod Installation**: Mods are placed in a staging directory upon installation
 2. **Mod Loading**: When launching the game or clicking the **"Load Mods"** button, all files from the staging directory are symlinked to your game's `Data` directory. Symlinking is key here because it is orders of mangitude faster than copying files around (on Windows hard links are used).
