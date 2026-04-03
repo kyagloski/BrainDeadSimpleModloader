@@ -51,7 +51,7 @@ There are many themes to choose from and now resources are pulled from the Steam
   <tr>
     <td style="border:none; padding:4px;"><img src="https://github.com/user-attachments/assets/43e05b8b-14b9-4f59-8fe1-8e15675c38a5" width="250"/></td>
     <td style="border:none; padding:4px;"><img src="https://github.com/user-attachments/assets/efe764d1-173f-41c0-8385-e15705b7bc2a" width="250"/></td>
-    <td style="border:none; padding:4px;"><img src="https://github.com/user-attachments/assets/0988352b-009f-4564-94ce-7b8450d41e28" width="250"/></td>
+    <td style="border:none; padding:4px;"><img src="https://github.com/user-attachments/assets/1b2f13a0-94ec-497d-9dfe-0bb93b406bba" width="250"/></td>
   </tr>
 </table>
 
