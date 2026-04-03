@@ -317,7 +317,7 @@ class RichTextDelegate(QStyledItemDelegate):
 
 
 class FadingBg:
-    def __init__(self, table, paths, interval_ms=20000):
+    def __init__(self, table, paths, interval_ms=7000): # 20000 - 20s
         global OVERRIDING_COLOR, OVERRIDDEN_COLOR
         OVERRIDING_COLOR = "#00ff00"
         OVERRIDDEN_COLOR = "#ff0000"
@@ -382,11 +382,11 @@ class FadingBg:
         
         # Cap the radius at a maximum value
         max_dimension = max(pix.width(), pix.height())
-        radius = min(max_dimension / 1.1, 1200)  # Cap at 1200px
+        radius = min(max_dimension / 1.4, 2000)  # Cap at 1200px
         
         grad = QRadialGradient(center, radius)
         grad.setColorAt(0.0, QColor(0, 0, 0, 0))
-        grad.setColorAt(0.7, QColor(0, 0, 0, 200))
+        grad.setColorAt(0.7, QColor(0, 0, 0, 180))
         grad.setColorAt(1.0, QColor(0, 0, 0, 255))
         
         painter.fillRect(result.rect(), grad)
@@ -736,7 +736,7 @@ class ConfigManager(QMainWindow):
                     "INSTANCES"        :""}
 
         import bdsm
-        STYLESHEET_OPTIONS = [Path(i).name for i in os.listdir(bdsm.LOCAL_DIR/"utils"/"resources"/"stylesheets") if i.endswith(".qss")]
+        STYLESHEET_OPTIONS = sorted([Path(i).name for i in os.listdir(bdsm.LOCAL_DIR/"utils"/"resources"/"stylesheets") if i.endswith(".qss")])
 
         for key, value in self.config.items():
             if key not in tooltips: continue
@@ -1150,7 +1150,7 @@ class InstanceManager(QDialog):
         self.list_widget.setCurrentRow(self.list_widget.count() - 1)
 
     def _on_remove(self):
-        from bdsm import read_parent_cfg, write_cfg 
+        from bdsm import read_parent_cfg, write_cfg, get_instance_name
 
         item = self.list_widget.currentItem()
         if not item: return
@@ -1171,8 +1171,7 @@ class InstanceManager(QDialog):
         if msg.exec() != QMessageBox.StandardButton.Yes: return
 
         # check if deleting selected instance
-        try: sel_name = next(k for k, v in cfg_dict["INSTANCES"].items() if v["SELECTED"])
-        except: sel_name = cfg_dict["INSTANCES"][list(cfg_dict["INSTANCES"].keys())[0]]["PATH"] 
+        sel_name = get_instance_name()
         if name==sel_name: self._on_select(item=self.list_widget.item(0), close=False)
         
         cfg_dict=read_parent_cfg()

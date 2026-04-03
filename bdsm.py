@@ -102,7 +102,7 @@ def create_cfg(path=None, gui=False, is_global=False, instance_path=None):
         f.write("UPDATE_ON_CLOSE: true\n")
         f.write("LINK_ON_LAUNCH: true\n")
         f.write("DO_REQUESTS: true\n")
-        f.write("STYLESHEET: dark.qss\n")
+        f.write("STYLESHEET: dark_round.qss\n")
         launchers=game_specific.get_launchers(target,compat)
         f.write("EXECUTABLES:\n")
         for title in launchers:
@@ -234,6 +234,18 @@ def write_cfg(d, path=None, is_global=False):
     with open(config_file, "w") as f: 
         yaml.dump(dict(d),f,sort_keys=False,default_flow_style=False)
 
+
+def get_instance_name():
+    cfg=read_parent_cfg()
+    try: sel_name = next(k for k, v in cfg["INSTANCES"].items() if v["SELECTED"])
+    except: sel_name = cfg["INSTANCES"][list(cfg["INSTANCES"].keys())[0]]["PATH"] 
+    return sel_name
+
+
+def get_instance_path():
+    sel_path = Path(next((v["PATH"] for v in global_cfg["INSTANCES"].values() if v["SELECTED"]), next(iter(global_cfg["INSTANCES"].values()))["PATH"]))
+    return sel_path
+    
 
 def load_list():
     read_cfg(sync=False)

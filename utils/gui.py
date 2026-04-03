@@ -47,8 +47,8 @@ class ModLoaderUserInterface(QMainWindow):
     def __init__(self):
         super().__init__()
         self.cfg = read_cfg(sync=False)
-
-        self.setWindowTitle("BrainDead Simple Modloader (BDSM "+VERSION+")")
+        instance = get_instance_name()
+        self.setWindowTitle(f"BrainDead Simple Modloader ({VERSION}) - {instance}")
         icon=QIcon()
         try:icon.addFile(str(LOCAL_DIR/"utils"/"resources"/"icon.png"), QSize(256, 256))
         except:pass
@@ -173,7 +173,7 @@ class ModLoaderUserInterface(QMainWindow):
     def _create_file_explorer(self):
         widget = QWidget()
         layout = QVBoxLayout(widget)
-        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setContentsMargins(0, 0, 5, 0)
         
         self.explorer_label = QLabel("Select a mod to view files")
         self.explorer_label.setStyleSheet("padding: 5px; font-weight: bold;")
@@ -191,7 +191,7 @@ class ModLoaderUserInterface(QMainWindow):
     def _create_plugins_list(self):
         widget = QWidget()
         layout = QVBoxLayout(widget)
-        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setContentsMargins(0, 0, 5, 0)
         
         self.plugins_label = QLabel("Loaded Plugins")
         self.plugins_label.setStyleSheet("padding: 5px; font-weight: bold;")
@@ -249,8 +249,7 @@ class ModLoaderUserInterface(QMainWindow):
         #inst_man.triggered.connect(self.open_instance_manager)
         ini_man.triggered.connect(self.open_ini_manager)
         parent_cfg=read_parent_cfg()
-        try: instance_path = next(v["PATH"] for v in parent_cfg["INSTANCES"].values() if v["SELECTED"]) 
-        except: instance_path = parent_cfg["INSTANCES"][list(parent_cfg["INSTANCES"].keys())[0]]["PATH"]
+        instance_path = get_instance_path()
         open_instance.triggered.connect(lambda: self._open_path(instance_path))
         open_target.triggered.connect(lambda: self._open_path(self.cfg["TARGET_DIR"]))
         open_bdsm.triggered.connect(lambda: self._open_path(LOCAL_DIR))
@@ -325,7 +324,15 @@ class ModLoaderUserInterface(QMainWindow):
         return preset_layout
 
     def _create_mod_table(self):
+        container = QFrame()
+        container.setObjectName("tableContainer")
+        table_layout = QVBoxLayout(container)
+        table_layout.setContentsMargins(0, 0, 0, 0)
+        table_layout.setSpacing(0)
+
         self.mod_table = ModTable(self, 0, 4)
+        table_layout.addWidget(self.mod_table)
+
         #self.mod_table.setItemDelegateForColumn(2, RichTextDelegate(self))
         self.mod_table.setItemDelegateForColumn(2, RichTextDelegate(self))
         self.mod_table.setItemDelegateForColumn(3, RichTextDelegate(self))
@@ -374,7 +381,8 @@ class ModLoaderUserInterface(QMainWindow):
         self.mod_table.setColumnWidth(2, 530)
         self.mod_table.setColumnWidth(3, 80)
 
-        return self.mod_table
+        #return self.mod_table
+        return container
 
     def _create_search_box(self):
         self.search_box = QLineEdit()
@@ -463,7 +471,7 @@ class ModLoaderUserInterface(QMainWindow):
 
     def open_settings(self):
         global_cfg = read_parent_cfg(gui=True, update=False)
-        child_instance = Path(next((v["PATH"] for v in global_cfg["INSTANCES"].values() if v["SELECTED"]), next(iter(global_cfg["INSTANCES"].values()))["PATH"]))
+        child_instance = get_instance_path()
         config_path = Path(child_instance/"config.yaml")
         if not config_path.exists():
             QMessageBox.warning(self, "Error", f"Config file not found:\n{config_path}")
@@ -1553,6 +1561,9 @@ class ModLoaderUserInterface(QMainWindow):
         self._init_ui(verbose=self.log_output.toPlainText())
         self._load_initial_data(reload=True)
         
+        instance = get_instance_name()
+        self.setWindowTitle(f"BrainDead Simple Modloader ({VERSION}) - {instance}")
+
         self.blockSignals(False)
  
     def open_ini_manager(self):

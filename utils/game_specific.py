@@ -291,7 +291,7 @@ def get_launchers(target_dir,compat_dir):
     launchers=dict()
     if game=="Default": return {"Default":{"PATH":"\"\"","PARAMS":""}}
     for exe in exes:
-        if os.path.exists(exe):
+        if os.path.exists(exe) and str(exe).endswith('.exe'):
             title=str(exe.name).replace(".exe",'')
             launchers[title]=dict()
             launchers[title]["ICON"]=""
