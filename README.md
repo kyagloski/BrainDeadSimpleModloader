@@ -55,6 +55,7 @@ There are many themes to choose from and now resources are pulled from the Steam
     <td style="border:none; padding:4px;"><img src="https://github.com/user-attachments/assets/dd43183d-c8f1-4dcb-983d-4b39922469b0" width="250"/></td>
   </tr>
 </table>
+
 *(Rich text is supported for separator naming btw)*
 
 ## Installing Mods
