@@ -44,14 +44,14 @@ There are many themes to choose from and now resources are pulled from the Steam
 
 <table style="border:none; border-collapse:collapse;">
   <tr>
-    <td style="border:none; padding:4px;"><img src="https://github.com/user-attachments/assets/1baadc22-d7f6-42ee-9171-56510d65dc1f" width="310"/></td>
-    <td style="border:none; padding:4px;"><img src="https://github.com/user-attachments/assets/19cacaa7-9642-499a-9460-8c645c3edeac" width="310"/></td>
-    <td style="border:none; padding:4px;"><img src="https://github.com/user-attachments/assets/65d6bc02-0299-4d9b-9a75-053bd93e0cb1" width="310"/></td>
+    <td style="border:none; padding:4px;"><img src="https://github.com/user-attachments/assets/1baadc22-d7f6-42ee-9171-56510d65dc1f" width="200"/></td>
+    <td style="border:none; padding:4px;"><img src="https://github.com/user-attachments/assets/19cacaa7-9642-499a-9460-8c645c3edeac" width="200"/></td>
+    <td style="border:none; padding:4px;"><img src="https://github.com/user-attachments/assets/65d6bc02-0299-4d9b-9a75-053bd93e0cb1" width="200"/></td>
   </tr>
   <tr>
-    <td style="border:none; padding:4px;"><img src="https://github.com/user-attachments/assets/43e05b8b-14b9-4f59-8fe1-8e15675c38a5" width="310"/></td>
-    <td style="border:none; padding:4px;"><img src="https://github.com/user-attachments/assets/efe764d1-173f-41c0-8385-e15705b7bc2a" width="310"/></td>
-    <td style="border:none; padding:4px;"><img src="https://github.com/user-attachments/assets/0988352b-009f-4564-94ce-7b8450d41e28" width="310"/></td>
+    <td style="border:none; padding:4px;"><img src="https://github.com/user-attachments/assets/43e05b8b-14b9-4f59-8fe1-8e15675c38a5" width="200"/></td>
+    <td style="border:none; padding:4px;"><img src="https://github.com/user-attachments/assets/efe764d1-173f-41c0-8385-e15705b7bc2a" width="200"/></td>
+    <td style="border:none; padding:4px;"><img src="https://github.com/user-attachments/assets/0988352b-009f-4564-94ce-7b8450d41e28" width="200"/></td>
   </tr>
 </table>
 
