@@ -20,7 +20,7 @@ Currently this tool is supported on both Linux and Windows. Its primary maintena
 - Skyrim (Legacy Version)
 - Skyrim VR
 
-*You can try your luck with other games, as arbitary folder choices are acceptable, but more work needs to be done to fully support this*
+*(You can try your luck with other games, as arbitary folder choices are acceptable, but more work needs to be done to fully support this)*
 
 ## Features
 - **Multi-File Drag-and-Drop Installation**: Install multiple mods simultaneously with intuitive drag-and-drop functionality
@@ -55,7 +55,7 @@ There are many themes to choose from and now resources are pulled from the Steam
     <td style="border:none; padding:4px;"><img src="https://github.com/user-attachments/assets/dd43183d-c8f1-4dcb-983d-4b39922469b0" width="250"/></td>
   </tr>
 </table>
-
+*(Rich text is supported for separator naming btw)*
 
 ## Installing Mods
 
