@@ -86,7 +86,11 @@ The listed binaries can be configured by the user by clicking the button next to
 ## Instance Manager
 Add multiple instances for a game or multiple games. You can also duplicate instances to have a known starting point for a new instance configuration.
 
-<img width="408" height="594" alt="im" src="https://github.com/user-attachments/assets/96248692-7552-4daf-8973-5593bc10664d" /><img width="508" height="254" alt="ie" src="https://github.com/user-attachments/assets/898940cc-4c8a-4e0c-bbaa-28187059a716" />
+![output_small](https://github.com/user-attachments/assets/a3a3171e-2f03-4abb-a00c-dc62e6869005)
+
+You can edit instances in the instance configurator.
+
+<img width="508" height="254" alt="ie" src="https://github.com/user-attachments/assets/898940cc-4c8a-4e0c-bbaa-28187059a716" />
 
 ## INI Manager
 The INI Manager can manage backups for your INI files because Bethesda is really good at breaking INI configurations. Upon opening you'll find two columns, your backups, and your current game files. By clicking `Backup` it will create a timestamped backup in the root folder of your instance under the `./BrainDeadSimpleModloader/inis/` directory.
