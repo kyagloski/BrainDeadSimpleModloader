@@ -243,7 +243,8 @@ def get_instance_name():
 
 
 def get_instance_path():
-    sel_path = Path(next((v["PATH"] for v in global_cfg["INSTANCES"].values() if v["SELECTED"]), next(iter(global_cfg["INSTANCES"].values()))["PATH"]))
+    cfg=read_parent_cfg()
+    sel_path = Path(next((v["PATH"] for v in cfg["INSTANCES"].values() if v["SELECTED"]), next(iter(cfg["INSTANCES"].values()))["PATH"]))
     return sel_path
     
 
