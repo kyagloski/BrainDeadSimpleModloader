@@ -317,7 +317,7 @@ class RichTextDelegate(QStyledItemDelegate):
 
 
 class FadingBg:
-    def __init__(self, table, paths, interval_ms=7000): # 20000 - 20s
+    def __init__(self, table, paths, interval_ms=20000): # 20000 - 20s
         global OVERRIDING_COLOR, OVERRIDDEN_COLOR
         OVERRIDING_COLOR = "#00ff00"
         OVERRIDDEN_COLOR = "#ff0000"
