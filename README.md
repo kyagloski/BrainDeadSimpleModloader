@@ -42,7 +42,7 @@ The tool will install mods to the `Data` folder within your game directory. Whil
 After configuring your target path you should be greeted with a screen such as this:
 <img width="1214" height="770" alt="sky" src="https://github.com/user-attachments/assets/c5e1059c-1f16-4bf1-a2a1-05d8be83c824" />
 
-There are many themes to choose from and now resources are pulled from the Steam API for things like backgrounds and game icons. There a few more themes not listed here and you can create more yourself, the are located in the `/resources/stylesheets` directory, based on the qss file format.
+There are many themes to choose from and now resources are pulled from the Steam API for things like backgrounds and game icons. There a few more themes not listed here and you can create more yourself, the are located in the `<bdsm_instance>/utils/resources/stylesheets` directory, based on the qss file format.
 
 <table style="border:none; border-collapse:collapse;">
   <tr>
@@ -68,7 +68,7 @@ After initial setup, you can install mods using either of the following methods:
 Acceptable File Formats
 - 7z, RAR, Zip, Directories
   
-Installed mods are stored in a staging directory located at `./BrainDeadSimpleModloader/mods/` within the application's root folder (default configuration).
+Installed mods are stored in a staging directory located at `<bdsm_instance>/mods/` within the application's root folder (default configuration).
 
 Example of multiple mod install by dragging and dropping files
 (install order is based off timestamp)
@@ -95,7 +95,7 @@ You can also edit instances in the instance configurator. Edit things such as na
 <img width="508" height="254" alt="ie" src="https://github.com/user-attachments/assets/898940cc-4c8a-4e0c-bbaa-28187059a716" />
 
 ## INI Manager
-The INI Manager can manage backups for your INI files because Bethesda is really good at breaking INI configurations. Upon opening you'll find two columns, your backups, and your current game files. By clicking `Backup` it will create a timestamped backup in the root folder of your instance under the `./BrainDeadSimpleModloader/inis/` directory.
+The INI Manager can manage backups for your INI files because Bethesda is really good at breaking INI configurations. Upon opening you'll find two columns, your backups, and your current game files. By clicking `Backup` it will create a timestamped backup in the root folder of your instance under the `<bdsm_instance>/inis/` directory.
 
 <img width="1746" height="1031" alt="aaa" src="https://github.com/user-attachments/assets/5650c9e0-b9d0-4bf9-a9a6-d23f8255209b" />
 (Soon there will be a diff mode to view changes across files)
