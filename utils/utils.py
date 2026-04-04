@@ -187,19 +187,40 @@ def get_steam_resources(name,app_id,save_dir,icon=False,bg=False):
     if icon: return str(save_dirs[0])
     else: return save_dirs
 
+def find_sniper():
+    # find sniper runtime for games
+    steam_roots = [
+        Path.home() / ".steam/steam",
+        Path.home() / ".local/share/Steam",
+        Path.home() / "snap/steam/common/.local/share/Steam",
+        Path.home() / ".var/app/com.valvesoftware.Steam/.local/share/Steam",  # Flatpak
+    ]
+    for root in steam_roots:
+        vdf = root / "steamapps/libraryfolders.vdf"
+        if not vdf.exists():
+            continue
+
+        # Parse library paths out of the VDF
+        paths = re.findall(r'"path"\s+"([^"]+)"', vdf.read_text())
+        for lib_path in paths:
+            candidate = Path(lib_path) / "steamapps/common/SteamLinuxRuntime_sniper"
+            if candidate.is_dir():
+                return candidate
+    return None
+
 def launch_game(cfg,game_exe):
+    # TODO: determine if this works across all distros and all steam installtion types
     if os.name=="posix":
         c=cfg["COMPAT_DIR"].split("pfx")[0]
         with open(Path(c)/"config_info",'r') as f: # read steam config for proton path
             proton=(f.readlines()[1].split("files")[0]+"proton").replace(' ','\\ ').replace('(','\\(').replace(')','\\)')
-        runtime=proton.split("common")[0]+"common/SteamLinuxRuntime_sniper/_v2-entry-point --verb=waitforexitandrun -- "
+        runtime=find_sniper()/"_v2-entry-point --verb=waitforexitandrun -- "
         exe=cfg["EXECUTABLES"][game_exe]["PATH"]
         exe_dir=str(Path(exe).parent).replace(' ','\\ ')
         params=cfg["EXECUTABLES"][game_exe]["PARAMS"].replace("%command%",'{cmd}')
         if not params: params="{cmd}"
         appid=f"SteamAppId={str(Path(c).name)}"
         gameid=f"SteamGameId={str(Path(c).name)}"
-        #compat_appid=f"STEAM_COMPAT_APP_ID={str(Path(c).name)}"
         data_path="STEAM_COMPAT_DATA_PATH="+c
         client_path="STEAM_COMPAT_CLIENT_INSTALL_PATH="+os.path.expanduser("~/.steam/steam")
         #cmd=f"cd {exe_dir}; {cpath} {spath} {appid} {compat_appid} {gameid} {runtime} {proton} waitforexitandrun \"{exe}\" {params} &"
