@@ -88,7 +88,7 @@ Add multiple instances for a game or multiple games. You can also duplicate inst
 
 ![output_small](https://github.com/user-attachments/assets/a3a3171e-2f03-4abb-a00c-dc62e6869005)
 
-You can edit instances in the instance configurator.
+You can also edit instances in the instance configurator. Edit things such as name, icon, location.
 
 <img width="508" height="254" alt="ie" src="https://github.com/user-attachments/assets/898940cc-4c8a-4e0c-bbaa-28187059a716" />
 
