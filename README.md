@@ -21,6 +21,7 @@ Currently this tool is supported on both Linux and Windows. Its primary maintena
 - Skyrim VR
 
 *(You can try your luck with other games, as arbitary folder choices are acceptable, but more work needs to be done to fully support this)*
+*(Also note this is designed for steam games so I have no clue how it would on GOG, still need to look into that)*
 
 ## Features
 - **Multi-File Drag-and-Drop Installation**: Install multiple mods simultaneously with intuitive drag-and-drop functionality
