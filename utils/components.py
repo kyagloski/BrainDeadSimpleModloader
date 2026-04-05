@@ -1597,6 +1597,7 @@ class ExeManager(QMainWindow):
         new_item = ListItem()
         if title: new_item.title=title
         if icon is not None: new_item.icon=icon
+        else: new_item.icon=None
         if path: new_item.path=path
         if params: new_item.params=params if params.strip() else "%command%"
 
