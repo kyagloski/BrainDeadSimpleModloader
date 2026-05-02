@@ -403,6 +403,8 @@ def process_fomod(archive_path, extract_dir, output_dir, parent=None):
         all_files = fomod_data['required_files'] + results['selected_files'] + conditional_files
         if all_files:
             mod_name = install_fomod_files(archive_path, all_files, extract_dir, output_dir)
+        else:
+            mod_name = install_fomod_files(archive_path, fomod_data['required_files'], extract_dir, output_dir)
         #return results['selected_files']+conditional_files # idk about this one
         return mod_name
     return None  # User cancelled
@@ -472,20 +474,29 @@ def install_mod_files(archive_path, temp_dir, output_dir):
     return mod_name
 
 def installer_run(archive_path=None, output_dir=None, temp_dir=None, gui=False, parent=None):
-    try:
-        temp_dir = find_mod_base_dir(Path(temp_dir))
-        is_fomod = find_fomod_config(temp_dir)
-        if is_fomod:
-            mod_name = process_fomod(archive_path, temp_dir, output_dir, parent)
-        else:
-            mod_name = install_mod_files(archive_path, temp_dir, output_dir)
-    except Exception as e:
-        if gui:
-            QMessageBox.warning(parent,
-                        "Installation Error",
-                        f"Encountered exception during mod installation! \n\nException:\n"+str(e))
-        print("error: encountered exception: "+str(e)+" when installing mod, giving up")
-        return None
+    
+
+    temp_dir = find_mod_base_dir(Path(temp_dir))
+    is_fomod = find_fomod_config(temp_dir)
+    if is_fomod:
+        mod_name = process_fomod(archive_path, temp_dir, output_dir, parent)
+    else:
+        mod_name = install_mod_files(archive_path, temp_dir, output_dir)
+
+    #try:
+    #    temp_dir = find_mod_base_dir(Path(temp_dir))
+    #    is_fomod = find_fomod_config(temp_dir)
+    #    if is_fomod:
+    #        mod_name = process_fomod(archive_path, temp_dir, output_dir, parent)
+    #    else:
+    #        mod_name = install_mod_files(archive_path, temp_dir, output_dir)
+    #except Exception as e:
+    #    if gui:
+    #        QMessageBox.warning(parent,
+    #                    "Installation Error",
+    #                    f"Encountered exception during mod installation! \n\nException:\n"+str(e))
+    #    print("error: encountered exception: "+str(e)+" when installing mod, giving up")
+    #    return None
     try: shutil.rmtree(temp_dir); print("removed tmp extract dir")
     except: print("warning: could not remove tmp extract dir")
     return mod_name

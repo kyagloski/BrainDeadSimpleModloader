@@ -84,7 +84,9 @@ class ModLoaderUserInterface(QMainWindow):
 
         # thread containers
         self.extract_threads=[]
-        self.status_threads=[]
+        self.extract_status_threads=[]
+        self.link_status_threads=None
+        self.exe_status_thread=None
 
         QShortcut(QKeySequence("Escape"), self).activated.connect(self.close)
         QShortcut(QKeySequence("Ctrl+S"), self).activated.connect(self.auto_save_load_order)
@@ -456,7 +458,8 @@ class ModLoaderUserInterface(QMainWindow):
         
         self.update_status()
         self.update_unload_button_state()
-        if not reload: self.load_plugins_list()
+        #if not reload: self.load_plugins_list()
+        self.load_plugins_list()
 
     def _open_path(self, path):
         """Open a path with system's default application"""
@@ -489,8 +492,8 @@ class ModLoaderUserInterface(QMainWindow):
     def load_plugins_list(self):
         self.plugins_list.clear()
         try:
-            import bdsm
-            backup_path = Path(bdsm.BACKUP_DIR)
+            from bdsm import BACKUP_DIR
+            backup_path = Path(BACKUP_DIR)
             plugins_file = None
             
             for filename in ['Plugins.txt', 'plugins.txt']:
@@ -505,12 +508,12 @@ class ModLoaderUserInterface(QMainWindow):
                         line = line.strip()
                         if line and not (line.startswith('#') or line.startswith(">#") or line.startswith("v#")):
                             self.plugins_list.addTopLevelItem(QTreeWidgetItem([line]))
-        except Exception: pass
+        except Exception as e: print(f"ecountered exception loading plugins list: {e}")
 
     def update_unload_button_state(self):
         try:
-            import bdsm
-            backup_path = Path(bdsm.BACKUP_DIR)
+            from bdsm import BACKUP_DIR
+            backup_path = Path(BACKUP_DIR)
             state=False
             if backup_path.exists() and "backup_manifest.txt" in os.listdir(backup_path): state=True
             self.unload_button.setEnabled(state)
@@ -681,6 +684,8 @@ class ModLoaderUserInterface(QMainWindow):
 
     def load_mods(self):
         try:
+            self.link_status_thread=LinkingStatusThread(self.status_label, load=True)
+            self.link_status_thread.start()
             read_cfg(sync=False) # check for update
             self.executor.add_command(perform_copy, tuple())
             self.executor.commands_finished.connect(self.load_plugins_list)
@@ -691,6 +696,8 @@ class ModLoaderUserInterface(QMainWindow):
 
     def unload_mods(self):
         try:
+            self.link_status_thread=LinkingStatusThread(self.status_label, load=False)
+            self.link_status_thread.start()
             read_cfg(sync=False) # check for update
             self.executor.add_command(restore, tuple())
             self.executor.commands_finished.connect(self.load_plugins_list)
@@ -1457,10 +1464,8 @@ class ModLoaderUserInterface(QMainWindow):
         self.statusBar().showMessage(f"UI Scale: {int(self._scale_factor * 100)}%", SHOW_MSG_TIME) 
 
     def dropEvent(self, event):
-        if event.mimeData().hasUrls():
-            self.handle_file_drop(event)
-        else:
-            event.ignore()
+        if event.mimeData().hasUrls(): self.handle_file_drop(event)
+        else: event.ignore()
 
     def handle_file_drop(self, event):
         valid_extensions = {'.7z', '.zip', '.rar',''}
@@ -1475,15 +1480,15 @@ class ModLoaderUserInterface(QMainWindow):
         file_paths.sort(key=lambda p: p.stat().st_mtime)
          
         extract_thread=ExtractorThread(file_paths, self.cfg["SOURCE_DIR"], self) 
-        status_thread=StatusThread(self.status_label,Path(file_paths[0]))
+        extract_status_thread=ExtractionStatusThread(self.status_label,Path(file_paths[0]))
         self.extract_threads.append(extract_thread)
-        self.status_threads.append(status_thread)
+        self.extract_status_threads.append(extract_status_thread)
         self._extracting=True
-        extract_thread.progress.connect(lambda file: status_thread.set_file(file))
-        extract_thread.temp_complete.connect(status_thread.set_temp_complete)
-        extract_thread.complete.connect(status_thread.done)
+        extract_thread.progress.connect(lambda file: extract_status_thread.set_file(file))
+        extract_thread.temp_complete.connect(extract_status_thread.set_temp_complete)
+        extract_thread.complete.connect(extract_status_thread.done)
         extract_thread.start()
-        status_thread.start()
+        extact_status_thread.start()
  
         self.setStyleSheet("") # this seems broken with extra stylesheets
         event.acceptProposedAction()
@@ -1491,21 +1496,20 @@ class ModLoaderUserInterface(QMainWindow):
     def add_mod_dialog(self):
         file_paths, _ = QFileDialog.getOpenFileNames(
             self, "Select Mod Archive(s)", "",
-            "Mod Archives (*.7z *.zip *.rar);;All Files (*)"
-        )
+            "Mod Archives (*.7z *.zip *.rar);;All Files (*)")
         if not file_paths: return
         file_paths.sort(key=lambda p: Path(p).stat().st_mtime)
         
         extract_thread=ExtractorThread(file_paths, self.cfg["SOURCE_DIR"], self) 
-        status_thread=StatusThread(self.status_label,Path(file_paths[0]))
+        extract_status_thread=ExtractionStatusThread(self.status_label,Path(file_paths[0]))
         self.extract_threads.append(extract_thread)
-        self.status_threads.append(status_thread)
+        self.extract_status_threads.append(extract_status_thread)
         self._extracting=True
-        extract_thread.progress.connect(lambda file: status_thread.set_file(file))
-        extract_thread.temp_complete.connect(status_thread.set_temp_complete)
-        extract_thread.complete.connect(status_thread.done)
+        extract_thread.progress.connect(lambda file: extract_status_thread.set_file(file))
+        extract_thread.temp_complete.connect(extract_status_thread.set_temp_complete)
+        extract_thread.complete.connect(extract_status_thread.done)
         extract_thread.start()
-        status_thread.start()
+        extract_status_thread.start()
  
     def handle_mod_install(self, temp_dir, archive_path):
         if not temp_dir:
@@ -1621,12 +1625,23 @@ class ModLoaderUserInterface(QMainWindow):
                         "Launch Error",
                         f"Steam is required to launch the game\nPlease open steam to launch executable")
             return
+        if self.exe_status_thread!=None \
+        and self.exe_status_thread.stopped!=True:
+            reply=QMessageBox.warning(None,
+                        "Launch Warning",
+                        f"Process already running\nWould you like to start a new process anyway?",
+                        QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+            if reply!=QMessageBox.StandardButton.Yes: return
         self.cfg=read_cfg(sync=False)
         if self.cfg["LINK_ON_LAUNCH"]: 
+            self.link_status_thread=LinkingStatusThread(self.status_label, load=True)
+            self.link_status_thread.start()
             self.auto_save_load_order(instant=True)
             perform_copy()
-        launch_game(self.cfg, self.current_exe) 
-
+            self.link_status_thread.stopped=True
+        proc=launch_game(self.cfg, self.current_exe) 
+        self.exe_status_thread=ExeStatusThread(self.status_label,proc)
+        self.exe_status_thread.start()
 
 if __name__ == "__main__":
     cfg=read_cfg(gui=True)

@@ -303,8 +303,9 @@ def perform_copy():
         with open(BACKUP_MANIFEST, "r", encoding="utf-8") as f:
             backedup_manifest = [line.strip() for line in f if line.strip()]
 
-    # clean all symlinks (if install broke) (maybe risky idk)
+    # clean all symlinks and empty dirs (if install broke) (maybe risky idk)
     remove_symlink_rec(TARGET_DIR)
+    remove_empty_dirs_rec(TARGET_DIR)
 
     for dirname in load_order:
         if dirname.startswith('*') \

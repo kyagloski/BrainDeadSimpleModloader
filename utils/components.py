@@ -94,6 +94,7 @@ class CommandExecutorThread(QThread):
         #self.parent._loading=True
         command_id(*command_data) 
         #self.parent._loading=False
+        self.parent.link_status_thread.stopped=True
         return f"Executed: {command_id} with data: {command_data}"
         
     def run(self):
@@ -144,7 +145,7 @@ class ExtractorThread(QThread):
         self.complete.emit()
 
 
-class StatusThread(QThread):
+class ExtractionStatusThread(QThread):
     def __init__(self, status_widget, file):
         super().__init__()
         self.status=status_widget
@@ -181,6 +182,56 @@ class StatusThread(QThread):
 
     def done(self):
         self.stopped=True
+
+
+class LinkingStatusThread(QThread):
+    def __init__(self, status_widget, load):
+        super().__init__()
+        self.status=status_widget
+        self.load=load
+        self.stopped=False
+       
+    def run(self):
+        i=0
+        a=["|","/","-","\\"]
+        while not self.stopped:
+            if i>len(a)-1:i=0
+            #if os.path.isdir(self.file): self.status.setText(f"Copying {name}  {a[i]}")
+            #else: self.status.setText(f"Extracting {name}  {a[i]}")
+            if self.load: self.status.setText(f"Linking mod files... {a[i]}")
+            else: self.status.setText(f"Unlinking mod files... {a[i]}")
+            QThread.msleep(500)
+            i+=1
+        if self.load: self.status.setText("Linking complete!")
+        else: self.status.setText("Unlinking complete!")
+        QThread.msleep(500)
+        #self.status.setText("")
+
+    def set_temp_complete(self):
+        self.temp_complete=True 
+
+    def done(self):
+        self.stopped=True
+
+class ExeStatusThread(QThread):
+    def __init__(self, status_widget, proc):
+        super().__init__()
+        self.status=status_widget
+        self.proc=proc
+        self.stopped=False
+
+    def run(self):
+        i=0
+        a=["|","/","-","\\"]
+        while self.proc.poll()==None:
+            if i>len(a)-1:i=0
+            self.status.setText(f"Executable running (pid: {self.proc.pid}) {a[i]}")
+            QThread.msleep(500)
+            i+=1
+        self.status.setText("Executable stopped!")
+        self.stopped=True
+        QThread.msleep(1000)
+        #self.status.setText("")
 
 
 class ConflictThread(QThread):

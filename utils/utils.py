@@ -24,6 +24,11 @@ def force_symlink(target, link_name):
 def remove_symlink_rec(target):
     [os.unlink(os.path.join(r,f)) for r,d,fs in os.walk(target) for f in fs+d if os.path.islink(os.path.join(r,f))]
 
+def remove_empty_dirs_rec(target):
+    for dirpath, dirnames, filenames in os.walk(target, topdown=False):
+        if dirpath == target: continue
+        if not os.listdir(dirpath): os.rmdir(dirpath)
+
 def fix_path_case(path):
     path = os.path.abspath(path)
     drive, rest = os.path.splitdrive(path)
@@ -233,7 +238,8 @@ def launch_game(cfg,game_exe):
         cmd=f"cd \"{exe_dir}\" & \"{exe}\" {params}"
     print("Launching using: "+cmd)
     #os.system(cmd) # breaks on wayland
-    subprocess.Popen(cmd, shell=True)
+    proc=subprocess.Popen(cmd, shell=True)
+    return proc
 
 
 
