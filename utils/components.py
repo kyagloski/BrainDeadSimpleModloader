@@ -1943,6 +1943,8 @@ class INIManager(QMainWindow):
         self.left_editor.viewport().installEventFilter(self)
         self.right_editor.installEventFilter(self)
         self.right_editor.viewport().installEventFilter(self)
+        self.right_editor.verticalScrollBar().valueChanged.connect(self.sync_scrolls)
+        self.left_editor.verticalScrollBar().valueChanged.connect(self.sync_scrolls)
 
         # Initialize paths
         self.compat_dir  = compat_dir
@@ -2288,7 +2290,21 @@ class INIManager(QMainWindow):
             self.left_editor.setFont(font)
         if hasattr(self, 'right_editor'):
             self.right_editor.setFont(font)
-    
+
+    def highlight_line(self):
+        # TODO: implement highlight syncing across both text editors
+        cursor=self.right_editor().textCursor()
+        line=cursor.blockNumber()
+
+
+    def sync_scrolls(self, *_):
+        if self.sender()==self.left_editor.verticalScrollBar():
+            try: self.right_editor.verticalScrollBar().setValue(self.left_editor.verticalScrollBar().value())
+            except Exception as e: print(e)
+        if self.sender()==self.right_editor.verticalScrollBar():
+            try: self.left_editor.verticalScrollBar().setValue(self.right_editor.verticalScrollBar().value())
+            except: pass
+ 
     def eventFilter(self, obj, event):
         """Handle Ctrl+Scroll zoom for editors"""
         from PyQt6.QtGui import QWheelEvent
@@ -2313,7 +2329,7 @@ class INIManager(QMainWindow):
                 else:
                     self.zoom_out()
                 return True  # Block the scroll event completely
-        
+                    
         return super().eventFilter(obj, event)
 
 
