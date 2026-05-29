@@ -17,7 +17,8 @@ from PyQt6.QtWidgets import (
     QTreeWidget, QTreeWidgetItem, QTableWidget, QTableWidgetItem, 
     QPushButton, QSplitter, QLabel, QLineEdit, QMenu, QMessageBox, 
     QComboBox, QFileDialog, QInputDialog, QTextEdit, QToolButton, 
-    QSplashScreen, QToolTip, QStyledItemDelegate, QHeaderView
+    QSplashScreen, QToolTip, QStyledItemDelegate, QHeaderView,
+    QTabWidget
 )
 from PyQt6.QtCore import ( Qt, QItemSelectionModel, QObject, QThread, 
     QWaitCondition, pyqtSignal, QMutex, QMutexLocker, QTimer, QPoint, 
@@ -159,19 +160,34 @@ class ModLoaderUserInterface(QMainWindow):
         self.statusBar().showMessage("Ready!", SHOW_MSG_TIME)
 
     def _create_left_panel(self):
-        left_panel = QWidget()
-        left_layout = QVBoxLayout(left_panel)
-        left_layout.setContentsMargins(0, 0, 0, 0)
-        
-        left_splitter = QSplitter(Qt.Orientation.Vertical)
-        left_layout.addWidget(left_splitter)
-        
-        left_splitter.addWidget(self._create_file_explorer())
-        left_splitter.addWidget(self._create_plugins_list())
-        left_splitter.setSizes([400, 200])
-        
-        return left_panel
+        tabs = QTabWidget()
 
+        files_tab = self._create_file_explorer()
+        files_layout = QVBoxLayout()
+        files_layout.addWidget(files_tab)
+
+        plugins_tab = self._create_plugins_list()
+        plugins_layout = QVBoxLayout()
+        plugins_layout.addWidget(plugins_tab)
+        
+        tabs.addTab(plugins_tab, "Plugins")
+        tabs.addTab(files_tab, "Files")
+   
+        #left_panel = QWidget()
+        #
+        #left_layout = QVBoxLayout(left_panel)
+        #left_layout.setContentsMargins(0, 0, 0, 0)
+        #
+        #left_splitter = QSplitter(Qt.Orientation.Vertical)
+        #left_layout.addWidget(left_splitter)
+        #
+        #left_splitter.addWidget(self._create_file_explorer())
+        #left_splitter.addWidget(self._create_plugins_list())
+        #left_splitter.setSizes([400, 200])
+        #
+        #return left_panel
+        return tabs
+    
     def _create_file_explorer(self):
         widget = QWidget()
         layout = QVBoxLayout(widget)
@@ -215,6 +231,7 @@ class ModLoaderUserInterface(QMainWindow):
         right_layout.addLayout(self._create_button_layout())
         
         return right_panel
+
 
     def _create_top_layout(self):
         preset_layout = QHBoxLayout()
