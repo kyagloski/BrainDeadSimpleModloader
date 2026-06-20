@@ -94,7 +94,7 @@ class CommandExecutorThread(QThread):
         #self.parent._loading=True
         command_id(*command_data) 
         #self.parent._loading=False
-        self.parent.link_status_thread.stopped=True
+        if self.parent.link_status_thread: self.parent.link_status_thread.stopped=True
         return f"Executed: {command_id} with data: {command_data}"
         
     def run(self):
@@ -2295,7 +2295,6 @@ class INIManager(QMainWindow):
         # TODO: implement highlight syncing across both text editors
         cursor=self.right_editor().textCursor()
         line=cursor.blockNumber()
-
 
     def sync_scrolls(self, *_):
         if self.sender()==self.left_editor.verticalScrollBar():

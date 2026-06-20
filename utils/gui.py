@@ -56,7 +56,13 @@ class ModLoaderUserInterface(QMainWindow):
         self.setWindowIcon(QIcon(icon))
         self.resize(1000, 600)
         self.splitters=[] # for resize state later
-        
+       
+        # thread containers
+        self.extract_threads=[]
+        self.extract_status_threads=[]
+        self.link_status_thread=None
+        self.exe_status_thread=None
+ 
         self._loading = True
         self._scale_factor = 1.0
         self._separator_rows = {}
@@ -82,12 +88,6 @@ class ModLoaderUserInterface(QMainWindow):
         self.executor = CommandExecutorThread(self)
         self.executor.commands_finished.connect(self.load_plugins_list)
         self.executor.start()
-
-        # thread containers
-        self.extract_threads=[]
-        self.extract_status_threads=[]
-        self.link_status_threads=None
-        self.exe_status_thread=None
 
         QShortcut(QKeySequence("Escape"), self).activated.connect(self.close)
         QShortcut(QKeySequence("Ctrl+S"), self).activated.connect(self.auto_save_load_order)
@@ -173,19 +173,6 @@ class ModLoaderUserInterface(QMainWindow):
         tabs.addTab(plugins_tab, "Plugins")
         tabs.addTab(files_tab, "Files")
    
-        #left_panel = QWidget()
-        #
-        #left_layout = QVBoxLayout(left_panel)
-        #left_layout.setContentsMargins(0, 0, 0, 0)
-        #
-        #left_splitter = QSplitter(Qt.Orientation.Vertical)
-        #left_layout.addWidget(left_splitter)
-        #
-        #left_splitter.addWidget(self._create_file_explorer())
-        #left_splitter.addWidget(self._create_plugins_list())
-        #left_splitter.setSizes([400, 200])
-        #
-        #return left_panel
         return tabs
     
     def _create_file_explorer(self):
