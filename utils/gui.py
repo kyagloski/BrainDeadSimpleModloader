@@ -1492,7 +1492,7 @@ class ModLoaderUserInterface(QMainWindow):
         extract_thread.temp_complete.connect(extract_status_thread.set_temp_complete)
         extract_thread.complete.connect(extract_status_thread.done)
         extract_thread.start()
-        extact_status_thread.start()
+        extract_status_thread.start()
  
         self.setStyleSheet("") # this seems broken with extra stylesheets
         event.acceptProposedAction()
