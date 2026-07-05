@@ -219,7 +219,7 @@ def fix_cfg(cfg, is_global=False):
         if "UPDATE_ON_CLOSE"   not in cfg.keys(): cfg["UPDATE_ON_CLOSE"]=True;         added=True
         if "LINK_ON_LAUNCH"    not in cfg.keys(): cfg["LINK_ON_LAUNCH"]=True;          added=True
         if "DO_REQUESTS"       not in cfg.keys(): cfg["DO_REQUESTS"]=True;             added=True
-        if "STYLESHEET"        not in cfg.keys(): cfg["STYLESHEET"]="dark.qss";        added=True
+        if "STYLESHEET"        not in cfg.keys(): cfg["STYLESHEET"]="dark_round.qss";  added=True
         if "EXECUTABLES"       not in cfg.keys(): 
             cfg_dict["EXECUTABLES"]=game_specific.get_launchers(cfg["TARGET_DIR"],cfg["COMPAT_DIR"]);
             added=True
