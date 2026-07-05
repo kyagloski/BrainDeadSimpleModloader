@@ -1,5 +1,5 @@
 #!/bin/bash
-set -x
+set -xe
 cp bdsm.py utils
 cd utils
 rm -rf build dist bdsm.spec
