@@ -4,6 +4,8 @@ import os
 import sys
 import shutil
 import argparse
+import subprocess
+import urllib.parse
 import stat
 import yaml
 from pathlib import Path
@@ -45,6 +47,8 @@ INSTANCES         = dict()
 BACKUP_DIR        = LOCAL_DIR/"manifest"
 COPY_MANIFEST     = BACKUP_DIR/"copy_manifest.txt"
 BACKUP_MANIFEST   = BACKUP_DIR/"backup_manifest.txt"
+
+LO_META_SEP       = '\t' # separates mod name from metadata in mod lists (old lists have none)
 
 VERBOSITY         = False
 OPERATION_TIMEOUT = 500 # 0.5s
@@ -102,6 +106,7 @@ def create_cfg(path=None, gui=False, is_global=False, instance_path=None):
         f.write("UPDATE_ON_CLOSE: true\n")
         f.write("LINK_ON_LAUNCH: true\n")
         f.write("DO_REQUESTS: true\n")
+        f.write("DO_SPLASH: true\n")
         f.write("STYLESHEET: dark_round.qss\n")
         launchers=game_specific.get_launchers(target,compat)
         f.write("EXECUTABLES:\n")
@@ -198,6 +203,7 @@ def read_child_cfg(gui=False, path=None, update=True):
         UPDATE_ON_CLOSE   = bool(cfg["UPDATE_ON_CLOSE"])
         LINK_ON_LAUNCH    = bool(cfg["LINK_ON_LAUNCH"])
         DO_REQUESTS       = bool(cfg["DO_REQUESTS"])
+        DO_SPLASH         = bool(cfg["DO_SPLASH"])
         EXECUTABLES       = cfg["EXECUTABLES"]
     return cfg
 
@@ -219,6 +225,7 @@ def fix_cfg(cfg, is_global=False):
         if "UPDATE_ON_CLOSE"   not in cfg.keys(): cfg["UPDATE_ON_CLOSE"]=True;         added=True
         if "LINK_ON_LAUNCH"    not in cfg.keys(): cfg["LINK_ON_LAUNCH"]=True;          added=True
         if "DO_REQUESTS"       not in cfg.keys(): cfg["DO_REQUESTS"]=True;             added=True
+        if "DO_SPLASH"         not in cfg.keys(): cfg["DO_SPLASH"]=True;               added=True
         if "STYLESHEET"        not in cfg.keys(): cfg["STYLESHEET"]="dark_round.qss";  added=True
         if "EXECUTABLES"       not in cfg.keys(): 
             cfg_dict["EXECUTABLES"]=game_specific.get_launchers(cfg["TARGET_DIR"],cfg["COMPAT_DIR"]);
@@ -248,14 +255,38 @@ def get_instance_path():
     return sel_path
     
 
+def split_loadorder_line(line):
+    # "~ModName\tgame=x&modid=1&version=1.0" -> ("~ModName", {...})
+    entry,_,meta=line.rstrip("\r\n").partition(LO_META_SEP)
+    meta=dict(urllib.parse.parse_qsl(meta.strip())) if meta.strip() else {}
+    return entry.strip(), meta
+
+
+def join_loadorder_line(entry, meta=None):
+    meta={k:v for k,v in (meta or {}).items() if v not in (None,"")}
+    if not meta: return entry
+    return entry+LO_META_SEP+urllib.parse.urlencode(meta)
+
+
+def read_loadorder_file(path):
+    with open(path, "r", encoding="utf-8") as f:
+        return [split_loadorder_line(line) for line in f if line.strip()]
+
+
 def load_list():
     read_cfg(sync=False)
     if not os.path.exists(LOAD_ORDER):
         print("load order file not found, creating new manifest/loadorders/loadorder.txt")
         ensure_dir(LOAD_ORDER.parent)
         Path(LOAD_ORDER).touch()
-    with open(LOAD_ORDER, "r", encoding="utf-8") as f:
-        return [line.strip() for line in f if line.strip()]
+    return [entry for entry,_ in read_loadorder_file(LOAD_ORDER) if entry]
+
+
+def load_list_meta():
+    # mod name -> metadata dict, only mods with metadata
+    read_cfg(sync=False)
+    if not os.path.exists(LOAD_ORDER): return dict()
+    return {entry.lstrip('~*'): meta for entry,meta in read_loadorder_file(LOAD_ORDER) if meta}
 
 
 def copy_with_backup(src, dst, backup_dir, copied_manifest, backedup_manifest, target_root):
@@ -341,6 +372,7 @@ def perform_copy():
 
             # copy all files
             for file in files:
+                if rel=="." and file.lower()=="meta.ini": continue # mod metadata, not game data
                 if VERBOSITY: print("linking: "+file) # status
                 if file.endswith('.esm') \
                 or file.endswith('.esl') \
@@ -418,11 +450,12 @@ def restore():
     print("unload complete!")
 
 
-def save_to_loadorder(mods, verbose=True):
+def save_to_loadorder(mods, verbose=True, meta=None):
     read_cfg(sync=False)
+    if meta is None: meta=load_list_meta() # keep existing metadata
     # save list of mods to load order
-    with open(LOAD_ORDER, "w") as f:
-        for mod in mods: f.write(mod+'\n')
+    with open(LOAD_ORDER, "w", encoding="utf-8") as f:
+        for mod in mods: f.write(join_loadorder_line(mod, meta.get(mod.lstrip('~*')))+'\n')
     if verbose: print("wrote to "+str(LOAD_ORDER))
 
 
@@ -456,8 +489,8 @@ def install_mod(archive_path=None, temp_dir=None, gui=False, parent=None, write=
     if write:
         with open(LOAD_ORDER, "a", encoding="utf-8") as f:
             f.write(name+'\n')
+        print("wrote mod: "+name+" to load order!")
     if RELOAD_ON_INSTALL: perform_copy() #restore(); perform_copy()
-    print("wrote mod: "+name+" to load order!")
     return name
 
 
@@ -478,10 +511,10 @@ def delete_mod(mod_name, gui=False, write=True):
         if 'y' not in input(prompt): return
     # remove from load order 
     if write:
-        with open(LOAD_ORDER, "r") as f: lines = f.readlines()
-        with open(LOAD_ORDER, "w") as f:
+        with open(LOAD_ORDER, "r", encoding="utf-8") as f: lines = f.readlines()
+        with open(LOAD_ORDER, "w", encoding="utf-8") as f:
             for line in lines:
-                if line.strip() != mod: f.write(line)
+                if split_loadorder_line(line)[0].lstrip('~*') != mod: f.write(line)
     # delete dir
     set_full_perms_dir(SOURCE_DIR/mod)
     try: shutil.rmtree(SOURCE_DIR/mod)
@@ -492,10 +525,10 @@ def delete_mod(mod_name, gui=False, write=True):
 
 def delete_mod_write(mods):
     # to avoid multiple usage of resource
-    with open(LOAD_ORDER, "r") as f: lines = f.readlines()
-    with open(LOAD_ORDER, "w") as f:
+    with open(LOAD_ORDER, "r", encoding="utf-8") as f: lines = f.readlines()
+    with open(LOAD_ORDER, "w", encoding="utf-8") as f:
         for line in lines:
-            if line.strip() not in mods: f.write(line) # TODO: handle separators here
+            if split_loadorder_line(line)[0] not in mods: f.write(line) # TODO: handle separators here
 
 
 def rename_mod(old_name, new_name):
@@ -507,11 +540,42 @@ def rename_mod(old_name, new_name):
     else: print("error: cannot find mod dir "+str(Path(SOURCE_DIR) / old_name)); return
     for loadorder in os.listdir(PRESET_DIR):
         loadorder = PRESET_DIR/loadorder
-        llist = [line.strip() for line in loadorder.read_text(encoding="utf-8").splitlines()]
-        try: llist[llist.index(old_name)] = new_name
+        llist = [split_loadorder_line(line) for line in loadorder.read_text(encoding="utf-8").splitlines()]
+        try: i = [entry.lstrip('~*') for entry,_ in llist].index(old_name)
         except: continue # this loadorder was not synced
-        loadorder.write_text("\n".join(llist), encoding="utf-8")
+        entry,meta = llist[i]
+        llist[i] = (entry[:len(entry)-len(entry.lstrip('~*'))]+new_name, meta) # keep disabled prefix
+        loadorder.write_text("\n".join(join_loadorder_line(e,m) for e,m in llist), encoding="utf-8")
     print("successfully renamed mod "+old_name+" to "+new_name)
+
+
+def launch_instance(name):
+    cfg_parent=read_parent_cfg()
+    try: instance_path=Path(cfg_parent["INSTANCES"][name]["PATH"]) / "config.yaml"
+    except: print(f"error: no instance named {name}"); sys.exit()
+    cfg=read_child_cfg(path=instance_path, update=False)
+    exe=next(k for k, v in cfg['EXECUTABLES'].items() if v.get('SELECTED'))
+    print(f"launching selected exe: {exe}")
+    launch_game(cfg,exe) 
+    print("game launched, this may take a second...")
+
+
+def list_instances():
+    cfg=read_parent_cfg()
+    print("\n".join(cfg["INSTANCES"]))
+
+
+def nexus_cmd(args):
+    # lazy import, nexus pulls in qt
+    try:    import utils.nexus as nexus
+    except: import nexus
+    if args.nxm:
+        if RUN_AS_EXE: cmd=[sys.executable, "--nxm", args.nxm]
+        else:          cmd=[sys.executable, str(LOCAL_DIR/"utils"/"gui.py"), "--nxm", args.nxm]
+        subprocess.Popen(cmd) # gui hands link to running instance if one exists
+    elif args.nexus_key:    nexus.set_api_key(args.nexus_key)
+    elif args.register_nxm: nexus.register_nxm_handler()
+    elif args.check_updates: nexus.cli_check_updates(read_cfg(sync=False))
 
 
 def main():
@@ -525,6 +589,13 @@ def main():
     parser.add_argument("--restore-ini", action="store_true", help="restore ini files from backup")
     parser.add_argument("-i", "--install", help="install a mod") 
     parser.add_argument("-d", "--delete", help="delete a mod")
+    # TODO: fix this mess
+    parser.add_argument("-ls", "--list-instances", action="store_true", help="list available instances")
+    parser.add_argument("--instance", metavar="NAME", help="play an instance by name (loads mods)")
+    parser.add_argument("--nxm", metavar="URL", help="download and install a nexus nxm:// link")
+    parser.add_argument("--nexus-key", metavar="KEY", help="validate and save nexus api key")
+    parser.add_argument("--register-nxm", action="store_true", help="register bdsm as the nxm:// link handler")
+    parser.add_argument("--check-updates", action="store_true", help="check nexus for mod updates")
     args = parser.parse_args()
 
     if len(sys.argv)>1: read_cfg() 
@@ -538,6 +609,9 @@ def main():
     elif args.switch_launcher: game_specific.switch_launcher(COMPAT_DIR, TARGET_DIR) 
     elif args.backup_ini: game_specific.backup_ini(COMPAT_DIR, INI_DIR)
     elif args.restore_ini: game_specific.restore_ini(COMPAT_DIR, INI_DIR)
+    elif args.list_instances: list_instances()
+    elif args.instance: launch_instance(args.instance)
+    elif args.nxm or args.nexus_key or args.register_nxm or args.check_updates: nexus_cmd(args)
     else: os.system(f"{sys.executable} {str(LOCAL_DIR/'utils'/'gui.py')}")
 
 if __name__ == "__main__":

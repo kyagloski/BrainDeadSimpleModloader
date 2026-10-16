@@ -7,6 +7,7 @@ import random
 from pathlib import Path
 from copy import deepcopy
 from time import sleep
+from datetime import datetime
 
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, 
@@ -39,6 +40,17 @@ OVERRIDDEN_COLOR = "#300505"
 ALPHA   = 20
 OPACITY = ALPHA/255
 DIALOGUE_WIDTH   = 60
+OUTDATED_COLOR   = "#e0b050"
+
+# mod info columns after the conflicts column (key, header, tooltip, width, visible by default)
+INFO_COLUMNS     = [ ("version",   "Version",   "Installed version",                  80,  True),
+                     ("latest",    "Latest",    "Newest version on Nexus",            80,  False),
+                     ("author",    "Author",    "Mod author",                         120, False),
+                     ("category",  "Category",  "Nexus category",                     120, False),
+                     ("modid",     "Nexus ID",  "Nexus mod id",                       70,  False),
+                     ("installed", "Installed", "Install date",                       120, True),
+                     ("file",      "Source",    "Archive the mod was installed from", 200, False) ]
+INFO_COL_START   = 4
 
 class StdoutRedirector(QObject):
     text_written = pyqtSignal(str)
@@ -214,11 +226,12 @@ class LinkingStatusThread(QThread):
         self.stopped=True
 
 class ExeStatusThread(QThread):
-    def __init__(self, status_widget, proc):
+    def __init__(self, status_widget, proc, parent=None):
         super().__init__()
         self.status=status_widget
         self.proc=proc
         self.stopped=False
+        self.parent=parent
 
     def run(self):
         i=0
@@ -230,6 +243,15 @@ class ExeStatusThread(QThread):
             i+=1
         self.status.setText("Executable stopped!")
         self.stopped=True
+
+        # switch to play button again
+        try:
+            self.parent.play_button.setText("▶︎")
+            self.parent.play_button.setToolTip("Launch executable")
+            self.parent.play_button.clicked.disconnect(self.parent.on_kill)
+            self.parent.play_button.clicked.connect(self.parent.on_play)
+        except: pass # this already happened elsewhere
+
         QThread.msleep(1000)
         #self.status.setText("")
 
@@ -623,6 +645,10 @@ class ModTable(QTableWidget):
         conflict_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
         conflict_item.setFlags(conflict_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
         self.setItem(row,3, conflict_item)
+        for col in range(INFO_COL_START, self.columnCount()):
+            info_item = QTableWidgetItem("")
+            info_item.setFlags(Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsSelectable | Qt.ItemFlag.ItemIsDragEnabled)
+            self.setItem(row, col, info_item)
         self.parent._loading=False
 
     def _create_mod_items(self, row, name, checkbox_state=None, conflicts="", tooltip="", hidden=False):
@@ -649,8 +675,36 @@ class ModTable(QTableWidget):
         self.setItem(row, 3, conflict_item)
         conflict_item.setFlags(conflict_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
 
+        self.set_info_items(row, name)
         if hidden: self.setRowHidden(row,True)
         self.parent._loading=False
+
+    def set_info_items(self, row, name):
+        # info comes from the parent's mod_info cache (meta.ini / mod list / archive name)
+        info=getattr(self.parent, "mod_info", {}).get(name, {})
+        for i,(key,_,_,_,_) in enumerate(INFO_COLUMNS):
+            col=INFO_COL_START+i
+            if col>=self.columnCount(): break
+            value=info.get(key, "")
+            tooltip=""
+            if key=="installed": value=datetime.fromtimestamp(value).strftime("%Y-%m-%d %H:%M") if value else ""
+            elif key=="version" and info.get("outdated"): tooltip=f"Update available: {info.get('latest','')}"
+            elif key in ("version","modid") and info.get("guessed"): tooltip="Guessed from archive name, use Nexus > Link to confirm"
+            item = QTableWidgetItem(str(value or ""))
+            item.setFlags(Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsSelectable | Qt.ItemFlag.ItemIsDragEnabled)
+            item.setToolTip(tooltip)
+            if key=="version" and info.get("outdated"): 
+                item.setText(f"{value} ⬆")
+                item.setForeground(QColor(OUTDATED_COLOR))
+            elif tooltip: # guessed, show dimmed
+                font=item.font(); font.setItalic(True); item.setFont(font)
+            item.setData(Qt.ItemDataRole.UserRole, info.get(key, ""))
+            self.setItem(row, col, item)
+
+    def refresh_info_items(self):
+        for row in range(self.rowCount()):
+            if self.is_separator_row(row) or not self.item(row, 2): continue
+            self.set_info_items(row, self.item(row, 2).text())
 
     def highlight_row(self, row, overriding=False, overridden=False):
         for col in range(self.columnCount()):
@@ -768,7 +822,7 @@ class ConfigManager(QMainWindow):
         longest = max((len(k) for k in self.config.keys()), default=10)
         label_width = longest * 8 + 8  # rough char width
         
-        BOOL_KEYS         = {"RELOAD_ON_INSTALL", "UPDATE_ON_CLOSE", "LINK_ON_LAUNCH", "DO_REQUESTS"}
+        BOOL_KEYS         = {"RELOAD_ON_INSTALL", "UPDATE_ON_CLOSE", "LINK_ON_LAUNCH", "DO_REQUESTS", "DO_SPLASH"}
         PATH_KEYS         = {"SOURCE_DIR", "TARGET_DIR", "COMPAT_DIR", "PRESET_DIR", "LOAD_ORDER", "INI_DIR"}
         STYLESHEET_KEY    = "STYLESHEET"
         
@@ -776,6 +830,7 @@ class ConfigManager(QMainWindow):
                     "UPDATE_ON_CLOSE"  :"Save loadorder on close of application",
                     "LINK_ON_LAUNCH"   :"Link all mods upon launching executable",
                     "DO_REQUESTS"      :"Request assets (background and icon images) from Steam API\n(Disabling will not render default background and icons)",
+                    "DO_SPLASH"        :"Show the splash on startup",
                     "SOURCE_DIR"       :"Mod install directory (location mods are linked from)",
                     "TARGET_DIR"       :"Mod load target directory (location mods are linked to)",
                     "COMPAT_DIR"       :"Steam game compatability data directory (necessarily the 'AppData/Local' directory)",

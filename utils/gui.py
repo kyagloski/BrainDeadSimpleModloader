@@ -7,6 +7,7 @@ import platform
 import yaml
 import tempfile
 import random
+import signal
 from pathlib import Path
 from collections import OrderedDict
 from time import sleep
@@ -37,6 +38,7 @@ except:
 from components import *
 from game_specific import *
 from installer import *
+import nexus
 
 os.environ["QT_WAYLAND_SHELL_INTEGRATION"] = "xdg-shell"
 os.environ["QT_QPA_PLATFORMTHEME"] = ""
@@ -62,6 +64,12 @@ class ModLoaderUserInterface(QMainWindow):
         self.extract_status_threads=[]
         self.link_status_thread=None
         self.exe_status_thread=None
+        self.nexus_threads=[]
+        self.nexus_pending=dict()      # (domain, mod_id) -> mod to replace, for website downloads
+        self.nexus_replacements=dict() # archive path -> mod to replace
+        self.mod_info=dict()           # mod name -> info shown in table columns
+        self.ui_state=self._read_ui_state()
+        self._sort_col=2
  
         self._loading = True
         self._scale_factor = 1.0
@@ -83,6 +91,10 @@ class ModLoaderUserInterface(QMainWindow):
         self.status_label.setStyleSheet("font-weight: bold;")
         self.status_label.setFont(QFont("Courier"))
         self.statusBar().addPermanentWidget(self.status_label)
+
+        # receive nxm links from other launches
+        self.nxm_server = nexus.NxmServer(self)
+        self.nxm_server.received.connect(lambda url: nexus.handle_nxm_link(self, url))
 
         # Create the command executor thread
         self.executor = CommandExecutorThread(self)
@@ -243,9 +255,11 @@ class ModLoaderUserInterface(QMainWindow):
         menu = QMenu()
         #inst_man = menu.addAction("Instance Manager")
         ini_man = menu.addAction("INI Manager")
+        nexus_man = menu.addAction("Nexus Manager")
         menu.addSeparator()
         open_instance = menu.addAction("Open Instance Folder")
         open_target = menu.addAction("Open Target Folder")
+        open_compat = menu.addAction("Open Compat Folder")
         open_bdsm = menu.addAction("Open BDSM Folder")
         def show_menu(): menu.exec(self.tools_button.mapToGlobal(QPoint(0, self.tools_button.height())))
         self.tools_button.clicked.connect(show_menu)
@@ -254,10 +268,12 @@ class ModLoaderUserInterface(QMainWindow):
 
         #inst_man.triggered.connect(self.open_instance_manager)
         ini_man.triggered.connect(self.open_ini_manager)
+        nexus_man.triggered.connect(lambda: nexus.open_nexus_manager(self))
         parent_cfg=read_parent_cfg()
         instance_path = get_instance_path()
         open_instance.triggered.connect(lambda: self._open_path(instance_path))
         open_target.triggered.connect(lambda: self._open_path(self.cfg["TARGET_DIR"]))
+        open_compat.triggered.connect(lambda: self._open_path(self.cfg["COMPAT_DIR"]))
         open_bdsm.triggered.connect(lambda: self._open_path(LOCAL_DIR))
         
         preset_layout.addWidget(QLabel("Preset:"))
@@ -336,16 +352,13 @@ class ModLoaderUserInterface(QMainWindow):
         table_layout.setContentsMargins(0, 0, 0, 0)
         table_layout.setSpacing(0)
 
-        self.mod_table = ModTable(self, 0, 4)
+        self.mod_table = ModTable(self, 0, INFO_COL_START+len(INFO_COLUMNS))
         table_layout.addWidget(self.mod_table)
 
         #self.mod_table.setItemDelegateForColumn(2, RichTextDelegate(self))
         self.mod_table.setItemDelegateForColumn(2, RichTextDelegate(self))
         self.mod_table.setItemDelegateForColumn(3, RichTextDelegate(self))
-        self.mod_table.setHorizontalHeaderLabels(["#", "", "Mod Name", "Conflicts" ])
-        self.mod_table.horizontalHeaderItem(0).setToolTip("Click to sort by priority")
-        self.mod_table.horizontalHeaderItem(2).setToolTip("Click to sort by name")
-        self.mod_table.horizontalHeaderItem(3).setToolTip("Overwritten and overriding mods")
+        self._set_header_labels()
 
         self.mod_table.verticalHeader().setVisible(False)
         self.mod_table.itemSelectionChanged.connect(self.on_mod_selected)
@@ -386,9 +399,82 @@ class ModLoaderUserInterface(QMainWindow):
         self.mod_table.setColumnWidth(1, 25)
         self.mod_table.setColumnWidth(2, 530)
         self.mod_table.setColumnWidth(3, 80)
+        for i,(key,_,_,width,_) in enumerate(INFO_COLUMNS): self.mod_table.setColumnWidth(INFO_COL_START+i, width)
+
+        # right click header to toggle columns
+        header.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        header.customContextMenuRequested.connect(self.show_header_menu)
+        for key,col,_,default in self._toggle_columns():
+            self.mod_table.setColumnHidden(col, not self.ui_state["COLUMNS"].get(key, default))
 
         #return self.mod_table
         return container
+
+    def _toggle_columns(self):
+        # (key, column, label, visible by default)
+        cols=[("conflicts", 3, "Conflicts", True)]
+        cols+=[(key, INFO_COL_START+i, label, default) for i,(key,label,_,_,default) in enumerate(INFO_COLUMNS)]
+        return cols
+
+    def _set_header_labels(self, sort_col=None, ascending=True):
+        labels=["#", "", "Mod Name", "Conflicts"]+[c[1] for c in INFO_COLUMNS]
+        if sort_col is not None: labels[sort_col]+=" ↑" if ascending else " ↓"
+        self.mod_table.setHorizontalHeaderLabels(labels)
+        self.mod_table.horizontalHeaderItem(0).setToolTip("Click to sort by priority")
+        self.mod_table.horizontalHeaderItem(2).setToolTip("Click to sort by name")
+        self.mod_table.horizontalHeaderItem(3).setToolTip("Overwritten and overriding mods")
+        for i,(_,_,tooltip,_,_) in enumerate(INFO_COLUMNS):
+            self.mod_table.horizontalHeaderItem(INFO_COL_START+i).setToolTip(tooltip+"\nClick to sort, right click to toggle columns")
+
+    def show_header_menu(self, pos):
+        menu = QMenu(self)
+        for key,col,label,_ in self._toggle_columns():
+            action=menu.addAction(label)
+            action.setCheckable(True)
+            action.setChecked(not self.mod_table.isColumnHidden(col))
+            action.toggled.connect(lambda checked,k=key,c=col: self.set_column_visible(k, c, checked))
+        menu.exec(self.mod_table.horizontalHeader().mapToGlobal(pos))
+
+    def set_column_visible(self, key, col, visible):
+        self.mod_table.setColumnHidden(col, not visible)
+        self.ui_state["COLUMNS"][key]=visible
+        self._write_ui_state()
+
+    def _read_ui_state(self):
+        state={"COLUMNS": dict()}
+        try:
+            with open(LOCAL_DIR/"ui_state.yaml", "r") as f: state.update(yaml.safe_load(f) or {})
+        except FileNotFoundError: pass
+        except Exception as e: print(f"warning: could not read ui state ({e})")
+        if not isinstance(state.get("COLUMNS"), dict): state["COLUMNS"]=dict()
+        return state
+
+    def _write_ui_state(self):
+        try:
+            with open(LOCAL_DIR/"ui_state.yaml", "w") as f: yaml.dump(dict(self.ui_state),f,sort_keys=False,default_flow_style=False)
+        except Exception as e: print(f"warning: could not save ui state ({e})")
+
+    def refresh_mod_info(self, names=None):
+        # rebuild table info from meta.ini files and the mod list metadata
+        domains=nexus.get_instance_domains(self.cfg)
+        domain=domains[0] if domains else ""
+        lo_meta=load_list_meta()
+        source_dir=Path(self.cfg["SOURCE_DIR"])
+        if names is None: self.mod_info=nexus.build_mod_info(source_dir, lo_meta, domain)
+        else:
+            for name in names: self.mod_info[name]=nexus.get_local_info(source_dir/name, lo_meta.get(name), domain)
+        if not hasattr(self, "mod_table"): return
+        for row in range(self.mod_table.rowCount()):
+            if self.is_separator_row(row) or not self.mod_table.item(row, 2): continue
+            name=self.mod_table.item(row, 2).text()
+            if names is None or name in names: self.mod_table.set_info_items(row, name)
+
+    def _info_sort_value(self, name, col):
+        key=INFO_COLUMNS[col-INFO_COL_START][0]
+        value=self.mod_info.get(name, {}).get(key, "")
+        if key=="installed": return float(value or 0)
+        if key=="modid": return int(value) if str(value).isdigit() else 0
+        return str(value or "").lower()
 
     def _create_search_box(self):
         self.search_box = QLineEdit()
@@ -449,6 +535,7 @@ class ModLoaderUserInterface(QMainWindow):
         return button_layout
 
     def _load_initial_data(self, reload=False):
+        self.refresh_mod_info()
         mods = load_list()
         for mod in mods:
             if mod.startswith('>#') or mod.startswith('v#') or mod.startswith('#'):
@@ -931,7 +1018,7 @@ class ModLoaderUserInterface(QMainWindow):
         try:
             mods=self._collect_load_order()
             read_cfg(sync=False) # check for update
-            save_to_loadorder(mods, verbose=False)
+            save_to_loadorder(mods, verbose=False, meta=nexus.loadorder_meta(self.mod_info))
             self.statusBar().showMessage("Load order saved successfully", SHOW_MSG_TIME)
         except Exception as e:
             QMessageBox.warning(self, "Save Error", f"Failed to save load order:\n{str(e)}")
@@ -998,12 +1085,14 @@ class ModLoaderUserInterface(QMainWindow):
         if logical_index == 0:
             if self._is_sorted_alphabetically:
                 self.restore_priority_order()
-        elif logical_index == 2:
-            self._sort_ascending = not self._sort_ascending if self._is_sorted_alphabetically else True
-            self.sort_alphabetically()
+        elif logical_index == 2 or logical_index >= INFO_COL_START:
+            same_col = self._is_sorted_alphabetically and self._sort_col == logical_index
+            self._sort_ascending = not self._sort_ascending if same_col else True
+            self.sort_alphabetically(logical_index)
 
-    def sort_alphabetically(self):
+    def sort_alphabetically(self, col=2):
         self._is_sorted_alphabetically = True
+        self._sort_col = col
         self.mod_table.setDragEnabled(False)
         self.mod_table.setAcceptDrops(False)
         self.move_up_button.setEnabled(False)
@@ -1013,7 +1102,9 @@ class ModLoaderUserInterface(QMainWindow):
         for row in range(self.mod_table.rowCount()): 
             mods_data.append(list(self.mod_table.collect_row_data(row).values()))
                 
-        mods_data.sort(key=lambda x: x[2].lower(), reverse=not self._sort_ascending)
+        if col == 2: sort_key = lambda x: x[2].lower()
+        else:        sort_key = lambda x: self._info_sort_value(x[2], col)
+        mods_data.sort(key=sort_key, reverse=not self._sort_ascending)
     
         self.mod_table.setRowCount(0)
         for priority_num, is_sep, name, checkbox_state, hidden, conflicts, tooltip in mods_data:
@@ -1026,10 +1117,10 @@ class ModLoaderUserInterface(QMainWindow):
                 self.mod_table._create_mod_items(row, name, checkbox_state, conflicts, tooltip)
                 self.mod_table.item(row, 0).setText(priority_num)
         
-        arrow = "↑" if self._sort_ascending else "↓"
-        self.mod_table.setHorizontalHeaderLabels(["#", "", f"Mod Name {arrow}"])
+        self._set_header_labels(col, self._sort_ascending)
         direction = "ascending" if self._sort_ascending else "descending"
-        self.statusBar().showMessage(f"Sorted alphabetically {direction} (reordering disabled)", SHOW_MSG_TIME)
+        col_name = "name" if col == 2 else INFO_COLUMNS[col-INFO_COL_START][1].lower()
+        self.statusBar().showMessage(f"Sorted by {col_name} {direction} (reordering disabled)", SHOW_MSG_TIME)
 
     def restore_priority_order(self):
         self._is_sorted_alphabetically = False
@@ -1049,7 +1140,7 @@ class ModLoaderUserInterface(QMainWindow):
                 self.add_mod(mod, True)
         self._loading = False
         
-        self.mod_table.setHorizontalHeaderLabels(["#", "", "Mod Name"])
+        self._set_header_labels()
         self.statusBar().showMessage("Restored priority order (reordering enabled)", SHOW_MSG_TIME)
         self.reset_all_separator_state()
 
@@ -1114,6 +1205,9 @@ class ModLoaderUserInterface(QMainWindow):
             add_sep_below_action = menu.addAction("Add Separator Below")
             menu.addSeparator()
             open_folder_action = menu.addAction("Open Folder")
+            selected_names = [self.mod_table.item(r, 2).text() for r in sorted(set(i.row() for i in self.mod_table.selectedItems())) 
+                              if not self.is_separator_row(r)]
+            if selected_names: nexus.add_mod_menu(self, menu, selected_names)
             
             action = menu.exec(self.mod_table.viewport().mapToGlobal(position))
             
@@ -1368,6 +1462,7 @@ class ModLoaderUserInterface(QMainWindow):
         if ok and new_name and new_name != old_name:
             #try:
             rename_mod(old_name, new_name)
+            self.mod_info[new_name]=self.mod_info.pop(old_name, {})
             self.move_row(row,row,new_name)
             self.auto_save_load_order()
             self.statusBar().showMessage(f"Renamed '{old_name}' to '{new_name}'", SHOW_MSG_TIME)
@@ -1515,18 +1610,44 @@ class ModLoaderUserInterface(QMainWindow):
         extract_thread.start()
         extract_status_thread.start()
  
+    def install_archives(self, file_paths):
+        extract_thread=ExtractorThread(file_paths, self.cfg["SOURCE_DIR"], self) 
+        extract_status_thread=ExtractionStatusThread(self.status_label,Path(file_paths[0]))
+        self.extract_threads.append(extract_thread)
+        self.extract_status_threads.append(extract_status_thread)
+        self._extracting=True
+        extract_thread.progress.connect(lambda file: extract_status_thread.set_file(file))
+        extract_thread.temp_complete.connect(extract_status_thread.set_temp_complete)
+        extract_thread.complete.connect(extract_status_thread.done)
+        extract_thread.start()
+        extract_status_thread.start()
+ 
     def handle_mod_install(self, temp_dir, archive_path):
+        replace=self.nexus_replacements.pop(str(archive_path), None) # nexus update of existing mod
         if not temp_dir:
             QMessageBox.warning(self,
                         "Installation Error",
                         f"Encountered exception during mod extraction for archive:\n{Path(archive_path).name}")
             return
         
-        name=install_mod(archive_path=archive_path, temp_dir=temp_dir, gui=True, parent=self)
+        name=install_mod(archive_path=archive_path, temp_dir=temp_dir, gui=True, parent=self, write=not replace)
+        if name and replace:
+            try: name=nexus.replace_mod(self.cfg["SOURCE_DIR"], name, replace)
+            except Exception as e:
+                QMessageBox.warning(self, "Update Error", f"Could not replace {replace}:\n{e}\n\nNew version was installed as {name}")
+                install_mod_write([name])
+                replace=None
         if name: 
-            self.add_mod(name, enabled=True)
-            self.mod_table.scrollToBottom()
-            self.statusBar().showMessage(f"Successfully installed {name}", SHOW_MSG_TIME)
+            nexus.write_mod_meta(archive_path, Path(self.cfg["SOURCE_DIR"])/name)
+            self.refresh_mod_info([name])
+            if replace:
+                self.statusBar().showMessage(f"Updated {name}, reload mods to apply", SHOW_MSG_TIME)
+                if self.cfg["RELOAD_ON_INSTALL"]: self.load_mods()
+            else:
+                self.add_mod(name, enabled=True)
+                self.mod_table.scrollToBottom()
+                self.statusBar().showMessage(f"Successfully installed {name}", SHOW_MSG_TIME)
+            self.save_load_order() # write nexus metadata to mod list
 
     def select_exe(self, text):
         if text=='': return
@@ -1643,21 +1764,45 @@ class ModLoaderUserInterface(QMainWindow):
             self.auto_save_load_order(instant=True)
             perform_copy()
             self.link_status_thread.stopped=True
-        proc=launch_game(self.cfg, self.current_exe) 
-        self.exe_status_thread=ExeStatusThread(self.status_label,proc)
+        self.proc=launch_game(self.cfg, self.current_exe) 
+        self.exe_status_thread=ExeStatusThread(self.status_label,self.proc,parent=self)
         self.exe_status_thread.start()
+
+        # switch to kill button
+        self.play_button.setText("◼︎")
+        self.play_button.setToolTip("Kill executable")
+        self.play_button.clicked.disconnect(self.on_play)
+        self.play_button.clicked.connect(self.on_kill)
+        
+
+    def on_kill(self):
+        try:
+            if platform.system() == "Windows": os.system(f"taskkill /F /PID {self.proc.pid} >nul 2>&1")
+            else: os.kill(self.proc.pid, signal.SIGKILL)
+            print(f"successfully killed {self.proc.pid}!")
+        except Exception as e:
+            print(f"error: failed to kill process {self.proc.pid}: {e}")
+
+        # switch to play button again
+        self.play_button.setText("▶︎")
+        self.play_button.setToolTip("Launch executable")
+        self.play_button.clicked.disconnect(self.on_kill)
+        self.play_button.clicked.connect(self.on_play)
+
 
 if __name__ == "__main__":
     cfg=read_cfg(gui=True)
     app = QApplication(sys.argv)
+    nxm_url = sys.argv[sys.argv.index("--nxm")+1] if "--nxm" in sys.argv[:-1] else None
+    if nxm_url and nexus.send_to_running(nxm_url): sys.exit(0) # already open, hand off link
     window = ModLoaderUserInterface()
     stylesheet = load_stylesheet(Path(LOCAL_DIR)/"utils"/"resources"/"stylesheets"/cfg["STYLESHEET"])
     splash = QSplashScreen(QPixmap(str(LOCAL_DIR/"utils"/"resources"/"splash.png")))
     #app.setStyle("Fusion")
     app.setStyleSheet(stylesheet)
     window.show()
-    splash.show()
-    QTimer.singleShot(1700, splash.close)
+    if cfg["DO_SPLASH"]: splash.show(); QTimer.singleShot(1700, splash.close)
+    if nxm_url: QTimer.singleShot(500, lambda: nexus.handle_nxm_link(window, nxm_url))
     sys.exit(app.exec())
 
 

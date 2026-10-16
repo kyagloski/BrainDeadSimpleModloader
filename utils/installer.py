@@ -31,7 +31,7 @@ def extract_archive(archive_path, extract_path):
         patoolib.extract_archive(archive_path, outdir=extract_path, verbosity=-1)
         return True
     except Exception as e:
-        print(f"encountered exception during extract: {str(e)}")
+        print(f"installer encountered exception during extract: {str(e)}")
         return False
 
 
@@ -121,11 +121,9 @@ def read_fomod(xml_path):
         return #sys.exit(1)
 
 def get_text(element, default=''):
-    """Safely get text from element."""
     return element.text.strip() if element is not None and element.text else default
 
 def parse_fomod_structure(fomod_path, extract_dir):
-    """Parse FOMOD structure and return data for GUI or CLI processing"""
     root, namespace = read_fomod(fomod_path)
     ns = {'': namespace.strip('{}')} if namespace else {}
     
@@ -188,7 +186,6 @@ def parse_fomod_structure(fomod_path, extract_dir):
              'namespace': ns }
 
 def parse_conditional_installs(root, ns):
-    """Parse conditionalFileInstalls section for pattern-based file installation."""
     conditional_installs = []
     
     conditional_elem = root.find('.//conditionalFileInstalls', ns) if ns else root.find('.//conditionalFileInstalls')
@@ -210,7 +207,6 @@ def parse_conditional_installs(root, ns):
     return conditional_installs
 
 def parse_groups(groups_elem, ns):
-    """Parse group elements and return group data"""
     groups_data = []
     
     for group in groups_elem.findall('.//group', ns) if ns else groups_elem.findall('.//group'):
@@ -271,7 +267,6 @@ def parse_groups(groups_elem, ns):
 
 
 def evaluate_conditional_installs(conditional_installs, condition_flags, ns):
-    """Evaluate conditional file installs and return matching files."""
     files = []
     for pattern in conditional_installs:
         deps_elem = pattern['dependencies_elem']
@@ -283,7 +278,6 @@ def evaluate_conditional_installs(conditional_installs, condition_flags, ns):
 
 
 def evaluate_dependencies_element(deps_elem, condition_flags, ns):
-    """Evaluate a dependencies element directly."""
     if deps_elem is None: return True
     operator = deps_elem.get('operator', 'And')
     # Find all flag dependencies
@@ -306,14 +300,12 @@ def evaluate_dependencies_element(deps_elem, condition_flags, ns):
     else: return all(results)
 
 def evaluate_conditions(visible_elem, condition_flags, ns):
-    """Evaluate visibility conditions based on current flags."""
     # Get dependencies element
     deps_elem = visible_elem.find('.//dependencies', ns) if ns else visible_elem.find('.//dependencies')
     if deps_elem is None: return True
     return evaluate_dependencies_element(deps_elem, condition_flags, ns)
 
 def extract_files_info(files_elem, ns):
-    """Extract file and folder information from XML."""
     file_list = []
     
     # Handle individual files
@@ -335,7 +327,6 @@ def extract_files_info(files_elem, ns):
     return file_list
 
 def process_fomod(archive_path, extract_dir, output_dir, parent=None):
-    """Process FOMOD configuration using GUI with dynamic step evaluation"""
     fomod_path=find_fomod_config(extract_dir)
     print(f"found FOMOD config at: {fomod_path}")
     # Parse FOMOD structure
@@ -410,7 +401,6 @@ def process_fomod(archive_path, extract_dir, output_dir, parent=None):
     return None  # User cancelled
 
 def install_fomod_files(archive_path, file_list, extract_dir, output_dir):
-    """Copy selected files to output directory."""
     extract_dir = Path(extract_dir)
     if os.path.isdir(archive_path): mod_name=Path(archive_path).name
     else: mod_name = Path(archive_path).stem
@@ -483,20 +473,6 @@ def installer_run(archive_path=None, output_dir=None, temp_dir=None, gui=False, 
     else:
         mod_name = install_mod_files(archive_path, temp_dir, output_dir)
 
-    #try:
-    #    temp_dir = find_mod_base_dir(Path(temp_dir))
-    #    is_fomod = find_fomod_config(temp_dir)
-    #    if is_fomod:
-    #        mod_name = process_fomod(archive_path, temp_dir, output_dir, parent)
-    #    else:
-    #        mod_name = install_mod_files(archive_path, temp_dir, output_dir)
-    #except Exception as e:
-    #    if gui:
-    #        QMessageBox.warning(parent,
-    #                    "Installation Error",
-    #                    f"Encountered exception during mod installation! \n\nException:\n"+str(e))
-    #    print("error: encountered exception: "+str(e)+" when installing mod, giving up")
-    #    return None
     try: shutil.rmtree(temp_dir); print("removed tmp extract dir")
     except: print("warning: could not remove tmp extract dir")
     return mod_name
