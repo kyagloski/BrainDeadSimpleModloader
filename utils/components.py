@@ -4,6 +4,7 @@ import platform
 import yaml
 import tempfile
 import random
+import difflib
 from pathlib import Path
 from copy import deepcopy
 from time import sleep
@@ -17,7 +18,7 @@ from PyQt6.QtWidgets import (
     QSplashScreen, QToolTip, QStyledItemDelegate, QHeaderView,
     QGraphicsOpacityEffect, QStyle, QScrollArea, QFrame, QCheckBox,
     QDialog, QListWidget, QListWidgetItem, QFormLayout, QTreeView,
-    QDialogButtonBox
+    QDialogButtonBox, QSpinBox
 )
 from PyQt6.QtCore import ( Qt, QItemSelectionModel, QObject, QThread, 
     QWaitCondition, pyqtSignal, QMutex, QMutexLocker, QTimer, QPoint, 
@@ -27,7 +28,7 @@ from PyQt6.QtCore import ( Qt, QItemSelectionModel, QObject, QThread,
 from PyQt6.QtGui import ( QIcon, QFont, QTextCursor, QCursor, QPixmap, 
     QTextDocument, QPainter, QRadialGradient, QColor, QSyntaxHighlighter,
     QTextCharFormat, QFileSystemModel, QShortcut, QKeySequence,
-    QDesktopServices
+    QDesktopServices, QTextFormat, QTextOption, QPolygonF
 )
 
 from game_specific import *
@@ -41,6 +42,7 @@ ALPHA   = 20
 OPACITY = ALPHA/255
 DIALOGUE_WIDTH   = 60
 OUTDATED_COLOR   = "#e0b050"
+IS_LINUX         = platform.system()=="Linux" # proton only applies to linux launches
 
 # mod info columns after the conflicts column (key, header, tooltip, width, visible by default)
 INFO_COLUMNS     = [ ("version",   "Version",   "Installed version",                  80,  True),
@@ -51,6 +53,11 @@ INFO_COLUMNS     = [ ("version",   "Version",   "Installed version",            
                      ("installed", "Installed", "Install date",                       120, True),
                      ("file",      "Source",    "Archive the mod was installed from", 200, False) ]
 INFO_COL_START   = 4
+
+# ini diff line colors (rgba)
+DIFF_COLORS      = { "replace" : (220, 170, 40, 70),
+                     "delete"  : (200, 50, 50, 70),
+                     "insert"  : (40, 160, 60, 70) }
 
 class StdoutRedirector(QObject):
     text_written = pyqtSignal(str)
@@ -264,9 +271,10 @@ class ConflictThread(QThread):
         self.parent=parent
         self.mod_table=parent.mod_table
         self.load_order=[]
+        self.stopped=False
    
     def run(self):
-        while 1:
+        while not self.stopped:
             # this is retarded but i am at my wits end
             if (not self.parent._is_sorted_alphabetically) \
             and (not self.parent._loading) \
@@ -281,26 +289,27 @@ class ConflictThread(QThread):
             QThread.msleep(80)
         
     def set_mod_conflict_flags(self, name, row):
+        size=px(14) # follows ui scale
         over_text=""
         tooltip_text_er=""
         tooltip_text_en=""
         tooltip_text_fu=""
         if name in self.mod_table.overriders.keys(): 
             if tooltip_text_er=="": tooltip_text_er+="<span style=\"color: #99ff99; font-weight: bold;\">Overriding:</span><br>  "
-            over_text+=" <span style=\"color: #99ff99; font-size: 14px;\">▲</span>"
+            over_text+=f" <span style=\"color: #99ff99; font-size: {size}px;\">▲</span>"
             tooltip_text_er+="\n  ".join(self.mod_table.overriders[name])
         if name in self.mod_table.overriddens.keys(): 
             if tooltip_text_en=="": tooltip_text_en+="<span style=\"color: #ff9999; font-weight: bold;\">Overridden By:</span><br>  "
-            over_text+=" <span style=\"color: #ff9999; font-size: 14px;\">▼</span>"
+            over_text+=f" <span style=\"color: #ff9999; font-size: {size}px;\">▼</span>"
             tooltip_text_en+="\n  ".join(self.mod_table.overriddens[name])
         if name in self.mod_table.overriddens_full.keys(): 
             if tooltip_text_fu=="": tooltip_text_fu+="<span style=\"color: #ff9999; font-weight: bold;\">Fully Overridden By:</span><br>  "
-            over_text+=" <span style=\"color: #ff9999; font-size: 14px;\">▽</span>"
+            over_text+=f" <span style=\"color: #ff9999; font-size: {size}px;\">▽</span>"
             tooltip_text_fu+="\n  ".join(self.mod_table.overriddens_full[name])
     
         if tooltip_text_fu and tooltip_text_fu.replace("Fully ",'')==tooltip_text_en: 
             tooltip_text_en=""
-            over_text=over_text.replace("<span style=\"color: #ff9999; font-size: 14px;\">▼</span>",'')
+            over_text=over_text.replace(f"<span style=\"color: #ff9999; font-size: {size}px;\">▼</span>",'')
 
         over_text=f'<div style="text-align: center;">{over_text}</div>'
 
@@ -367,14 +376,23 @@ class RichTextDelegate(QStyledItemDelegate):
                 color = option.palette.highlightedText().color().name()
             else:
                 color = option.palette.text().color().name()
+            # conflict arrows: theme brightness instead of fixed pastel, which looked brighter than the row
+            v = max(140, option.palette.text().color().value())
+            text = text.replace("#99ff99", QColor.fromHsv(120, 170, v).name()).replace("#ff9999", QColor.fromHsv(0, 170, v).name())
             if not Qt.mightBeRichText(text):
                 text = f"<span style='font-weight: 600;'>{text}</span>"
             text = f"<span style='color: {color};'>{text}</span>"
             doc = QTextDocument()
+            doc.setDefaultFont(option.font) # follows ui scale
+            opt = doc.defaultTextOption()
+            opt.setWrapMode(QTextOption.WrapMode.NoWrap) # wrapping spilled into the next row
+            doc.setDefaultTextOption(opt)
             doc.setHtml(text)
+            doc.setTextWidth(option.rect.width()) # still used for centered text
             painter.save()
-            painter.translate(option.rect.topLeft())
-            doc.setTextWidth(option.rect.width())
+            painter.setClipRect(option.rect)
+            y_offset = max(0, (option.rect.height() - doc.size().height()) / 2)
+            painter.translate(option.rect.left(), option.rect.top() + y_offset)
             doc.drawContents(painter)
             painter.restore()
         else:
@@ -384,9 +402,33 @@ class RichTextDelegate(QStyledItemDelegate):
         text = index.data(Qt.ItemDataRole.DisplayRole)
         if text:
             doc = QTextDocument()
+            doc.setDefaultFont(option.font)
             doc.setHtml(text)
             return QSize(int(doc.idealWidth()), int(doc.size().height()))
         return super().sizeHint(option, index)
+
+
+class SeparatorArrowDelegate(QStyledItemDelegate):
+    # ▶ and ▼ render at different sizes in most fonts, draw both as the same triangle
+    def paint(self, painter, option, index):
+        text = index.data(Qt.ItemDataRole.DisplayRole)
+        if text not in ("▶", "▼"): return super().paint(painter, option, index)
+        self.initStyleOption(option, index)
+        option.text = ""
+        style = option.widget.style()
+        style.drawControl(style.ControlElement.CE_ItemViewItem, option, painter, option.widget) # background/selection
+        size = option.fontMetrics.height()*0.5
+        c = QPointF(option.rect.center())
+        if text == "▶": points = [QPointF(c.x()-size*0.4, c.y()-size*0.5), QPointF(c.x()+size*0.5, c.y()), QPointF(c.x()-size*0.4, c.y()+size*0.5)]
+        else:           points = [QPointF(c.x()-size*0.5, c.y()-size*0.4), QPointF(c.x()+size*0.5, c.y()-size*0.4), QPointF(c.x(), c.y()+size*0.5)]
+        selected = option.state & QStyle.StateFlag.State_Selected
+        color = option.palette.highlightedText().color() if selected else option.palette.text().color()
+        painter.save()
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(color)
+        painter.drawPolygon(QPolygonF(points))
+        painter.restore()
 
 
 class FadingBg:
@@ -790,12 +832,13 @@ class ConfigManager(QMainWindow):
 
     def __init__(self, cfg_dict):
         super().__init__()
-        from bdsm import read_cfg
+        from bdsm import read_cfg, get_ui_scale as bdsm_get_ui_scale
         #self.config = cfg_dict
         self.config = read_cfg()
+        self.config["UI_SCALE"] = bdsm_get_ui_scale(self.config) # global, shown with instance settings
         self.widgets = {}
         self.setWindowTitle("Settings")
-        self.setMinimumWidth(800)
+        self.setMinimumWidth(px(800))
         self.build_ui()
 
         QShortcut(QKeySequence("Escape"), self).activated.connect(self.close)
@@ -820,8 +863,9 @@ class ConfigManager(QMainWindow):
         form.setContentsMargins(4, 4, 4, 4)
 
         longest = max((len(k) for k in self.config.keys()), default=10)
-        label_width = longest * 8 + 8  # rough char width
+        label_width = px(longest * 8 + 8)  # rough char width
         
+        SCALE_KEY         = "UI_SCALE"
         BOOL_KEYS         = {"RELOAD_ON_INSTALL", "UPDATE_ON_CLOSE", "LINK_ON_LAUNCH", "DO_REQUESTS", "DO_SPLASH"}
         PATH_KEYS         = {"SOURCE_DIR", "TARGET_DIR", "COMPAT_DIR", "PRESET_DIR", "LOAD_ORDER", "INI_DIR"}
         STYLESHEET_KEY    = "STYLESHEET"
@@ -838,6 +882,7 @@ class ConfigManager(QMainWindow):
                     "LOAD_ORDER"       :"Currently selected loadorder preset file",
                     "INI_DIR"          :"INI backup directory location",
                     "STYLESHEET"       :"Application theme stylesheet (located in <BDSM_INSTALL_DIR>/utils/resources/stylesheets)",
+                    "UI_SCALE"         :"Interface scale (Ctrl +/- to zoom, Ctrl 0 to reset)",
                     "EXECUTABLES"      :"",
                     "INSTANCES"        :""}
 
@@ -863,7 +908,7 @@ class ConfigManager(QMainWindow):
 
             elif key == STYLESHEET_KEY:
                 combo = QComboBox()
-                combo.setMinimumWidth(250)
+                combo.setMinimumWidth(px(250))
                 options = list(STYLESHEET_OPTIONS)
                 if value not in options:
                     options.insert(0, value)
@@ -876,6 +921,18 @@ class ConfigManager(QMainWindow):
                 row.addStretch()
                 combo.setToolTip(tooltips[key])
 
+            elif key == SCALE_KEY:
+                spin = QSpinBox()
+                spin.setRange(50, 200)
+                spin.setSingleStep(10)
+                spin.setSuffix("%")
+                try:    spin.setValue(round(float(value)*100))
+                except: spin.setValue(100)
+                spin.setToolTip(tooltips[key])
+                self.widgets[key] = spin
+                row.addWidget(spin)
+                row.addStretch()
+
             elif key in PATH_KEYS:
                 edit = QLineEdit(value)
                 self.widgets[key] = edit
@@ -883,7 +940,7 @@ class ConfigManager(QMainWindow):
                 row.addWidget(edit)
                 btn = QPushButton("...")
                 btn.setToolTip("Browse files")
-                btn.setFixedWidth(28)
+                btn.setFixedWidth(px(28))
                 # Determine if it's a file or directory picker
                 is_file = key == "LOAD_ORDER"
                 btn.clicked.connect(lambda checked, e=edit, f=is_file: file_select(e, f))
@@ -900,24 +957,26 @@ class ConfigManager(QMainWindow):
         bottom = QHBoxLayout()
         bottom.addStretch()
         apply_btn = QPushButton("Apply")
-        apply_btn.setFixedWidth(90)
+        apply_btn.setFixedWidth(px(90))
         apply_btn.clicked.connect(self.apply)
         bottom.addWidget(apply_btn)
 
         info_btn = QPushButton("ⓘ")
         info_btn.setToolTip("About")
-        info_btn.setFixedSize(30, 35)
+        info_btn.setFixedSize(px(30), px(35))
         info_btn.clicked.connect(lambda: self.show_info(self))
         bottom.addWidget(info_btn)
 
         outer.addLayout(bottom)
 
     def apply(self):
-        from bdsm import write_cfg
+        from bdsm import write_cfg, save_ui_scale
         for key, widget in self.widgets.items():
             if isinstance(widget, QCheckBox):   self.config[key] = widget.isChecked()
             elif isinstance(widget, QComboBox): self.config[key] = widget.currentText()
+            elif isinstance(widget, QSpinBox):  self.config[key] = widget.value()/100
             else:                               self.config[key] = widget.text()
+        save_ui_scale(self.config.pop("UI_SCALE")) # global, kept out of the instance config
         write_cfg(self.config)
         self.applied.emit()
         #QMessageBox.information(self, "Saved", "Settings saved!"+' '*20)
@@ -925,7 +984,7 @@ class ConfigManager(QMainWindow):
     def show_info(self, parent=None):
         dialog = QDialog(parent)
         dialog.setWindowTitle("About")
-        dialog.setMinimumWidth(300)
+        dialog.setMinimumWidth(px(300))
         layout = QVBoxLayout(dialog)
         layout.setSpacing(10)
 
@@ -958,7 +1017,7 @@ class ConfigManager(QMainWindow):
 
         layout2=QHBoxLayout()
         donate = QPushButton("❤ Donate")
-        donate.setFixedWidth(80)
+        donate.setFixedWidth(px(80))
         donate.setStyleSheet("""
             QPushButton { color: white; background-color: #003087; font-weight: bold; }
             QPushButton:hover { background-color: #ff99ff; }
@@ -989,8 +1048,8 @@ class InstanceManager(QDialog):
         self.selected_instance=None
 
         self.setWindowTitle("Instance Manager")
-        self.setMinimumSize(360, 500)
-        self.resize(380, 540)
+        self.setMinimumSize(px(360), px(500))
+        self.resize(px(380), px(540))
         self.setWindowFlags(self.windowFlags() & ~Qt.WindowType.WindowContextHelpButtonHint)
 
         self._build_ui()
@@ -1008,7 +1067,7 @@ class InstanceManager(QDialog):
 
         # Game list
         self.list_widget = QListWidget()
-        self.list_widget.setIconSize(QSize(83, 55))
+        self.list_widget.setIconSize(QSize(px(83), px(55)))
         self.list_widget.setSpacing(1)
         self.list_widget.itemSelectionChanged.connect(self._on_selection_changed)
         self.list_widget.itemDoubleClicked.connect(self._on_select)
@@ -1021,18 +1080,18 @@ class InstanceManager(QDialog):
         bottom.setSpacing(8)
 
         self.btn_add = QPushButton("+")
-        self.btn_add.setFixedSize(35, 35)
+        self.btn_add.setFixedSize(px(35), px(35))
         self.btn_add.setToolTip("Add instance")
         self.btn_add.clicked.connect(self._on_add)
 
         self.btn_remove = QPushButton("-")
-        self.btn_remove.setFixedSize(35, 35)
+        self.btn_remove.setFixedSize(px(35), px(35))
         self.btn_remove.setToolTip("Remove instance")
         self.btn_remove.setEnabled(False)
         self.btn_remove.clicked.connect(self._on_remove)
 
         self.btn_edit = QPushButton("☰")
-        self.btn_edit.setFixedSize(35, 35)
+        self.btn_edit.setFixedSize(px(35), px(35))
         self.btn_edit.setToolTip("Edit instance configuration")
         self.btn_edit.setEnabled(False)
         self.btn_edit.clicked.connect(self.open_instance_editor)
@@ -1043,11 +1102,11 @@ class InstanceManager(QDialog):
         bottom.addStretch()
 
         self.btn_cancel = QPushButton("Cancel")
-        self.btn_cancel.setFixedWidth(80)
+        self.btn_cancel.setFixedWidth(px(80))
         self.btn_cancel.clicked.connect(self.reject)
 
         self.btn_select = QPushButton("Select")
-        self.btn_select.setFixedWidth(80)
+        self.btn_select.setFixedWidth(px(80))
         self.btn_select.setEnabled(False)
         self.btn_select.clicked.connect(self._on_select)
 
@@ -1121,7 +1180,7 @@ class InstanceManager(QDialog):
         dialog = QDialog(self)
         dialog.setWindowTitle("New Instance Setup")
         layout = QVBoxLayout(dialog)
-        dialog.setMinimumWidth(480)
+        dialog.setMinimumWidth(px(480))
 
         item = self.list_widget.currentItem().text()
         cfg = read_parent_cfg()
@@ -1332,8 +1391,8 @@ class InstanceEditor(QMainWindow):
         self.instance_name = instance_name 
 
         self.setWindowTitle("Edit Instance")
-        self.setMinimumSize(480, 200)
-        self.resize(480, 200)
+        self.setMinimumSize(px(480), px(200))
+        self.resize(px(480), px(200))
         self.setWindowFlags(self.windowFlags() & ~Qt.WindowType.WindowContextHelpButtonHint)
 
         self.has_pending_changes = False
@@ -1371,7 +1430,7 @@ class InstanceEditor(QMainWindow):
         icon_row.addWidget(self.icon_edit)
         icon_btn = QPushButton("...")
         icon_btn.setToolTip("Browse files")
-        icon_btn.setFixedWidth(28)
+        icon_btn.setFixedWidth(px(28))
         icon_btn.clicked.connect(lambda checked, e=self.icon_edit, f=True: file_select(e, f))
         icon_row.addWidget(icon_btn)
         form_layout.addRow(QLabel("Icon:"), icon_row)
@@ -1384,7 +1443,7 @@ class InstanceEditor(QMainWindow):
         path_row.addWidget(self.path_edit)
         path_btn = QPushButton("...")
         path_btn.setToolTip("Browse files")
-        path_btn.setFixedWidth(28)
+        path_btn.setFixedWidth(px(28))
         path_btn.clicked.connect(lambda checked, e=self.path_edit, f=True: file_select(e, f))
         path_row.addWidget(path_btn)
         form_layout.addRow(QLabel("Path:"), path_row)
@@ -1397,13 +1456,13 @@ class InstanceEditor(QMainWindow):
        
         # Cancel button
         self.cancel_button = QPushButton("Cancel")
-        self.cancel_button.setFixedWidth(100)
+        self.cancel_button.setFixedWidth(px(100))
         self.cancel_button.clicked.connect(self.close)
         bottom_layout.addWidget(self.cancel_button)
  
         # Apply button
         self.apply_button = QPushButton("Apply")
-        self.apply_button.setFixedWidth(100)
+        self.apply_button.setFixedWidth(px(100))
         self.apply_button.clicked.connect(self.apply_changes)
         self.apply_button.setEnabled(False)
         bottom_layout.addWidget(self.apply_button)
@@ -1490,10 +1549,11 @@ class InstanceEditor(QMainWindow):
 
 class ListItem:
     """Class to represent a list item with title, path, and params"""
-    def __init__(self, title="", path="", params=""):
+    def __init__(self, title="", path="", params="", proton=""):
         self.title = title
         self.path = path
         self.params = params
+        self.proton = proton # empty uses steam default
     
     def __str__(self):
         return self.title if self.title else "New Item"
@@ -1518,7 +1578,7 @@ class ExeManager(QMainWindow):
         
     def init_ui(self):
         self.setWindowTitle("Executable Manager")
-        self.resize(650, 250)
+        self.resize(px(650), px(250))
         
         # Central widget
         central_widget = QWidget()
@@ -1537,7 +1597,7 @@ class ExeManager(QMainWindow):
         if exes:
             for exe in exes:
                 if "ICON" not in exes[exe]: exes[exe]["ICON"]="" # for prev installs
-                self.add_item(title=exe, icon=exes[exe]["ICON"], path=exes[exe]["PATH"], params=exes[exe]["PARAMS"])
+                self.add_item(title=exe, icon=exes[exe]["ICON"], path=exes[exe]["PATH"], params=exes[exe]["PARAMS"], proton=exes[exe].get("PROTON",""))
         self.list_widget.currentRowChanged.connect(self.on_item_selected)
         left_layout.addWidget(self.list_widget)
         
@@ -1546,27 +1606,27 @@ class ExeManager(QMainWindow):
         
         # Plus button
         self.plus_button = QPushButton("+")
-        self.plus_button.setFixedSize(35, 35)
+        self.plus_button.setFixedSize(px(35), px(35))
         self.plus_button.setToolTip("Add executable")
         self.plus_button.clicked.connect(self.add_item)
         button_layout.addWidget(self.plus_button)
         
         # Minus button
         self.minus_button = QPushButton("-")
-        self.minus_button.setFixedSize(35, 35)
+        self.minus_button.setFixedSize(px(35), px(35))
         self.minus_button.setToolTip("Remove executable")
         self.minus_button.clicked.connect(self.remove_item)
         button_layout.addWidget(self.minus_button)
         
         # Up arrow button
         #self.up_button = QPushButton("↑")
-        #self.up_button.setFixedSize(35, 35)
+        #self.up_button.setFixedSize(px(35), px(35))
         #self.up_button.clicked.connect(self.move_item_up)
         #button_layout.addWidget(self.up_button)
         #
         ## Down arrow button
         #self.down_button = QPushButton("↓")
-        #self.down_button.setFixedSize(35, 35)
+        #self.down_button.setFixedSize(px(35), px(35))
         #self.down_button.clicked.connect(self.move_item_down)
         #button_layout.addWidget(self.down_button)
         
@@ -1596,7 +1656,7 @@ class ExeManager(QMainWindow):
         icon_row.addWidget(self.icon_edit)
         icon_btn = QPushButton("...")
         icon_btn.setToolTip("Browse files")
-        icon_btn.setFixedWidth(28)
+        icon_btn.setFixedWidth(px(28))
         icon_btn.clicked.connect(lambda checked, e=self.icon_edit, f=True: file_select(e, f))
         icon_row.addWidget(icon_btn)
         form_layout.addRow(QLabel("Icon:"), icon_row)
@@ -1609,7 +1669,7 @@ class ExeManager(QMainWindow):
         path_row.addWidget(self.path_edit)
         path_btn = QPushButton("...")
         path_btn.setToolTip("Browse files")
-        path_btn.setFixedWidth(28)
+        path_btn.setFixedWidth(px(28))
         path_btn.clicked.connect(lambda checked, e=self.path_edit, f=True: file_select(e, f))
         path_row.addWidget(path_btn)
         form_layout.addRow(QLabel("Path:"), path_row)
@@ -1619,13 +1679,22 @@ class ExeManager(QMainWindow):
         self.params_edit.setToolTip("Add parameters before/after launch command\nEquivalent to Steam launch options")
         self.params_edit.textChanged.connect(self.mark_pending_changes)
         form_layout.addRow(QLabel("Params:"), self.params_edit)
+
+        # Proton field (linux only)
+        self.proton_combo = None
+        if IS_LINUX:
+            self.proton_combo = QComboBox()
+            self.proton_combo.setToolTip("Proton version used to launch this executable")
+            self._populate_proton()
+            self.proton_combo.currentIndexChanged.connect(self.mark_pending_changes)
+            form_layout.addRow(QLabel("Proton:"), self.proton_combo)
         
         right_layout.addLayout(form_layout)
         
         # Use as Steam executable button
         #steam_layout = QHBoxLayout()
         #self.steam_button = QPushButton("Use as Steam executable")
-        #self.steam_button.setFixedWidth(180)
+        #self.steam_button.setFixedWidth(px(180))
         #self.steam_button.setToolTip("Swap this executable with the original Steam launcher so this is launched in its stead")
         #self.steam_button.clicked.connect(self.use_as_steam_executable)
         #self.steam_button.setEnabled(False)
@@ -1640,7 +1709,7 @@ class ExeManager(QMainWindow):
         
         # Apply button
         self.apply_button = QPushButton("Apply")
-        self.apply_button.setFixedWidth(100)
+        self.apply_button.setFixedWidth(px(100))
         self.apply_button.clicked.connect(self.apply_changes)
         self.apply_button.setEnabled(False)
         apply_layout.addWidget(self.apply_button)
@@ -1658,11 +1727,26 @@ class ExeManager(QMainWindow):
 
         QShortcut(QKeySequence("Ctrl+S"), self).activated.connect(self.apply_changes)
         
+    def _populate_proton(self):
+        self.proton_combo.clear()
+        try: default=Path(get_default_proton(self.cfg["COMPAT_DIR"])).parent.name
+        except Exception: default=""
+        self.proton_combo.addItem(f"Steam default ({default})" if default else "Steam default", "")
+        for name,path in find_proton_versions().items(): self.proton_combo.addItem(name, path)
+
+    def _select_proton(self, path):
+        idx=self.proton_combo.findData(path or "")
+        if idx<0: # configured version was removed
+            self.proton_combo.addItem(f"{Path(path).parent.name} (missing)", path)
+            idx=self.proton_combo.count()-1
+        self.proton_combo.setCurrentIndex(idx)
+
     def set_fields_enabled(self, enabled):
         """Enable or disable the text fields and apply button"""
         self.title_edit.setEnabled(enabled)
         self.path_edit.setEnabled(enabled)
         self.params_edit.setEnabled(enabled)
+        if self.proton_combo: self.proton_combo.setEnabled(enabled)
         #self.steam_button.setEnabled(enabled)
         
     def mark_pending_changes(self):
@@ -1685,7 +1769,7 @@ class ExeManager(QMainWindow):
                     missing.append("Path")
                 self.apply_button.setToolTip(f"Required field(s) missing: {', '.join(missing)}")
             
-    def add_item(self, title=None, icon=None, path=None, params=None):
+    def add_item(self, title=None, icon=None, path=None, params=None, proton=None):
         """Add a new item to the list"""
         # Check if there's already an item with empty title or path
         for item in self.items:
@@ -1706,6 +1790,7 @@ class ExeManager(QMainWindow):
         else: new_item.icon=None
         if path: new_item.path=path
         if params: new_item.params=params if params.strip() else "%command%"
+        if proton: new_item.proton=proton
 
         self.items.append(new_item)
         self.list_widget.addItem(str(new_item))
@@ -1807,6 +1892,7 @@ class ExeManager(QMainWindow):
             self.path_edit.setText(item.path)
             item.params = item.params if item.params.strip() else "%command%"
             self.params_edit.setText(item.params)
+            if self.proton_combo: self._select_proton(item.proton)
             
         # Reset pending changes flag
         self.has_pending_changes = False
@@ -1864,6 +1950,9 @@ class ExeManager(QMainWindow):
             self.cfg["EXECUTABLES"][item.title]["ICON"]=item.icon if os.path.exists(item.icon) else ""
             if not os.path.exists(item.icon): self.icon_edit.setText("")
             self.cfg["EXECUTABLES"][item.title]["PARAMS"]=item.params
+            if self.proton_combo: # windows configs are left untouched
+                item.proton = self.proton_combo.currentData() or ""
+                self.cfg["EXECUTABLES"][item.title]["PROTON"]=item.proton
             bdsm.write_cfg(self.cfg)
 
             # Update list widget item text
@@ -1878,6 +1967,7 @@ class ExeManager(QMainWindow):
         self.title_edit.clear()
         self.path_edit.clear()
         self.params_edit.clear()
+        if self.proton_combo: self.proton_combo.setCurrentIndex(0)
     
     def use_as_steam_executable(self):
         """Swap this executable with Steam launcher"""
@@ -1952,7 +2042,16 @@ class INIManager(QMainWindow):
 
         self.setWindowTitle("BrainDead Simple Modloader - INI Manager")
         #self.setGeometry(100, 100, 1400, 800)
-        self.resize(1400,800)
+        self.resize(px(1400),px(800))
+
+        # diff state, needed before editors exist
+        self.diff_selections = {"left": [], "right": []}
+        self.diff_opcodes = []
+        self._syncing = False
+        self.diff_timer = QTimer(self)
+        self.diff_timer.setSingleShot(True)
+        self.diff_timer.setInterval(300)
+        self.diff_timer.timeout.connect(self.update_diff)
         
         # Main widget and layout
         main_widget = QWidget()
@@ -2032,7 +2131,7 @@ class INIManager(QMainWindow):
         
         # Directory name label at top
         self.left_dir_label = QLabel("No directory selected")
-        self.left_dir_label.setMaximumHeight(25)
+        self.left_dir_label.setMaximumHeight(px(25))
         self.left_dir_label.setStyleSheet("font-weight: bold;")
         layout.addWidget(self.left_dir_label)
         
@@ -2092,7 +2191,7 @@ class INIManager(QMainWindow):
         
         # Directory name label at top
         self.right_dir_label = QLabel("No directory selected")
-        self.right_dir_label.setMaximumHeight(25)
+        self.right_dir_label.setMaximumHeight(px(25))
         self.right_dir_label.setStyleSheet("font-weight: bold;")
         layout.addWidget(self.right_dir_label)
         
@@ -2129,6 +2228,14 @@ class INIManager(QMainWindow):
         
         # Buttons
         button_layout = QHBoxLayout()
+
+        self.diff_check = QCheckBox("Diff")
+        self.diff_check.setToolTip("Highlight differences between the backup and current INI")
+        self.diff_check.toggled.connect(self.update_diff)
+        button_layout.addWidget(self.diff_check)
+
+        self.diff_label = QLabel("")
+        button_layout.addWidget(self.diff_label)
         button_layout.addStretch()
         
         self.save_btn = QPushButton("Save")
@@ -2194,6 +2301,7 @@ class INIManager(QMainWindow):
                 with open(file_path, 'r', encoding='utf-8') as f:
                     content = f.read()
                 self.left_editor.setPlainText(content)
+                self.update_diff()
             except Exception as e:
                 QMessageBox.warning(self, "Error", f"Could not read file:\n{str(e)}")
     
@@ -2214,6 +2322,7 @@ class INIManager(QMainWindow):
                 self.right_editor.setPlainText(content)
                 self.save_btn.setEnabled(False)
                 self.right_editor_modified = False
+                self.update_diff()
             except Exception as e:
                 QMessageBox.warning(self, "Error", f"Could not read file:\n{str(e)}")
     
@@ -2222,6 +2331,7 @@ class INIManager(QMainWindow):
         if hasattr(self, 'selected_current_file') and self.selected_current_file:
             self.save_btn.setEnabled(True)
             self.right_editor_modified = True
+        if self.diff_check.isChecked(): self.diff_timer.start() # debounce while typing
     
     def save_current_file(self):
         """Save the current file being edited"""
@@ -2352,12 +2462,71 @@ class INIManager(QMainWindow):
         line=cursor.blockNumber()
 
     def sync_scrolls(self, *_):
-        if self.sender()==self.left_editor.verticalScrollBar():
-            try: self.right_editor.verticalScrollBar().setValue(self.left_editor.verticalScrollBar().value())
-            except Exception as e: print(e)
-        if self.sender()==self.right_editor.verticalScrollBar():
-            try: self.left_editor.verticalScrollBar().setValue(self.right_editor.verticalScrollBar().value())
-            except: pass
+        if self._syncing: return
+        if self.sender()==self.left_editor.verticalScrollBar():    src,dst,from_left=self.left_editor,self.right_editor,True
+        elif self.sender()==self.right_editor.verticalScrollBar(): src,dst,from_left=self.right_editor,self.left_editor,False
+        else: return
+        self._syncing=True
+        try:
+            if self.diff_opcodes: # align matching lines instead of pixels
+                line=src.cursorForPosition(QPoint(0,0)).blockNumber()
+                offset=src.verticalScrollBar().value()-self._line_top(src, line)
+                target=self._map_line(line, from_left)
+                dst.verticalScrollBar().setValue(int(self._line_top(dst, target)+offset))
+            else: dst.verticalScrollBar().setValue(src.verticalScrollBar().value())
+        except Exception as e: print(e)
+        self._syncing=False
+
+    def _line_top(self, editor, line):
+        block=editor.document().findBlockByNumber(line)
+        if not block.isValid(): block=editor.document().lastBlock()
+        return editor.document().documentLayout().blockBoundingRect(block).top()
+
+    def _map_line(self, line, from_left):
+        # map a line number to the matching line in the other editor
+        for tag,i1,i2,j1,j2 in self.diff_opcodes:
+            s1,s2,d1,d2 = (i1,i2,j1,j2) if from_left else (j1,j2,i1,i2)
+            if s1<=line<s2:
+                if tag=="equal": return d1+(line-s1)
+                return min(d1+(line-s1), max(d1,d2-1))
+        return line
+
+    def update_diff(self):
+        self.diff_selections={"left": [], "right": []}
+        self.diff_opcodes=[]
+        left_text,right_text=self.left_editor.toPlainText(),self.right_editor.toPlainText()
+        if not self.diff_check.isChecked(): self.diff_label.setText("")
+        elif not (left_text and right_text): self.diff_label.setText("Open a backup and current INI to diff")
+        else:
+            left=[l.rstrip() for l in left_text.split('\n')]
+            right=[l.rstrip() for l in right_text.split('\n')]
+            self.diff_opcodes=difflib.SequenceMatcher(None, left, right, autojunk=False).get_opcodes()
+            changed=added=removed=0
+            for tag,i1,i2,j1,j2 in self.diff_opcodes:
+                if tag=="equal": continue
+                if tag=="replace": changed+=max(i2-i1,j2-j1)
+                if tag=="insert":  added+=j2-j1
+                if tag=="delete":  removed+=i2-i1
+                self._mark_lines(self.left_editor, "left", i1, i2, "replace" if tag=="replace" else "delete")
+                self._mark_lines(self.right_editor, "right", j1, j2, "replace" if tag=="replace" else "insert")
+            if changed or added or removed: self.diff_label.setText(f"{changed} changed, {added} added, {removed} removed")
+            else: self.diff_label.setText("Files are identical")
+        # redraw, keeping find highlights on top
+        if getattr(self, "current_matches", None): self.highlight_all_matches()
+        else: self.clear_highlights()
+
+    def _mark_lines(self, editor, side, start, end, kind):
+        fmt=QTextCharFormat()
+        fmt.setBackground(QColor(*DIFF_COLORS[kind]))
+        fmt.setProperty(QTextFormat.Property.FullWidthSelection, True)
+        doc=editor.document()
+        for n in range(start, end):
+            block=doc.findBlockByNumber(n)
+            if not block.isValid(): break
+            selection=QTextEdit.ExtraSelection()
+            selection.cursor=QTextCursor(block)
+            selection.format=fmt
+            self.diff_selections[side].append(selection)
  
     def eventFilter(self, obj, event):
         """Handle Ctrl+Scroll zoom for editors"""
@@ -2522,9 +2691,9 @@ class INIManager(QMainWindow):
             editor.setExtraSelections(current_selections)
     
     def clear_highlights(self):
-        """Clear all highlights from both editors"""
-        self.left_editor.setExtraSelections([])
-        self.right_editor.setExtraSelections([])
+        """Clear find highlights from both editors, keeps diff highlights"""
+        self.left_editor.setExtraSelections(list(self.diff_selections["left"]))
+        self.right_editor.setExtraSelections(list(self.diff_selections["right"]))
     
     def find_next(self):
         """Go to next match"""

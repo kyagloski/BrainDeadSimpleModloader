@@ -3,6 +3,7 @@
 
 import os
 import re
+import shlex
 import sys
 import stat
 import urllib.request
@@ -12,6 +13,27 @@ from collections import defaultdict, OrderedDict
 from pathlib import Path
 
 FAILED_URLS=[]
+UI = {"SCALE": 1.0} # ui scale shared by every window
+BASE_FONT_PT = 9     # matches the stylesheets' QWidget font-size
+
+def set_ui_scale(scale):
+    try:    UI["SCALE"]=min(2.0, max(0.5, round(float(scale), 2)))
+    except: UI["SCALE"]=1.0
+    return UI["SCALE"]
+
+def px(n):
+    # scale a hardcoded pixel size by the ui scale
+    return max(1, round(n*UI["SCALE"])) if n>0 else 0 # 0 stays 0, a collapsed splitter panel
+
+def scale_stylesheet(style, scale=None):
+    # scale every px/pt in a stylesheet, always from the unscaled original
+    scale=UI["SCALE"] if scale is None else scale
+    def sub(m):
+        v=float(m.group(1))
+        if m.group(2)=="pt": return f"{round(v*scale,1):g}pt"
+        if v>0: return f"{max(1, round(v*scale))}px" # keep thin borders visible
+        return f"{round(v*scale)}px"
+    return re.sub(r'(?<![\w.#])(-?\d+(?:\.\d+)?)(px|pt)\b', sub, style)
 
 def force_symlink(target, link_name):
     try:
@@ -192,15 +214,53 @@ def get_steam_resources(name,app_id,save_dir,icon=False,bg=False):
     if icon: return str(save_dirs[0])
     else: return save_dirs
 
+STEAM_ROOTS = [
+    Path.home() / ".steam/steam",
+    Path.home() / ".steam/root",
+    Path.home() / ".local/share/Steam",
+    Path.home() / "snap/steam/common/.local/share/Steam",
+    Path.home() / ".var/app/com.valvesoftware.Steam/.local/share/Steam",  # Flatpak
+]
+# system wide custom proton installs (e.g. distro proton-ge packages)
+SYSTEM_COMPAT_TOOLS = [Path("/usr/share/steam/compatibilitytools.d"), Path("/usr/local/share/steam/compatibilitytools.d")]
+
+def find_steam_libraries():
+    libs=[]
+    for root in STEAM_ROOTS:
+        vdf = root / "steamapps/libraryfolders.vdf"
+        if not vdf.exists(): continue
+        try: libs+=[Path(p) for p in re.findall(r'"path"\s+"([^"]+)"', vdf.read_text())]
+        except OSError: pass
+    return libs
+
+def find_proton_versions():
+    # proton name -> path of its 'proton' launch script, valve builds and custom (ge) builds
+    candidates=[]
+    for lib in find_steam_libraries()+STEAM_ROOTS:
+        common=lib/"steamapps"/"common"
+        if common.is_dir(): candidates+=[d for d in common.iterdir() if d.name.lower().startswith("proton")]
+    for tools in [root/"compatibilitytools.d" for root in STEAM_ROOTS]+SYSTEM_COMPAT_TOOLS:
+        if tools.is_dir(): candidates+=list(tools.iterdir())
+    versions,seen=dict(),set()
+    for d in sorted(candidates, key=lambda d: d.name.lower()):
+        script=d/"proton"
+        try:
+            if not script.is_file() or script.resolve() in seen: continue
+            seen.add(script.resolve())
+        except OSError: continue
+        name=d.name if d.name not in versions else f"{d.name} ({d.parent.parent.name})"
+        versions[name]=str(script)
+    return versions
+
+def get_default_proton(compat_dir):
+    # proton steam last used for this game, read from the prefix
+    c=str(compat_dir).split("pfx")[0]
+    with open(Path(c)/"config_info",'r') as f:
+        return f.readlines()[1].split("files")[0]+"proton"
+
 def find_sniper():
     # find sniper runtime for games
-    steam_roots = [
-        Path.home() / ".steam/steam",
-        Path.home() / ".local/share/Steam",
-        Path.home() / "snap/steam/common/.local/share/Steam",
-        Path.home() / ".var/app/com.valvesoftware.Steam/.local/share/Steam",  # Flatpak
-    ]
-    for root in steam_roots:
+    for root in STEAM_ROOTS:
         vdf = root / "steamapps/libraryfolders.vdf"
         if not vdf.exists():
             continue
@@ -217,8 +277,13 @@ def launch_game(cfg,game_exe):
     # TODO: determine if this works across all distros and all steam installtion types
     if os.name=="posix":
         c=cfg["COMPAT_DIR"].split("pfx")[0]
-        with open(Path(c)/"config_info",'r') as f: # read steam config for proton path
-            proton=(f.readlines()[1].split("files")[0]+"proton").replace(' ','\\ ').replace('(','\\(').replace(')','\\)')
+        proton=cfg["EXECUTABLES"][game_exe].get("PROTON") or ""
+        if proton and not os.path.isfile(proton):
+            print(f"warning: proton {proton} not found, using steam default")
+            proton=""
+        if not proton: proton=get_default_proton(cfg["COMPAT_DIR"]) # read steam config for proton path
+        print("using proton: "+str(Path(proton).parent.name))
+        proton=shlex.quote(proton)
         runtime=find_sniper()/"_v2-entry-point --verb=waitforexitandrun -- "
         exe=cfg["EXECUTABLES"][game_exe]["PATH"]
         exe_dir=str(Path(exe).parent).replace(' ','\\ ')

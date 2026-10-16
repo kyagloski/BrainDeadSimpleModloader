@@ -242,6 +242,17 @@ def write_cfg(d, path=None, is_global=False):
         yaml.dump(dict(d),f,sort_keys=False,default_flow_style=False)
 
 
+def get_ui_scale(child_cfg=None):
+    # global for all instances, falls back to the instance value from before it was global
+    return read_parent_cfg(update=False).get("UI_SCALE", (child_cfg or {}).get("UI_SCALE", 1.0))
+
+
+def save_ui_scale(scale):
+    cfg=read_parent_cfg(update=False)
+    cfg["UI_SCALE"]=scale
+    write_cfg(cfg, is_global=True)
+
+
 def get_instance_name():
     cfg=read_parent_cfg()
     try: sel_name = next(k for k, v in cfg["INSTANCES"].items() if v["SELECTED"])

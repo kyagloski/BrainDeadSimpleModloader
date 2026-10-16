@@ -50,13 +50,15 @@ class ModLoaderUserInterface(QMainWindow):
     def __init__(self):
         super().__init__()
         self.cfg = read_cfg(sync=False)
+        self._scale_factor = set_ui_scale(get_ui_scale(self.cfg)) # before any widget is sized
+        self.base_stylesheet = ""
         instance = get_instance_name()
         self.setWindowTitle(f"BrainDead Simple Modloader ({VERSION}) - {instance}")
         icon=QIcon()
         try:icon.addFile(str(LOCAL_DIR/"utils"/"resources"/"icon.png"), QSize(256, 256))
         except:pass
         self.setWindowIcon(QIcon(icon))
-        self.resize(1000, 600)
+        self.resize(px(1000), px(600))
         self.splitters=[] # for resize state later
        
         # thread containers
@@ -72,7 +74,6 @@ class ModLoaderUserInterface(QMainWindow):
         self._sort_col=2
  
         self._loading = True
-        self._scale_factor = 1.0
         self._separator_rows = {}
         self._is_sorted_alphabetically = False
         self._sort_ascending = True
@@ -83,6 +84,8 @@ class ModLoaderUserInterface(QMainWindow):
 
         # create ui and load data
         self._init_ui()
+        geometry=self.ui_state.get("LAYOUT", {}).get("GEOMETRY")
+        if geometry: self.restoreGeometry(bytes.fromhex(geometry))
         self._setup_stdout_redirect()
         self._load_initial_data()
 
@@ -124,6 +127,7 @@ class ModLoaderUserInterface(QMainWindow):
 
     def _init_ui(self, verbose=False):
         central_widget = QWidget()
+        self._save_layout() # rebuilds (zoom, preset, settings) would reset dragged sizes
         self.setCentralWidget(central_widget)
         main_layout = QVBoxLayout(central_widget)
         
@@ -167,6 +171,9 @@ class ModLoaderUserInterface(QMainWindow):
         
         main_splitter.addWidget(log_widget)
         main_splitter.setSizes([500, 100])
+        self.splitters=[splitter, main_splitter]
+        self._restore_splitters()
+        self._layout_scale=UI["SCALE"] # scale these widgets were built at
         
         self.statusBar().setContentsMargins(0,0,0,0)
         self.statusBar().showMessage("Ready!", SHOW_MSG_TIME)
@@ -236,21 +243,21 @@ class ModLoaderUserInterface(QMainWindow):
         preset_layout = QHBoxLayout()
         
         self.settings_button = QPushButton("⚙")
-        self.settings_button.setFixedSize(35, 35)
+        self.settings_button.setFixedSize(px(35), px(35))
         #self.settings_button.clicked.connect(self.open_settings)
         self.settings_button.clicked.connect(self.open_cfg_manager)
         self.settings_button.setToolTip("Open settings")
         preset_layout.addWidget(self.settings_button)
 
         self.instance_button = QPushButton("⇄")
-        self.instance_button.setFixedSize(35, 35)
+        self.instance_button.setFixedSize(px(35), px(35))
         self.instance_button.clicked.connect(self.open_instance_manager)
         self.instance_button.setToolTip("Switch instance")
         preset_layout.addWidget(self.instance_button)
 
         self.tools_button = QToolButton()
         self.tools_button.setText("⚒")
-        self.tools_button.setFixedSize(35, 35)
+        self.tools_button.setFixedSize(px(35), px(35))
         self.tools_button.setToolTip("Tools")
         menu = QMenu()
         #inst_man = menu.addAction("Instance Manager")
@@ -291,19 +298,19 @@ class ModLoaderUserInterface(QMainWindow):
         preset_layout.addWidget(self.preset_combo,2)
 
         self.add_preset_button = QPushButton("+")
-        self.add_preset_button.setFixedSize(35, 35)
+        self.add_preset_button.setFixedSize(px(35), px(35))
         self.add_preset_button.setToolTip("New Preset")
         self.add_preset_button.clicked.connect(self.add_preset)
         preset_layout.addWidget(self.add_preset_button)
         
         self.del_preset_button = QPushButton("-")
-        self.del_preset_button.setFixedSize(35, 35)
+        self.del_preset_button.setFixedSize(px(35), px(35))
         self.del_preset_button.setToolTip("Delete Preset")
         self.del_preset_button.clicked.connect(self.del_preset)
         preset_layout.addWidget(self.del_preset_button)
 
         separator = QLabel("|")
-        separator.setFixedWidth(30)
+        separator.setFixedWidth(px(30))
         preset_layout.addWidget(separator)
 
         preset_layout.addStretch()
@@ -325,20 +332,20 @@ class ModLoaderUserInterface(QMainWindow):
                 icon=QIcon(image)
                 self.bin_combo.addItem(icon,exe)
             if not self.current_exe: self.current_exe=deepcopy(list(exes.keys())[0])
-        self.bin_combo.setIconSize(QSize(63,34))
+        self.bin_combo.setIconSize(QSize(px(63), px(34)))
         self.bin_combo.setCurrentText(self.current_exe)
         self.bin_combo.currentTextChanged.connect(self.select_exe)
         self.bin_combo.setToolTip("Selected executable")
         preset_layout.addWidget(self.bin_combo,2)
 
         self.settings_button = QPushButton("☰")
-        self.settings_button.setFixedSize(35, 35)
+        self.settings_button.setFixedSize(px(35), px(35))
         self.settings_button.setToolTip("Edit executables")
         self.settings_button.clicked.connect(self.open_exe_manager)
         preset_layout.addWidget(self.settings_button)
 
         self.play_button = QPushButton("▶︎")
-        self.play_button.setFixedSize(35, 35)
+        self.play_button.setFixedSize(px(35), px(35))
         self.play_button.setToolTip("Launch executable")
         self.play_button.clicked.connect(self.on_play)
         preset_layout.addWidget(self.play_button)
@@ -356,11 +363,14 @@ class ModLoaderUserInterface(QMainWindow):
         table_layout.addWidget(self.mod_table)
 
         #self.mod_table.setItemDelegateForColumn(2, RichTextDelegate(self))
+        self.mod_table.setItemDelegateForColumn(0, SeparatorArrowDelegate(self))
         self.mod_table.setItemDelegateForColumn(2, RichTextDelegate(self))
         self.mod_table.setItemDelegateForColumn(3, RichTextDelegate(self))
         self._set_header_labels()
 
         self.mod_table.verticalHeader().setVisible(False)
+        self.mod_table.verticalHeader().setMinimumSectionSize(px(12))
+        self.mod_table.verticalHeader().setDefaultSectionSize(px(30)) # qt default row height ignores font size
         self.mod_table.itemSelectionChanged.connect(self.on_mod_selected)
         self.mod_table.selectionModel().selectionChanged.connect(self.on_item_deselect)
         self.mod_table.itemChanged.connect(self.on_item_changed)
@@ -386,6 +396,10 @@ class ModLoaderUserInterface(QMainWindow):
         self.mod_table.overriddens=dict()
         self.mod_table.overriddens_full=dict()
         self.mod_table.mod_files=dict()
+        if getattr(self, "conflict_thread", None): # ui rebuilds made a new one each time
+            self.conflict_thread.stopped=True
+            # qt aborts if a QThread is freed while running, hold it until it exits
+            self._retired_threads=[t for t in getattr(self, "_retired_threads", []) if not t.isFinished()]+[self.conflict_thread]
         self.conflict_thread=ConflictThread(self)
         self.conflict_thread.conflict_update.connect(self.update_conflict_flag)
         self.conflict_thread.start()
@@ -395,11 +409,13 @@ class ModLoaderUserInterface(QMainWindow):
         header.setSectionResizeMode(0, header.ResizeMode.Fixed)
         header.setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
         header.setSectionResizeMode(1, header.ResizeMode.Fixed)
-        self.mod_table.setColumnWidth(0, 40)
-        self.mod_table.setColumnWidth(1, 25)
-        self.mod_table.setColumnWidth(2, 530)
-        self.mod_table.setColumnWidth(3, 80)
-        for i,(key,_,_,width,_) in enumerate(INFO_COLUMNS): self.mod_table.setColumnWidth(INFO_COL_START+i, width)
+        self.mod_table.setColumnWidth(0, px(40))
+        self.mod_table.setColumnWidth(1, px(25))
+        self.mod_table.setColumnWidth(2, px(530))
+        self.mod_table.setColumnWidth(3, px(80))
+        for i,(key,_,_,width,_) in enumerate(INFO_COLUMNS): self.mod_table.setColumnWidth(INFO_COL_START+i, px(width))
+        for col,width in self.ui_state.get("LAYOUT", {}).get("WIDTHS", {}).items(): # user dragged widths
+            if int(col)<self.mod_table.columnCount(): self.mod_table.setColumnWidth(int(col), px(width))
 
         # right click header to toggle columns
         header.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
@@ -439,6 +455,22 @@ class ModLoaderUserInterface(QMainWindow):
         self.mod_table.setColumnHidden(col, not visible)
         self.ui_state["COLUMNS"][key]=visible
         self._write_ui_state()
+
+    def _restore_splitters(self):
+        for sp,sizes in zip(self.splitters, self.ui_state.get("LAYOUT", {}).get("SPLITTERS", [])):
+            if len(sizes)==sp.count(): sp.setSizes([px(n) for n in sizes])
+
+    def _save_layout(self):
+        # sizes stored unscaled so they survive zoom
+        if not self.splitters: return
+        scale=getattr(self, "_layout_scale", UI["SCALE"])
+        layout=self.ui_state.setdefault("LAYOUT", dict())
+        try:
+            layout["SPLITTERS"]=[[round(n/scale) for n in sp.sizes()] for sp in self.splitters]
+            header=self.mod_table.horizontalHeader()
+            layout.setdefault("WIDTHS", dict()).update({c: round(self.mod_table.columnWidth(c)/scale) for c in range(self.mod_table.columnCount())
+                if header.sectionResizeMode(c)==QHeaderView.ResizeMode.Interactive and not self.mod_table.isColumnHidden(c)})
+        except RuntimeError: pass # widgets already deleted
 
     def _read_ui_state(self):
         state={"COLUMNS": dict()}
@@ -487,18 +519,18 @@ class ModLoaderUserInterface(QMainWindow):
         button_layout = QHBoxLayout()
         
         self.add_button = QPushButton("+")
-        self.add_button.setFixedSize(35, 35)
+        self.add_button.setFixedSize(px(35), px(35))
         self.add_button.setToolTip("Install Mod")
         self.add_button.clicked.connect(self.add_mod_dialog)
         
         self.move_up_button = QPushButton("↑")
-        self.move_up_button.setFixedSize(35, 35)
+        self.move_up_button.setFixedSize(px(35), px(35))
         self.move_up_button.setToolTip("Move Item Up")
         self.move_up_button.clicked.connect(self.move_mod_up)
         self.move_up_button.setEnabled(False)
         
         self.move_down_button = QPushButton("↓")
-        self.move_down_button.setFixedSize(35, 35)
+        self.move_down_button.setFixedSize(px(35), px(35))
         self.move_down_button.setToolTip("Move Item Down")
         self.move_down_button.clicked.connect(self.move_mod_down)
         self.move_down_button.setEnabled(False)
@@ -513,7 +545,7 @@ class ModLoaderUserInterface(QMainWindow):
         
         separator = QLabel("|")
         #separator.setStyleSheet("color: gray; font-size: 20px; padding: 0px; margin: 0px 5px;")
-        separator.setFixedWidth(30)
+        separator.setFixedWidth(px(30))
         
         self.save_button = QPushButton("Save Load Order")
         self.save_button.clicked.connect(self.save_load_order)
@@ -1527,40 +1559,53 @@ class ModLoaderUserInterface(QMainWindow):
         event.accept()
 
     def keyPressEvent(self, event):
-        if event.modifiers() == Qt.KeyboardModifier.ControlModifier:
-            set_scale=False
-            if event.key() in (Qt.Key.Key_Plus, Qt.Key.Key_Equal):
-                self._scale_factor = min(2.0, self._scale_factor + 0.1)
-                set_scale=True 
-            elif event.key() == Qt.Key.Key_Minus:
-                self._scale_factor = max(0.5, self._scale_factor - 0.1)
-                set_scale=True 
-            elif event.key() == Qt.Key.Key_0:
-                self._scale_factor = 1.0
-                set_scale=True 
-            if set_scale: self.apply_scale()
+        if event.modifiers() & Qt.KeyboardModifier.ControlModifier: # shift/keypad allowed for ctrl +
+            scale=None
+            current=getattr(self, "_pending_scale", None) or self._scale_factor # repeats stack before the rebuild
+            if event.key() in (Qt.Key.Key_Plus, Qt.Key.Key_Equal): scale=min(2.0, current+0.1)
+            elif event.key() == Qt.Key.Key_Minus:                  scale=max(0.5, current-0.1)
+            elif event.key() == Qt.Key.Key_0:                      scale=1.0
+            if scale is not None:
+                event.accept()
+                # rebuild after this event returns, it deletes the widget the key came from
+                self._pending_scale=scale
+                QTimer.singleShot(0, self._apply_pending_scale)
             else: super().keyPressEvent(event)
         else: super().keyPressEvent(event)
-    
-    def apply_scale(self):
-        app = QApplication.instance()
-        base_size = 9
-        new_size = int(base_size * self._scale_factor)
-        font = app.font()
-        font.setPointSize(new_size)
+
+    def load_theme(self):
+        # read stylesheet from config, applied scaled so it always matches the ui scale
+        self.base_stylesheet=load_stylesheet(Path(LOCAL_DIR)/"utils"/"resources"/"stylesheets"/self.cfg["STYLESHEET"])
+        app=QApplication.instance()
+        font=app.font()
+        font.setPointSizeF(BASE_FONT_PT*self._scale_factor)
         app.setFont(font)
-        existing_style = app.styleSheet()
-        new_style = re.sub(
-            r'(QWidget\s*\{[^}]*font-size:\s*)\d+pt',
-            rf'\g<1>{new_size}pt',
-            existing_style)
-        app.setStyleSheet(new_style)
-        self._init_ui(verbose=self.log_output.toPlainText())
+        app.setStyleSheet(scale_stylesheet(self.base_stylesheet))
+    
+    def _apply_pending_scale(self):
+        # key repeat can queue several zooms, only rebuild once for the last one
+        scale=getattr(self, "_pending_scale", None)
+        self._pending_scale=None
+        if scale is not None: self.apply_scale(scale)
+
+    def apply_scale(self, scale, save=True):
+        old=self._scale_factor
+        self._scale_factor=set_ui_scale(scale)
+        if self._scale_factor==old: return
+        top_row=self.mod_table.rowAt(0) # keep the same mods in view
+        self.save_load_order()
+        self.load_theme()
+        self._init_ui(verbose=self.log_output.toPlainText()) # widgets are sized on creation
         self._load_initial_data(reload=True)
-        self.mod_table.setColumnWidth(0, int(40*self._scale_factor))
-        #self.mod_table.setColumnWidth(1, int(25*self._scale_factor))
-        self.mod_table.setColumnWidth(3, int(80*self._scale_factor))
-        self.statusBar().showMessage(f"UI Scale: {int(self._scale_factor * 100)}%", SHOW_MSG_TIME) 
+        if not (self.isMaximized() or self.isFullScreen()):
+            screen=self.screen().availableGeometry()
+            ratio=self._scale_factor/old
+            size=(min(round(self.width()*ratio), screen.width()), min(round(self.height()*ratio), screen.height()))
+            QTimer.singleShot(0, lambda: (self.resize(*size), self._restore_splitters())) # after the new layout's minimum size applies
+        if top_row>0: QTimer.singleShot(0, lambda: self.mod_table.scrollToItem(self.mod_table.item(top_row, 0), QTableWidget.ScrollHint.PositionAtTop))
+        if save: # persist
+            save_ui_scale(self._scale_factor)
+        self.statusBar().showMessage(f"UI Scale: {round(self._scale_factor*100)}%", SHOW_MSG_TIME) 
 
     def dropEvent(self, event):
         if event.mimeData().hasUrls(): self.handle_file_drop(event)
@@ -1666,8 +1711,8 @@ class ModLoaderUserInterface(QMainWindow):
         self.blockSignals(True)
         self.cfg=read_cfg(gui=True)
        
-        stylesheet=load_stylesheet(Path(LOCAL_DIR)/"utils"/"resources"/"stylesheets"/self.cfg["STYLESHEET"])
-        app.setStyleSheet(stylesheet)
+        self._scale_factor=set_ui_scale(get_ui_scale(self.cfg))
+        self.load_theme()
         self._init_ui(verbose=self.log_output.toPlainText())
         self._load_initial_data(reload=True)
         
@@ -1685,8 +1730,8 @@ class ModLoaderUserInterface(QMainWindow):
         #bdsm.CONFIG_FILE=LOCAL_DIR/"config.yaml"
         self.cfg=read_cfg(gui=True)
        
-        stylesheet=load_stylesheet(Path(LOCAL_DIR)/"utils"/"resources"/"stylesheets"/self.cfg["STYLESHEET"])
-        app.setStyleSheet(stylesheet)
+        self._scale_factor=set_ui_scale(get_ui_scale(self.cfg))
+        self.load_theme()
         self._init_ui(verbose=self.log_output.toPlainText())
         self._load_initial_data(reload=True)
         
@@ -1742,6 +1787,9 @@ class ModLoaderUserInterface(QMainWindow):
     def closeEvent(self, event):
         print("saving load order...")
         if self.cfg["UPDATE_ON_CLOSE"]: self.auto_save_load_order(instant=True)
+        self._save_layout()
+        self.ui_state.setdefault("LAYOUT", dict())["GEOMETRY"]=bytes(self.saveGeometry()).hex()
+        self._write_ui_state()
         event.accept()
 
     def on_play(self):
@@ -1796,10 +1844,9 @@ if __name__ == "__main__":
     nxm_url = sys.argv[sys.argv.index("--nxm")+1] if "--nxm" in sys.argv[:-1] else None
     if nxm_url and nexus.send_to_running(nxm_url): sys.exit(0) # already open, hand off link
     window = ModLoaderUserInterface()
-    stylesheet = load_stylesheet(Path(LOCAL_DIR)/"utils"/"resources"/"stylesheets"/cfg["STYLESHEET"])
     splash = QSplashScreen(QPixmap(str(LOCAL_DIR/"utils"/"resources"/"splash.png")))
     #app.setStyle("Fusion")
-    app.setStyleSheet(stylesheet)
+    window.load_theme()
     window.show()
     if cfg["DO_SPLASH"]: splash.show(); QTimer.singleShot(1700, splash.close)
     if nxm_url: QTimer.singleShot(500, lambda: nexus.handle_nxm_link(window, nxm_url))

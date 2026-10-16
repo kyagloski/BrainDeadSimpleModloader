@@ -11,6 +11,9 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt, QSize, pyqtSignal
 from PyQt6.QtGui import QPixmap, QFont
 
+try:    from utils.utils import px
+except: from utils import px
+
 DEBUG=False
 
 class OptionListItem(QListWidgetItem):
@@ -47,7 +50,7 @@ class FomodInstallerDialog(QDialog):
     def __init__(self, mod_name, parent=None):
         super().__init__(parent)
         self.setWindowTitle(f"FOMOD Installer - {mod_name}")
-        self.resize(900, 550)
+        self.resize(px(900), px(550))
         self.setModal(True)
         
         self.mod_name = mod_name
