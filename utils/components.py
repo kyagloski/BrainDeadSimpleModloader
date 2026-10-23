@@ -1335,10 +1335,6 @@ class InstanceManager(QDialog):
         msg.setCheckBox(checkbox)
         if msg.exec() != QMessageBox.StandardButton.Yes: return
 
-        # check if deleting selected instance
-        sel_name = get_instance_name()
-        if name==sel_name: self._on_select(item=self.list_widget.item(0), close=False)
-        
         cfg_dict=read_parent_cfg()
         path=cfg_dict["INSTANCES"][name]["PATH"]
         del cfg_dict["INSTANCES"][name]
@@ -1353,6 +1349,8 @@ class InstanceManager(QDialog):
             return
 
         self._refresh_list()
+        self._on_select(item=self.list_widget.item(0), close=False) # reselect to fix weird bugs
+
 
     def _on_select(self, item=None, close=True):
         from bdsm import read_parent_cfg, write_cfg

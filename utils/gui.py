@@ -1719,6 +1719,7 @@ class ModLoaderUserInterface(QMainWindow):
         self.blockSignals(False)
    
     def open_instance_manager(self):
+        self.cfg=read_cfg(gui=True)
         self.instance_manager = InstanceManager(self)
         self.instance_manager.setWindowModality(Qt.WindowModality.ApplicationModal)
         self.instance_manager.closed.connect(self.on_instance_manager_close)

@@ -8,6 +8,7 @@ import subprocess
 import urllib.parse
 import stat
 import yaml
+import random
 from pathlib import Path
 from collections import OrderedDict
 
@@ -71,7 +72,13 @@ def create_cfg(path=None, gui=False, is_global=False, instance_path=None):
     
     # verification
     try: compat = str(game_specific.infer_compat_path(Path(target)))
-    except Exception as e: print(f"error: path is invalid ({e})"); sys.exit() 
+    except Exception as e: 
+        print(f"error: path is invalid ({e})");
+        with open(LOCAL_DIR/"config.yaml") as f: d = yaml.safe_load(f)
+        del d["INSTANCES"][e]
+        with open(LOCAL_DIR/"config.yaml", "w") as f: yaml.safe_dump(d, f, sort_keys=False)
+        return
+
     if not compat: compat=target
     if not os.path.exists(compat): print("error: could not infer comapt dir: "+compat)
 
